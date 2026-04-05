@@ -1066,7 +1066,7 @@ export default function App() {
           </div>
         );
         return (
-          <div style={{ flex:1, overflowY:"auto", padding:"20px 16px", display:"flex", flexDirection:"column", gap:16 }}>
+          <div style={{ flex:1, overflowY:"auto", minHeight:0 }}><div style={{ padding:"20px 16px", display:"flex", flexDirection:"column", gap:16 }}>
             <h2 style={{ fontFamily:"'Cinzel', serif", fontSize:18, color:C.gold, letterSpacing:2 }}>COMPOSIZIONE DELLA CANTINA</h2>
 
             {/* KPI */}
@@ -1090,7 +1090,7 @@ export default function App() {
             <Section title="PER TIPOLOGIA" rows={mkRows(byType)} color={C.gold}/>
             <Section title="PER VITIGNO"   rows={mkRows(byGrape)} color="#7a9aba"/>
             <Section title="PER REGIONE"   rows={mkRows(byRegion)} color="#8aba7a"/>
-          </div>
+          </div></div>
         );
       })()}
 
@@ -2040,7 +2040,7 @@ export default function App() {
         </div>
       )}
       {/* ── FAB AGGIUNGI VINO ── */}
-      {!modal && (view === "catalog" || view === "racks") && <button
+      {!modal && !rackModal && (view === "catalog" || view === "racks") && <button
         onClick={() => {
           if (view === "racks") { setEditingRack(emptyRack()); setRackModal("add"); }
           else { setEditing(emptyWine()); setScanError(null); setModal("add"); }
