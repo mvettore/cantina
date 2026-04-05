@@ -82,6 +82,48 @@ function resizeImage(file, maxPx = 900, quality = 0.82) {
   });
 }
 
+// ── Crop image to label using Claude bbox ──
+async function cropToLabel(base64DataUrl) {
+  try {
+    const base64 = base64DataUrl.split(",")[1];
+    const mediaType = base64DataUrl.split(";")[0].split(":")[1] || "image/jpeg";
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    // In produzione usa la funzione server, in locale usa la chiave diretta
+    // Per semplicità usiamo sempre la funzione server
+    const resp = await fetch("/.netlify/functions/crop-label", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ base64, mediaType }),
+    });
+    if (!resp.ok) return null;
+    const { x, y, w, h } = await resp.json();
+
+    // Ritaglia con Canvas
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const px = img.width  * x / 100;
+        const py = img.height * y / 100;
+        const pw = img.width  * w / 100;
+        const ph = img.height * h / 100;
+        // Aggiungi un po' di margine
+        const margin = Math.min(pw, ph) * 0.04;
+        canvas.width  = Math.min(pw + margin * 2, img.width);
+        canvas.height = Math.min(ph + margin * 2, img.height);
+        canvas.getContext("2d").drawImage(img,
+          Math.max(0, px - margin), Math.max(0, py - margin),
+          canvas.width, canvas.height,
+          0, 0, canvas.width, canvas.height
+        );
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = () => resolve(null);
+      img.src = base64DataUrl;
+    });
+  } catch { return null; }
+}
+
 // ── Call backend proxy → structured JSON ──
 // In locale (npm run dev) chiama l'API Anthropic direttamente.
 // In produzione (Netlify) chiama /api/scan-label che fa da proxy sicuro.
@@ -208,7 +250,8 @@ export default function App() {
   const [toast,   setToast]   = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState(null);
-  const [drinkModal, setDrinkModal] = useState(null); // wine to drink from
+  const [drinkModal, setDrinkModal] = useState(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState(null); // wine to drink from
   const [enriching, setEnriching] = useState(false);
   const [enrichData, setEnrichData] = useState(null);
   const [enrichError, setEnrichError] = useState(null);
@@ -301,10 +344,15 @@ export default function App() {
       const dataUrl = await resizeImage(file, 350, 0.55);
       const sizeKB = Math.round(dataUrl.length * 0.75 / 1024);
       console.log(`Immagine scan: ~${sizeKB}KB`);
-      const info    = await scanLabel(dataUrl);
 
-      // Store a smaller thumbnail for display
-      const thumb = await resizeImage(file, 400, 0.65);
+      // Scan e crop etichetta in parallelo
+      const [info, croppedDataUrl] = await Promise.all([
+        scanLabel(dataUrl),
+        cropToLabel(dataUrl),
+      ]);
+
+      // Thumb: usa il ritaglio se disponibile, altrimenti l'intera foto ridimensionata
+      const thumb = croppedDataUrl || await resizeImage(file, 400, 0.65);
 
       setEditing(prev => ({
         ...prev,
@@ -318,7 +366,7 @@ export default function App() {
         price:    info.price != null ? String(info.price) : prev.price,
         photo:    thumb,
       }));
-      showToast("✨ Etichetta riconosciuta con successo!");
+      showToast("✨ Etichetta riconosciuta e ritagliata!");
     } catch (err) {
       console.error(err);
       setScanError("Non sono riuscito a leggere l'etichetta. Riprova con una foto più nitida.");
@@ -749,15 +797,15 @@ export default function App() {
                     onClick={() => { setEditing({...wine}); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
                     <div style={{ height: 3, background: `linear-gradient(90deg, ${tc.bar}, ${C.gold})` }} />
 
-                    {/* Photo strip */}
-                    {wine.photo && (
-                      <div style={{ height: 140, overflow: "hidden", position: "relative" }}>
-                        <img src={wine.photo} alt={wine.name} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }} />
-                        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 50%, rgba(46,31,15,0.85) 100%)" }} />
-                      </div>
-                    )}
-
-                    <div style={{ padding: "11px 14px 10px" }}>
+                    <div style={{ padding: "11px 14px 10px", display: "flex", gap: 12 }}>
+                      {/* Thumbnail compatto */}
+                      {wine.photo && (
+                        <div onClick={e => { e.stopPropagation(); setLightboxPhoto(wine.photo); }}
+                          style={{ flexShrink: 0, width: 54, alignSelf: "flex-start", cursor: "zoom-in", borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}`, marginTop: 2 }}>
+                          <img src={wine.photo} alt={wine.name} style={{ width: "100%", display: "block", objectFit: "cover", aspectRatio: "2/3" }} />
+                        </div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
                       {/* Riga 1: badge tipo + anno + quantità */}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -802,6 +850,8 @@ export default function App() {
                       })()}
                     </div>
 
+                      </div>{/* end flex content */}
+                    </div>{/* end padding div */}
                     {/* Azioni: compatte */}
                     <div style={{ borderTop: `1px solid ${C.bg}`, display: "flex" }}>
                       {[["✏ MODIFICA", () => { setEditing({...wine}); setScanError(null); setModal("edit"); }, false],
@@ -1113,15 +1163,17 @@ export default function App() {
                 >✕</button>
               </div>
 
-              {/* Photo hero */}
+              {/* Photo hero — tappabile per lightbox */}
               {editing.photo && (
-                <div style={{height:160,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08"}}>
+                <div onClick={() => setLightboxPhoto(editing.photo)}
+                  style={{height:180,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08",cursor:"zoom-in"}}>
                   <img src={editing.photo} alt={editing.name} style={{maxHeight:"100%",maxWidth:"100%",objectFit:"contain"}}/>
-                  <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, transparent 40%, rgba(62,42,22,0.95) 100%)"}}/>
-                  <div style={{position:"absolute",bottom:14,left:22,right:22}}>
+                  <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, transparent 40%, rgba(62,42,22,0.9) 100%)"}}/>
+                  <div style={{position:"absolute",bottom:12,left:22,right:22,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
                     <TypeBadge type={editing.type}/>
+                    <span style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:"'Cinzel', serif",letterSpacing:1}}>🔍 tocca per ingrandire</span>
                   </div>
-                  <div style={{position:"absolute",top:14,right:18,fontSize:28,fontWeight:300,color:C.gold,fontFamily:"'Cinzel', serif"}}>{editing.year}</div>
+                  <div style={{position:"absolute",top:14,right:18,fontSize:26,fontWeight:300,color:C.gold,fontFamily:"'Cinzel', serif"}}>{editing.year}</div>
                 </div>
               )}
 
@@ -1524,6 +1576,26 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* ── LIGHTBOX ── */}
+      {lightboxPhoto && (
+        <div onClick={() => setLightboxPhoto(null)} style={{
+          position:"fixed", inset:0, background:"rgba(0,0,0,0.95)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          zIndex:500, cursor:"zoom-out", padding:16,
+        }}>
+          <button onClick={() => setLightboxPhoto(null)} style={{
+            position:"absolute", top:16, right:16,
+            background:"rgba(255,255,255,0.15)", border:"none", borderRadius:"50%",
+            width:40, height:40, color:"#fff", fontSize:18, cursor:"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center",
+          }}>✕</button>
+          <img src={lightboxPhoto} alt="Etichetta" style={{
+            maxWidth:"100%", maxHeight:"90vh", objectFit:"contain",
+            borderRadius:8, boxShadow:"0 0 60px rgba(0,0,0,0.8)",
+          }} onClick={e => e.stopPropagation()}/>
+        </div>
+      )}
 
       {/* Toast */}
       {toast&&(
