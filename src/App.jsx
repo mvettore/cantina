@@ -232,10 +232,14 @@ const StarRating = ({ value, onChange, readonly }) => (
   </div>
 );
 
-const TypeBadge = ({ type }) => {
+const TypeBadge = ({ type, small }) => {
   const c = typeColors[type] || { badge: "#555", text: "#eee" };
   return (
-    <span style={{ background: c.badge, color: c.text, padding: "5px 15px", borderRadius: 20, fontSize: 15, fontFamily: "'Cinzel', serif", letterSpacing: 1, fontWeight: 700 }}>
+    <span style={{ background: c.badge, color: c.text,
+      padding: small ? "1px 7px" : "4px 13px",
+      borderRadius: 20,
+      fontSize: small ? 11 : 14,
+      fontFamily: "'Cinzel', serif", letterSpacing: small ? 0.5 : 1, fontWeight: 700 }}>
       {type.toUpperCase()}
     </span>
   );
@@ -454,9 +458,20 @@ export default function App() {
       date: new Date().toISOString().split("T")[0],
       occasion: "",
       companions: "",
-      rating: 4,
-      notes: "",
       finished: true,
+      // Scheda degustazione AIS
+      rating: 0,
+      vista_limpidezza: "",
+      vista_colore: "",
+      olfatto_intensita: "",
+      olfatto_qualita: "",
+      olfatto_descrizione: "",
+      gusto_corpo: "",
+      gusto_acidita: "",
+      gusto_tannini: "",
+      gusto_persistenza: "",
+      gusto_equilibrio: "",
+      notes: "",
     });
     setLogModal("add");
   };
@@ -854,70 +869,72 @@ export default function App() {
                     onClick={() => { setEditing({...wine}); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
                     <div style={{ height: 3, background: `linear-gradient(90deg, ${tc.bar}, ${C.gold})` }} />
 
-                    <div style={{ display: "flex" }}>
+                    <div style={{display:"flex",minHeight:0}}>
                       {/* Foto verticale */}
                       {wine.photo && (
                         <div onClick={e=>{e.stopPropagation();setLightboxPhoto(wine.photo);}}
-                          style={{flexShrink:0,width:58,cursor:"zoom-in",overflow:"hidden",borderRight:`1px solid ${C.border}`}}>
-                          <img src={wine.photo} alt={wine.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                          style={{flexShrink:0,width:56,cursor:"zoom-in",overflow:"hidden",
+                            borderRight:`1px solid ${C.border}`}}>
+                          <img src={wine.photo} alt={wine.name}
+                            style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         </div>
                       )}
-                      <div style={{flex:1,minWidth:0,padding:"10px 13px 10px"}}>
+                      <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",gap:5}}>
 
-                        {/* Intestazione: tipo + anno + bt */}
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                          <div style={{display:"flex",alignItems:"center",gap:7}}>
-                            <TypeBadge type={wine.type}/>
-                            <span style={{fontSize:15,color:C.textFaint,fontFamily:"'Cinzel',serif",letterSpacing:1}}>{wine.year}</span>
-                          </div>
-                          <span style={{
-                            background:wine.quantity===0?"rgba(180,60,60,0.2)":wine.quantity<=2?"rgba(180,150,60,0.2)":"rgba(60,150,60,0.2)",
-                            color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
-                            padding:"2px 9px",borderRadius:20,fontSize:14,fontFamily:"'Cinzel',serif",fontWeight:600,
-                          }}>{wine.quantity} bt</span>
-                        </div>
-
-                        {/* Nome + denominazione su due righe strette */}
-                        <h3 style={{fontFamily:"'Cinzel',serif",fontSize:18,fontWeight:600,color:C.text,margin:"0 0 1px",lineHeight:1.2}}>{wine.name}</h3>
-                        {wine.denomination && (
-                          <p style={{fontFamily:"'EB Garamond',serif",fontSize:15,color:C.textMuted,margin:"0 0 2px",lineHeight:1.2}}>{wine.denomination}</p>
-                        )}
-                        <p style={{fontFamily:"'EB Garamond',serif",fontSize:15,color:C.textFaint,fontStyle:"italic",margin:"0 0 7px",lineHeight:1.2}}>{wine.producer}</p>
-
-                        {/* Stelle + vitigno + prezzo */}
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                          <StarRating value={wine.rating} readonly/>
-                          <div style={{display:"flex",gap:8,fontSize:14,color:C.textFaint,fontFamily:"'EB Garamond',serif",alignItems:"center"}}>
-                            {wine.grape && <span>🍇 {wine.grape}</span>}
-                            {wine.price && <span>€{wine.price}</span>}
+                        {/* Riga A: NOME grande + anno + bt */}
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
+                          <h3 style={{fontFamily:"'Cinzel',serif",fontSize:17,fontWeight:700,
+                            color:C.text,margin:0,lineHeight:1.15,flex:1,minWidth:0,
+                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            {wine.name}
+                          </h3>
+                          <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                            <span style={{fontSize:14,color:C.textFaint,fontFamily:"'Cinzel',serif",letterSpacing:0.5}}>{wine.year}</span>
+                            <span style={{
+                              background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
+                              color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
+                              padding:"1px 8px",borderRadius:20,fontSize:13,
+                              fontFamily:"'Cinzel',serif",fontWeight:700,
+                            }}>{wine.quantity}bt</span>
                           </div>
                         </div>
 
-                        {/* Posizione + stato su una riga */}
-                        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                          {rack && (wine.positions||[]).length>0 && (
-                            <span style={{display:"inline-flex",alignItems:"center",gap:5,
-                              background:"rgba(201,149,58,0.1)",border:`1px solid rgba(201,149,58,0.25)`,
-                              borderRadius:20,padding:"2px 9px",fontSize:13,fontFamily:"'Cinzel',serif"}}>
-                              <span style={{color:C.textMuted,fontSize:12}}>🗄</span>
-                              <span style={{color:C.textMuted}}>{rack.name}</span>
-                              <span style={{color:C.gold,fontWeight:700}}>{(wine.positions||[]).join("·")}</span>
-                            </span>
-                          )}
-                          {(()=>{ const ag=getAgingStatus(wine); if(!ag) return null;
-                            const age=new Date().getFullYear()-wine.year;
-                            return (
-                              <span style={{display:"inline-flex",alignItems:"center",gap:4,
-                                background:`${ag.c}15`,border:`1px solid ${ag.c}40`,
-                                borderRadius:20,padding:"2px 9px"}}>
-                                <span style={{fontSize:12,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700}}>
-                                  {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s.toUpperCase()}
-                                </span>
-                                <span style={{fontSize:12,color:C.textFaint,fontFamily:"'EB Garamond',serif"}}>{age}a</span>
+                        {/* Riga B: denominazione · produttore */}
+                        <p style={{fontFamily:"'EB Garamond',serif",fontSize:15,
+                          color:C.textMuted,margin:0,lineHeight:1.2,
+                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          {[wine.denomination, wine.producer].filter(Boolean).join(" · ")}
+                        </p>
+
+                        {/* Riga C: tipo · vitigno · prezzo */}
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                          <TypeBadge type={wine.type} small/>
+                          {wine.grape && <span style={{fontSize:13,color:C.textFaint,fontFamily:"'EB Garamond',serif"}}>🍇 {wine.grape}</span>}
+                          {wine.price && <span style={{fontSize:13,color:C.textFaint,fontFamily:"'EB Garamond',serif",marginLeft:"auto"}}>€{wine.price}</span>}
+                        </div>
+
+                        {/* Riga D: posizione · stato — solo se presenti */}
+                        {(rack&&(wine.positions||[]).length>0 || getAgingStatus(wine)) && (
+                          <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
+                            {rack&&(wine.positions||[]).length>0&&(
+                              <span style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
+                                background:"rgba(201,149,58,0.1)",border:`1px solid rgba(201,149,58,0.2)`,
+                                borderRadius:20,padding:"1px 8px",fontWeight:600}}>
+                                🗄 {rack.name} {(wine.positions||[]).join("·")}
                               </span>
-                            );
-                          })()}
-                        </div>
+                            )}
+                            {(()=>{const ag=getAgingStatus(wine);if(!ag)return null;
+                              const age=new Date().getFullYear()-wine.year;
+                              return(
+                                <span style={{fontSize:12,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700,
+                                  background:`${ag.c}12`,border:`1px solid ${ag.c}35`,
+                                  borderRadius:20,padding:"1px 8px"}}>
+                                  {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s} {age}a
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        )}
 
                       </div>
                     </div>
@@ -1684,14 +1701,21 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                    {entry.occasion && <p style={{ fontSize: 13, color: C.textFaint, marginBottom: 2 }}>📅 {entry.occasion}</p>}
-                    {entry.companions && <p style={{ fontSize: 13, color: C.textFaint, marginBottom: 2 }}>👥 {entry.companions}</p>}
-                    {entry.notes && <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", marginTop: 4, lineHeight: 1.5 }}>"{entry.notes}"</p>}
-                    <div style={{ marginTop: 6, display: "flex", gap: 8 }}>
-                      {entry.wineType && <span style={{ fontSize: 11, color: C.textFaint, background: C.surface2, borderRadius: 20, padding: "2px 8px", fontFamily: "'Cinzel', serif" }}>{entry.wineType.toUpperCase()}</span>}
-                      {entry.wineGrape && <span style={{ fontSize: 12, color: C.textFaint }}>🍇 {entry.wineGrape}</span>}
-                      {!entry.finished && <span style={{ fontSize: 11, color: "#c0a040", background: "rgba(180,150,60,0.15)", borderRadius: 20, padding: "2px 8px", fontFamily: "'Cinzel', serif" }}>NON FINITA</span>}
+                    {/* Contesto */}
+                    <div style={{ display: "flex", gap: 12, fontSize: 13, color: C.textFaint, fontFamily: "'EB Garamond', serif", flexWrap: "wrap", marginBottom: 4 }}>
+                      {entry.occasion && <span>📅 {entry.occasion}</span>}
+                      {entry.companions && <span>👥 {entry.companions}</span>}
+                      {!entry.finished && <span style={{ color: "#c0a040" }}>⚠ Non finita</span>}
                     </div>
+                    {/* AIS snippet */}
+                    {(entry.olfatto_descrizione || entry.gusto_corpo || entry.gusto_equilibrio) && (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
+                        {entry.gusto_corpo && <span style={{ fontSize: 12, color: C.textFaint, background: C.surface2, borderRadius: 20, padding: "1px 8px" }}>{entry.gusto_corpo}</span>}
+                        {entry.gusto_equilibrio && <span style={{ fontSize: 12, color: C.textFaint, background: C.surface2, borderRadius: 20, padding: "1px 8px" }}>{entry.gusto_equilibrio}</span>}
+                        {entry.gusto_persistenza && <span style={{ fontSize: 12, color: C.textFaint, background: C.surface2, borderRadius: 20, padding: "1px 8px" }}>{entry.gusto_persistenza}</span>}
+                      </div>
+                    )}
+                    {entry.notes && <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", lineHeight: 1.5, margin: 0 }}>"{entry.notes}"</p>}
                   </div>
                   <button onClick={e => { e.stopPropagation(); saveLog(log.filter(l => l.id !== entry.id)); showToast("Voce eliminata"); }}
                     style={{ alignSelf: "stretch", background: "none", border: "none", borderLeft: `1px solid ${C.bg}`, padding: "0 12px", cursor: "pointer", color: "#7a4040", fontSize: 16, transition: "color 0.15s" }}
@@ -1716,49 +1740,136 @@ export default function App() {
               </div>
               <button onClick={() => setLogModal(null)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 20 }}>✕</button>
             </div>
-            <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
-              <div>
-                <label style={labelStyle}>Data</label>
-                <input type="date" style={inputStyle} value={logEntry.date}
-                  onChange={e => setLogEntry(v => ({ ...v, date: e.target.value }))} />
-              </div>
-              <div>
-                <label style={labelStyle}>Occasione</label>
-                <input style={inputStyle} value={logEntry.occasion}
-                  onChange={e => setLogEntry(v => ({ ...v, occasion: e.target.value }))}
-                  placeholder="es. Cena in famiglia, Ristorante, Degustazione…" />
-              </div>
-              <div>
-                <label style={labelStyle}>Con chi</label>
-                <input style={inputStyle} value={logEntry.companions}
-                  onChange={e => setLogEntry(v => ({ ...v, companions: e.target.value }))}
-                  placeholder="es. Famiglia, Amici, Da solo…" />
-              </div>
-              <div>
-                <label style={labelStyle}>Valutazione della serata</label>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {[1,2,3,4,5].map(s => (
-                    <span key={s} onClick={() => setLogEntry(v => ({ ...v, rating: s }))} style={{
-                      cursor: "pointer", fontSize: 28,
-                      color: s <= logEntry.rating ? C.gold : C.border,
-                      transition: "color 0.15s", userSelect: "none",
-                    }}>★</span>
-                  ))}
+            <div style={{ padding: "16px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+              {/* Contesto */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Data</label>
+                  <input type="date" style={inputStyle} value={logEntry.date}
+                    onChange={e => setLogEntry(v => ({ ...v, date: e.target.value }))} />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 26 }}>
+                  <input type="checkbox" id="finished" checked={logEntry.finished}
+                    onChange={e => setLogEntry(v => ({ ...v, finished: e.target.checked }))}
+                    style={{ width: 18, height: 18, cursor: "pointer", accentColor: C.gold }} />
+                  <label htmlFor="finished" style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>Bottiglia finita</label>
+                </div>
+                <div>
+                  <label style={labelStyle}>Occasione</label>
+                  <input style={inputStyle} value={logEntry.occasion}
+                    onChange={e => setLogEntry(v => ({ ...v, occasion: e.target.value }))}
+                    placeholder="Cena, Ristorante, Degustazione…" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Con chi</label>
+                  <input style={inputStyle} value={logEntry.companions}
+                    onChange={e => setLogEntry(v => ({ ...v, companions: e.target.value }))}
+                    placeholder="Famiglia, Amici, Da solo…" />
                 </div>
               </div>
-              <div>
-                <label style={labelStyle}>Note del momento</label>
-                <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical", lineHeight: 1.6 }}
-                  value={logEntry.notes}
-                  onChange={e => setLogEntry(v => ({ ...v, notes: e.target.value }))}
-                  placeholder="Impressioni, abbinamento cibo, stato del vino…" />
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <input type="checkbox" id="finished" checked={logEntry.finished}
-                  onChange={e => setLogEntry(v => ({ ...v, finished: e.target.checked }))}
-                  style={{ width: 18, height: 18, cursor: "pointer", accentColor: C.gold }} />
-                <label htmlFor="finished" style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>Bottiglia finita</label>
-              </div>
+
+              {/* AIS — ESAME VISIVO */}
+              {(()=>{
+                const sectionStyle = { background: C.bg, borderRadius: 9, padding: "12px 14px", border: `1px solid ${C.border}` };
+                const rowStyle = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 };
+                const sel = (field, opts) => (
+                  <select style={{ ...inputStyle, fontSize: 15, padding: "7px 10px" }}
+                    value={logEntry[field]||""}
+                    onChange={e => setLogEntry(v => ({ ...v, [field]: e.target.value }))}>
+                    <option value="">—</option>
+                    {opts.map(o => <option key={o}>{o}</option>)}
+                  </select>
+                );
+                return (<>
+                  <div style={sectionStyle}>
+                    <p style={{ ...labelStyle, marginBottom: 0, color: C.gold }}>👁 ESAME VISIVO</p>
+                    <div style={rowStyle}>
+                      <div>
+                        <label style={labelStyle}>Limpidezza</label>
+                        {sel("vista_limpidezza", ["Limpido","Abbastanza limpido","Velato","Torbido"])}
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Colore / Intensità</label>
+                        <input style={{ ...inputStyle, fontSize: 15, padding: "7px 10px" }}
+                          value={logEntry.vista_colore||""}
+                          onChange={e => setLogEntry(v => ({ ...v, vista_colore: e.target.value }))}
+                          placeholder="es. Rosso rubino intenso" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={sectionStyle}>
+                    <p style={{ ...labelStyle, marginBottom: 0, color: C.gold }}>👃 ESAME OLFATTIVO</p>
+                    <div style={rowStyle}>
+                      <div>
+                        <label style={labelStyle}>Intensità</label>
+                        {sel("olfatto_intensita", ["Carente","Poco intenso","Abbastanza intenso","Intenso","Molto intenso"])}
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Qualità</label>
+                        {sel("olfatto_qualita", ["Comune","Poco fine","Abbastanza fine","Fine","Eccellente"])}
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 10 }}>
+                      <label style={labelStyle}>Descrizione aromi</label>
+                      <input style={{ ...inputStyle, fontSize: 15, padding: "7px 10px" }}
+                        value={logEntry.olfatto_descrizione||""}
+                        onChange={e => setLogEntry(v => ({ ...v, olfatto_descrizione: e.target.value }))}
+                        placeholder="es. Frutti rossi, spezie, vaniglia, tabacco…" />
+                    </div>
+                  </div>
+
+                  <div style={sectionStyle}>
+                    <p style={{ ...labelStyle, marginBottom: 0, color: C.gold }}>👅 ESAME GUSTATIVO</p>
+                    <div style={rowStyle}>
+                      <div>
+                        <label style={labelStyle}>Corpo</label>
+                        {sel("gusto_corpo", ["Leggero","Di medio corpo","Abbastanza strutturato","Strutturato","Molto strutturato"])}
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Acidità</label>
+                        {sel("gusto_acidita", ["Piatto","Poco acido","Abbastanza fresco","Fresco","Molto fresco"])}
+                      </div>
+                      {(logEntry.wineType === "Rosso" || logEntry.wineType === "Passito") && (
+                        <div>
+                          <label style={labelStyle}>Tannini</label>
+                          {sel("gusto_tannini", ["Molli","Poco tannico","Abbastanza tannico","Tannico","Molto tannico"])}
+                        </div>
+                      )}
+                      <div>
+                        <label style={labelStyle}>Persistenza</label>
+                        {sel("gusto_persistenza", ["Corto","Poco persistente","Abbastanza persistente","Persistente","Molto persistente"])}
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Equilibrio</label>
+                        {sel("gusto_equilibrio", ["Non equilibrato","Poco equilibrato","Abbastanza equilibrato","Equilibrato","Molto equilibrato"])}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Valutazione globale */}
+                  <div style={sectionStyle}>
+                    <p style={{ ...labelStyle, marginBottom: 8, color: C.gold }}>⭐ VALUTAZIONE VINO</p>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                      {[1,2,3,4,5].map(s => (
+                        <span key={s} onClick={() => setLogEntry(v => ({ ...v, rating: s }))} style={{
+                          cursor: "pointer", fontSize: 32,
+                          color: s <= (logEntry.rating||0) ? C.gold : C.border,
+                          transition: "color 0.15s", userSelect: "none",
+                        }}>★</span>
+                      ))}
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Note finali</label>
+                      <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical", lineHeight: 1.6 }}
+                        value={logEntry.notes||""}
+                        onChange={e => setLogEntry(v => ({ ...v, notes: e.target.value }))}
+                        placeholder="Impressioni generali, abbinamento cibo, momenti memorabili…" />
+                    </div>
+                  </div>
+                </>);
+              })()}
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
                 <button className="btn-ghost" onClick={() => setLogModal(null)}>{logModal === "edit" ? "ANNULLA" : "SALTA"}</button>
                 {logModal === "edit" && (
