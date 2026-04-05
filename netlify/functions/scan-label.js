@@ -1,44 +1,41 @@
-/**
- * Netlify Function: scan-label
- * Legge l'etichetta E restituisce le coordinate di ritaglio in un'unica chiamata.
- */
-
 const handler = async (event) => {
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
-  }
+  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
   let body;
   try { body = JSON.parse(event.body); }
   catch { return { statusCode: 400, body: JSON.stringify({ error: "Body non valido" }) }; }
 
   const { base64, mediaType } = body;
-  if (!base64 || !mediaType) {
-    return { statusCode: 400, body: JSON.stringify({ error: "Campi mancanti" }) };
-  }
+  if (!base64 || !mediaType) return { statusCode: 400, body: JSON.stringify({ error: "Campi mancanti" }) };
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: "API key non configurata" }) };
+  if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: "API key mancante" }) };
 
-  console.log(`Immagine: ~${Math.round(base64.length * 0.75 / 1024)}KB`);
+  console.log(`Immagine ricevuta: ~${Math.round(base64.length * 0.75 / 1024)}KB`);
 
-  const prompt = `Analizza questa fotografia di una bottiglia di vino.
+  const prompt = `Sei un esperto di vini. Analizza questa immagine di una bottiglia di vino.
 
-Restituisci SOLO un oggetto JSON valido con questi campi:
+Restituisci SOLO un JSON con questi campi esatti (niente altro testo):
 {
-  "name": "nome commerciale del vino (non il produttore)",
-  "producer": "cantina o produttore",
+  "name": "nome commerciale del vino",
+  "producer": "nome cantina o produttore",
   "year": 2019,
   "type": "Rosso|Bianco|Rosato|Spumante|Dolce|Passito",
-  "region": "regione italiana o paese",
+  "region": "regione italiana o paese estero",
   "grape": "vitigno principale",
-  "notes": "1-2 frasi descrittive",
+  "notes": "breve descrizione",
   "price": null,
-  "crop": { "x": 10, "y": 5, "w": 80, "h": 60 }
+  "crop": {
+    "x": 15,
+    "y": 20,
+    "w": 70,
+    "h": 45
+  }
 }
 
-Il campo "crop" deve contenere le coordinate percentuali (0-100) del rettangolo che contiene SOLO l'etichetta nella foto (non la bottiglia intera). x,y = angolo superiore sinistro, w,h = larghezza e altezza.
-Usa null per i campi del vino non leggibili. Niente testo fuori dal JSON.`;
+Per il campo "crop": indica le coordinate percentuali (0-100) del rettangolo che racchiude SOLO l'etichetta cartacea del vino nell'immagine, escludendo la bottiglia, il tappo, le mani e lo sfondo. x e y sono l'angolo superiore sinistro. w è la larghezza. h è l'altezza. Sii preciso.
+
+Usa null per i campi del vino non leggibili.`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 24000);
@@ -54,7 +51,7 @@ Usa null per i campi del vino non leggibili. Niente testo fuori dal JSON.`;
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 600,
+        max_tokens: 700,
         messages: [{
           role: "user",
           content: [
@@ -68,17 +65,17 @@ Usa null per i campi del vino non leggibili. Niente testo fuori dal JSON.`;
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errText = await response.text();
-      console.error("API error:", response.status, errText);
-      return { statusCode: response.status, body: JSON.stringify({ error: errText }) };
+      const err = await response.text();
+      return { statusCode: response.status, body: JSON.stringify({ error: err }) };
     }
 
     const data = await response.json();
     const raw = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
-    console.log("Raw:", raw.slice(0, 300));
+    console.log("Risposta:", raw.slice(0, 400));
 
     const clean = raw.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
     const parsed = JSON.parse(clean);
+    console.log("Crop:", JSON.stringify(parsed.crop));
 
     return {
       statusCode: 200,
@@ -87,10 +84,7 @@ Usa null per i campi del vino non leggibili. Niente testo fuori dal JSON.`;
     };
   } catch (err) {
     clearTimeout(timeoutId);
-    if (err.name === "AbortError") {
-      return { statusCode: 504, body: JSON.stringify({ error: "Timeout — riprova" }) };
-    }
-    console.error("Errore:", err.message);
+    if (err.name === "AbortError") return { statusCode: 504, body: JSON.stringify({ error: "Timeout" }) };
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };

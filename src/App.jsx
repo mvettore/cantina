@@ -85,20 +85,30 @@ function resizeImage(file, maxPx = 900, quality = 0.82) {
 // ── Crop image to label given percentage coords from API ──
 function cropImageToCoords(srcDataUrl, crop) {
   return new Promise((resolve) => {
-    if (!crop || typeof crop.x !== "number") { resolve(null); return; }
+    if (!crop || typeof crop.x !== "number" || typeof crop.w !== "number") {
+      resolve(null); return;
+    }
     const img = new Image();
     img.onload = () => {
       const { x, y, w, h } = crop;
-      // Add 3% margin
-      const mx = img.width  * Math.max(0, x - 2) / 100;
-      const my = img.height * Math.max(0, y - 2) / 100;
-      const mw = img.width  * Math.min(100, w + 4) / 100;
-      const mh = img.height * Math.min(100, h + 4) / 100;
+      // Clamp with small margin
+      const x1 = Math.max(0, (x - 2)) / 100;
+      const y1 = Math.max(0, (y - 2)) / 100;
+      const x2 = Math.min(100, (x + w + 2)) / 100;
+      const y2 = Math.min(100, (y + h + 2)) / 100;
+
+      const sx = Math.floor(img.width  * x1);
+      const sy = Math.floor(img.height * y1);
+      const sw = Math.floor(img.width  * (x2 - x1));
+      const sh = Math.floor(img.height * (y2 - y1));
+
+      if (sw < 20 || sh < 20) { resolve(null); return; }
+
       const canvas = document.createElement("canvas");
-      canvas.width  = Math.round(mw);
-      canvas.height = Math.round(mh);
-      canvas.getContext("2d").drawImage(img, mx, my, mw, mh, 0, 0, mw, mh);
-      resolve(canvas.toDataURL("image/jpeg", 0.88));
+      canvas.width  = sw;
+      canvas.height = sh;
+      canvas.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
     };
     img.onerror = () => resolve(null);
     img.src = srcDataUrl;
@@ -323,16 +333,18 @@ export default function App() {
       // Ridimensiona aggressivamente: max 350px, qualità 55%
       // Il corpo della richiesta deve stare sotto i 4MB di Netlify
       // Per la scansione API: immagine piccola (velocità)
-      const scanDataUrl = await resizeImage(file, 400, 0.65);
-      // Per il thumbnail salvato: immagine di qualità (800px, 85%)
-      const hiResDataUrl = await resizeImage(file, 800, 0.85);
+      const scanDataUrl = await resizeImage(file, 700, 0.82);
+      // Per il thumbnail salvato: immagine ad alta qualità
+      const hiResDataUrl = await resizeImage(file, 1400, 0.92);
 
       const info = await scanLabel(scanDataUrl);
 
       // Ritaglia l'etichetta usando le coordinate restituite dall'API
-      const croppedThumb = info.crop
+      console.log("Crop coords from API:", JSON.stringify(info.crop));
+      const croppedThumb = info.crop && typeof info.crop.x === "number"
         ? await cropImageToCoords(hiResDataUrl, info.crop)
         : null;
+      console.log("Crop result:", croppedThumb ? "SUCCESS" : "FALLBACK");
       const thumb = croppedThumb || hiResDataUrl;
 
       setEditing(prev => ({
