@@ -849,9 +849,8 @@ export default function App() {
                         );
                       })()}
                     </div>
-
-                      </div>{/* end flex content */}
-                    </div>{/* end padding div */}
+                      </div>
+                    </div>
                     {/* Azioni: compatte */}
                     <div style={{ borderTop: `1px solid ${C.bg}`, display: "flex" }}>
                       {[["✏ MODIFICA", () => { setEditing({...wine}); setScanError(null); setModal("edit"); }, false],
