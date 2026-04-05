@@ -148,7 +148,7 @@ const StarRating = ({ value, onChange, readonly }) => (
     {[1,2,3,4,5].map(s => (
       <span key={s} onClick={() => !readonly && onChange(s)} style={{
         cursor: readonly ? "default" : "pointer",
-        fontSize: readonly ? 20 : 28,
+        fontSize: readonly ? 22 : 30,
         color: s <= value ? "#c9953a" : "#b09878",
         transition: "color 0.15s", userSelect: "none",
       }}>★</span>
@@ -159,7 +159,7 @@ const StarRating = ({ value, onChange, readonly }) => (
 const TypeBadge = ({ type }) => {
   const c = typeColors[type] || { badge: "#555", text: "#eee" };
   return (
-    <span style={{ background: c.badge, color: c.text, padding: "4px 13px", borderRadius: 20, fontSize: 13, fontFamily: "'Cinzel', serif", letterSpacing: 1, fontWeight: 700 }}>
+    <span style={{ background: c.badge, color: c.text, padding: "5px 15px", borderRadius: 20, fontSize: 15, fontFamily: "'Cinzel', serif", letterSpacing: 1, fontWeight: 700 }}>
       {type.toUpperCase()}
     </span>
   );
@@ -360,11 +360,11 @@ export default function App() {
   const inputStyle = {
     background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7,
     color: C.text, padding: "11px 14px", width: "100%",
-    fontFamily: "'Cormorant Garamond', serif", fontSize: 17, outline: "none",
+    fontFamily: "'Cormorant Garamond', serif", fontSize: 19, outline: "none",
     transition: "border-color 0.15s",
   };
   const labelStyle = {
-    color: C.textFaint, fontSize: 13, letterSpacing: 1.2,
+    color: C.textFaint, fontSize: 15, letterSpacing: 1.2,
     fontFamily: "'Cinzel', serif", textTransform: "uppercase", marginBottom: 6, display: "block",
   };
 
@@ -372,12 +372,12 @@ export default function App() {
     <div style={{ overflowX: "auto" }}>
       <div style={{ display: "flex", gap: 3, marginBottom: 3, marginLeft: 28 }}>
         {Array.from({ length: rack.cols }, (_, c) => (
-          <div key={c} style={{ width: 40, textAlign: "center", fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{c + 1}</div>
+          <div key={c} style={{ width: 40, textAlign: "center", fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{c + 1}</div>
         ))}
       </div>
       {Array.from({ length: rack.rows }, (_, r) => (
         <div key={r} style={{ display: "flex", alignItems: "center", gap: 3, marginBottom: 3 }}>
-          <div style={{ width: 24, textAlign: "center", fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{ROW_LABELS[r]}</div>
+          <div style={{ width: 26, textAlign: "center", fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{ROW_LABELS[r]}</div>
           {Array.from({ length: rack.cols }, (_, c) => {
             const pos = `${ROW_LABELS[r]}${c + 1}`;
             const isThis = (highlightPositions||[]).includes(pos);
@@ -425,7 +425,7 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 3, marginBottom: 3, marginLeft: 28 }}>
           {Array.from({ length: rack.cols }, (_, c) => (
-            <div key={c} style={{ width: 40, textAlign: "center", fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{c + 1}</div>
+            <div key={c} style={{ width: 40, textAlign: "center", fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{c + 1}</div>
           ))}
         </div>
         {Array.from({ length: rack.rows }, (_, r) => (
@@ -460,7 +460,7 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cormorant Garamond', serif", color: C.text, fontSize: 16 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cormorant Garamond', serif", color: C.text, fontSize: 18 }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -473,24 +473,24 @@ export default function App() {
         input:focus, select:focus, textarea:focus { border-color: ${C.gold} !important; box-shadow: 0 0 0 2px rgba(201,149,58,0.14); }
         .wine-card { transition: transform 0.18s, box-shadow 0.18s; }
         .wine-card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,0,0,0.4) !important; }
-        .btn-gold { background: linear-gradient(135deg, #a07828, ${C.gold}, #a07828); color: #1a0800; border: none; border-radius: 8px; padding: 12px 24px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 14px; letter-spacing: 1.5px; font-weight: 700; transition: opacity 0.15s, transform 0.12s; white-space: nowrap; }
+        .btn-gold { background: linear-gradient(135deg, #a07828, ${C.gold}, #a07828); color: #1a0800; border: none; border-radius: 8px; padding: 12px 24px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 1.5px; font-weight: 700; transition: opacity 0.15s, transform 0.12s; white-space: nowrap; }
         .btn-gold:hover { opacity: 0.88; transform: translateY(-1px); }
-        .btn-ghost { background: transparent; color: ${C.textMuted}; border: 1px solid ${C.border}; border-radius: 8px; padding: 11px 22px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 14px; letter-spacing: 1px; transition: border-color 0.15s, color 0.15s; white-space: nowrap; }
+        .btn-ghost { background: transparent; color: ${C.textMuted}; border: 1px solid ${C.border}; border-radius: 8px; padding: 11px 22px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 1px; transition: border-color 0.15s, color 0.15s; white-space: nowrap; }
         .btn-ghost:hover { border-color: ${C.gold}; color: ${C.gold}; }
-        .btn-sm { background: ${C.surface2}; color: ${C.textMuted}; border: 1px solid ${C.border}; border-radius: 7px; padding: 8px 16px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 1px; transition: all 0.15s; }
+        .btn-sm { background: ${C.surface2}; color: ${C.textMuted}; border: 1px solid ${C.border}; border-radius: 7px; padding: 8px 16px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: all 0.15s; }
         .btn-sm:hover { color: ${C.gold}; border-color: ${C.gold}; }
-        .btn-danger { background: transparent; color: #c07070; border: 1px solid #804040; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 1px; transition: background 0.15s; }
+        .btn-danger { background: transparent; color: #c07070; border: 1px solid #804040; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: background 0.15s; }
         .btn-danger:hover { background: rgba(180,60,60,0.15); }
-        .tab-btn { background: none; border: 1px solid transparent; cursor: pointer; padding: 8px 16px; border-radius: 20px; font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 1px; transition: all 0.15s; }
-        .nav-btn { background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; padding: 12px 22px; font-family: 'Cinzel', serif; font-size: 14px; letter-spacing: 2px; transition: all 0.15s; color: ${C.textFaint}; }
+        .tab-btn { background: none; border: 1px solid transparent; cursor: pointer; padding: 8px 16px; border-radius: 20px; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: all 0.15s; }
+        .nav-btn { background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; padding: 12px 22px; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 2px; transition: all 0.15s; color: ${C.textFaint}; }
         .nav-btn.active { color: ${C.gold}; border-bottom-color: ${C.gold}; }
         .nav-btn:hover:not(.active) { color: ${C.textMuted}; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 16px; backdrop-filter: blur(4px); }
-        .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: 620px; max-height: 94vh; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; }
+        .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(94vw, 860px); max-height: 94vh; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; }
         @keyframes fadeUp { from { opacity:0; transform: translateY(18px) scale(0.97); } to { opacity:1; transform: none; } }
         @keyframes spin { to { transform: rotate(360deg); } }
         .rack-card { background: ${C.surface2}; border: 1px solid ${C.border}; border-radius: 12px; overflow: hidden; }
-        .action-btn { flex: 1; background: none; border: none; cursor: pointer; padding: 10px; font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 1px; transition: color 0.15s, background 0.15s; }
+        .action-btn { flex: 1; background: none; border: none; cursor: pointer; padding: 10px; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: color 0.15s, background 0.15s; }
 
         /* scan button */
         .btn-scan {
@@ -511,15 +511,15 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontSize: 34 }}>🍷</span>
           <div>
-            <h1 style={{ fontFamily: "'Cinzel', serif", fontSize: 24, fontWeight: 700, color: C.gold, letterSpacing: 3 }}>LA MIA CANTINA</h1>
-            <p style={{ fontSize: 13, color: C.textFaint, letterSpacing: 2, fontFamily: "'Cinzel', serif", marginTop: 2 }}>CATALOGO VINI</p>
+            <h1 style={{ fontFamily: "'Cinzel', serif", fontSize: 26, fontWeight: 700, color: C.gold, letterSpacing: 3 }}>LA MIA CANTINA</h1>
+            <p style={{ fontSize: 15, color: C.textFaint, letterSpacing: 2, fontFamily: "'Cinzel', serif", marginTop: 2 }}>CATALOGO VINI</p>
           </div>
         </div>
         <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
           {[["BOTTIGLIE", totalBottles], ["ETICHETTE", wines.length], ["SCAFFALI", racks.length]].map(([l, v]) => (
             <div key={l} style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 26, fontWeight: 300, color: C.gold }}>{v}</div>
-              <div style={{ fontSize: 13, color: C.textFaint, letterSpacing: 1.5, fontFamily: "'Cinzel', serif" }}>{l}</div>
+              <div style={{ fontSize: 30, fontWeight: 300, color: C.gold }}>{v}</div>
+              <div style={{ fontSize: 15, color: C.textFaint, letterSpacing: 1.5, fontFamily: "'Cinzel', serif" }}>{l}</div>
             </div>
           ))}
           {totalValue > 0 && <div style={{ textAlign: "center" }}>
@@ -592,11 +592,11 @@ export default function App() {
                     <div style={{ padding: "15px 18px 13px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 9 }}>
                         <TypeBadge type={wine.type} />
-                        <span style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1 }}>{wine.year}</span>
+                        <span style={{ fontSize: 17, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1 }}>{wine.year}</span>
                       </div>
-                      <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, fontWeight: 600, color: C.text, marginBottom: 4, lineHeight: 1.3 }}>{wine.name}</h3>
-                      <p style={{ fontSize: 15, color: C.textMuted, fontStyle: "italic", marginBottom: 9 }}>{wine.producer}</p>
-                      <div style={{ display: "flex", gap: 12, marginBottom: 9, fontSize: 14, color: C.textFaint, flexWrap: "wrap" }}>
+                      <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, fontWeight: 600, color: C.text, marginBottom: 5, lineHeight: 1.3 }}>{wine.name}</h3>
+                      <p style={{ fontSize: 17, color: C.textMuted, fontStyle: "italic", marginBottom: 10 }}>{wine.producer}</p>
+                      <div style={{ display: "flex", gap: 12, marginBottom: 10, fontSize: 16, color: C.textFaint, flexWrap: "wrap" }}>
                         {wine.region && <span>📍 {wine.region}</span>}
                         {wine.grape  && <span>🍇 {wine.grape}</span>}
                       </div>
@@ -604,14 +604,14 @@ export default function App() {
                         <div style={{ marginBottom: 9, display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(201,149,58,0.1)", border: `1px solid rgba(201,149,58,0.25)`, borderRadius: 7, padding: "5px 11px" }}>
                           <span style={{ fontSize: 13, color: C.textFaint }}>🗄</span>
                           <span style={{ fontSize: 14, color: C.textMuted, fontFamily: "'Cinzel', serif" }}>{rack.name}</span>
-                          <span style={{ fontSize: 15, color: C.gold, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{(wine.positions||[]).join(", ")}</span>
+                          <span style={{ fontSize: 17, color: C.gold, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{(wine.positions||[]).join(", ")}</span>
                         </div>
                       )}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <StarRating value={wine.rating} readonly />
                         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                          {wine.price && <span style={{ fontSize: 15, color: C.textMuted }}>€{wine.price}</span>}
-                          <span style={{ background: wine.quantity===0?"rgba(180,60,60,0.2)":wine.quantity<=2?"rgba(180,150,60,0.2)":"rgba(60,150,60,0.2)", color: wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070", padding: "4px 12px", borderRadius: 20, fontSize: 14, fontFamily: "'Cinzel', serif", fontWeight: 600 }}>{wine.quantity} bt</span>
+                          {wine.price && <span style={{ fontSize: 17, color: C.textMuted }}>€{wine.price}</span>}
+                          <span style={{ background: wine.quantity===0?"rgba(180,60,60,0.2)":wine.quantity<=2?"rgba(180,150,60,0.2)":"rgba(60,150,60,0.2)", color: wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070", padding: "5px 14px", borderRadius: 20, fontSize: 16, fontFamily: "'Cinzel', serif", fontWeight: 600 }}>{wine.quantity} bt</span>
                         </div>
                       </div>
                     </div>
@@ -638,8 +638,8 @@ export default function App() {
         <div style={{ padding: "28px 32px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
             <div>
-              <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2, marginBottom: 7 }}>I MIEI SCAFFALI</h2>
-              <p style={{ fontSize: 15, color: C.textMuted, fontStyle: "italic" }}>Ogni cella è una posizione A1, B3… Clicca su una bottiglia per i dettagli.</p>
+              <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, color: C.gold, letterSpacing: 2, marginBottom: 8 }}>I MIEI SCAFFALI</h2>
+              <p style={{ fontSize: 17, color: C.textMuted, fontStyle: "italic" }}>Ogni cella è una posizione A1, B3… Clicca su una bottiglia per i dettagli.</p>
             </div>
             <button className="btn-gold" onClick={() => { setEditingRack(emptyRack()); setRackModal("add"); }}>+ NUOVO SCAFFALE</button>
           </div>
@@ -656,8 +656,8 @@ export default function App() {
                 <div key={rack.id} className="rack-card">
                   <div style={{ padding: "17px 22px 14px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                      <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.text, letterSpacing: 1 }}>{rack.name}</h3>
-                      <p style={{ fontSize: 14, color: C.textFaint, marginTop: 4 }}>{rack.rows} file ({ROW_LABELS[0]}–{ROW_LABELS[rack.rows-1]}) × {rack.cols} colonne · {occ.length}/{rack.rows*rack.cols} occupate</p>
+                      <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, color: C.text, letterSpacing: 1 }}>{rack.name}</h3>
+                      <p style={{ fontSize: 16, color: C.textFaint, marginTop: 5 }}>{rack.rows} file ({ROW_LABELS[0]}–{ROW_LABELS[rack.rows-1]}) × {rack.cols} colonne · {occ.length}/{rack.rows*rack.cols} occupate</p>
                     </div>
                     <div style={{ display: "flex", gap: 9 }}>
                       <button className="btn-sm" onClick={() => { setEditingRack({...rack}); setRackModal("edit"); }}>✏ Modifica</button>
@@ -667,12 +667,12 @@ export default function App() {
                   <div style={{ padding: "20px 22px", overflowX: "auto" }}>
                     <div style={{ display: "flex", gap: 4, marginBottom: 4, marginLeft: 32 }}>
                       {Array.from({length:rack.cols},(_,c)=>(
-                        <div key={c} style={{ width:56, textAlign:"center", fontSize:13, color:C.textFaint, fontFamily:"'Cinzel', serif", fontWeight:600 }}>{c+1}</div>
+                        <div key={c} style={{ width:56, textAlign:"center", fontSize:15, color:C.textFaint, fontFamily:"'Cinzel', serif", fontWeight:600 }}>{c+1}</div>
                       ))}
                     </div>
                     {Array.from({length:rack.rows},(_,r)=>(
                       <div key={r} style={{ display:"flex", alignItems:"center", gap:4, marginBottom:4 }}>
-                        <div style={{ width:28, textAlign:"center", fontSize:14, color:C.textFaint, fontFamily:"'Cinzel', serif", fontWeight:700 }}>{ROW_LABELS[r]}</div>
+                        <div style={{ width:28, textAlign:"center", fontSize:16, color:C.textFaint, fontFamily:"'Cinzel', serif", fontWeight:700 }}>{ROW_LABELS[r]}</div>
                         {Array.from({length:rack.cols},(_,c)=>{
                           const pos = `${ROW_LABELS[r]}${c+1}`;
                           const wine = getWineAtPosition(rack.id, pos);
@@ -697,11 +697,11 @@ export default function App() {
                     ))}
                     {occ.length>0&&(
                       <div style={{marginTop:14,display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}}>
-                        <span style={{fontSize:13,color:C.textFaint,fontFamily:"'Cinzel', serif",letterSpacing:1}}>LEGENDA:</span>
+                        <span style={{fontSize:15,color:C.textFaint,fontFamily:"'Cinzel', serif",letterSpacing:1}}>LEGENDA:</span>
                         {[...new Set(occ.map(w=>w.type))].map(type=>{const c=typeColors[type];return(
                           <div key={type} style={{display:"flex",alignItems:"center",gap:6}}>
                             <div style={{width:14,height:14,background:c.badge,border:`1px solid ${c.bar}`,borderRadius:3}}/>
-                            <span style={{fontSize:13,color:C.textFaint,fontFamily:"'Cinzel', serif"}}>{type}</span>
+                            <span style={{fontSize:15,color:C.textFaint,fontFamily:"'Cinzel', serif"}}>{type}</span>
                           </div>
                         );})}
                       </div>
@@ -883,8 +883,8 @@ export default function App() {
                     ...((editing.positions||[]).length?[["📌 Posizioni",(editing.positions||[]).join(", "),true]]:[]),
                   ].map(([l,v,highlight])=>(
                     <div key={l} style={{background:C.bg,borderRadius:8,padding:"11px 14px"}}>
-                      <div style={{fontSize:13,color:C.textFaint,letterSpacing:1,fontFamily:"'Cinzel', serif",marginBottom:4}}>{l}</div>
-                      <div style={{fontSize:highlight?22:16,color:highlight?C.gold:C.text,fontFamily:highlight?"'Cinzel', serif":"inherit",fontWeight:highlight?700:400}}>{v}</div>
+                      <div style={{fontSize:15,color:C.textFaint,letterSpacing:1,fontFamily:"'Cinzel', serif",marginBottom:5}}>{l}</div>
+                      <div style={{fontSize:highlight?26:18,color:highlight?C.gold:C.text,fontFamily:highlight?"'Cinzel', serif":"inherit",fontWeight:highlight?700:400}}>{v}</div>
                     </div>
                   ))}
                 </div>
@@ -897,13 +897,13 @@ export default function App() {
                 )}
 
                 <div style={{marginBottom:16}}>
-                  <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:7}}>VALUTAZIONE</div>
+                  <div style={{fontSize:15,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:8}}>VALUTAZIONE</div>
                   <StarRating value={editing.rating} readonly/>
                 </div>
                 {editing.notes&&(
                   <div style={{background:C.bg,borderRadius:8,padding:"14px 16px",borderLeft:`2px solid ${C.border}`,marginBottom:16}}>
                     <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:6}}>NOTE DI DEGUSTAZIONE</div>
-                    <p style={{fontSize:16,color:C.textMuted,lineHeight:1.7,fontStyle:"italic"}}>{editing.notes}</p>
+                    <p style={{fontSize:18,color:C.textMuted,lineHeight:1.8,fontStyle:"italic"}}>{editing.notes}</p>
                   </div>
                 )}
                 {/* ── APPROFONDISCI ── */}
@@ -918,7 +918,7 @@ export default function App() {
                             🔍 ANALISI DEL VINO
                           </div>
                           {editing.enrichment && !enriching && (
-                            <div style={{fontSize:11,color:C.textFaint,marginTop:3,fontStyle:"italic"}}>
+                            <div style={{fontSize:13,color:C.textFaint,marginTop:3,fontStyle:"italic"}}>
                               Analisi salvata · clicca per aggiornare
                             </div>
                           )}
@@ -959,10 +959,10 @@ export default function App() {
                             ["💡 Lo sapevi?", displayData.curiosity],
                           ].filter(([,v]) => v).map(([label, text]) => (
                             <div key={label} style={{borderLeft:`2px solid ${C.border}`,paddingLeft:12}}>
-                              <div style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:5,fontWeight:700}}>
+                              <div style={{fontSize:15,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:6,fontWeight:700}}>
                                 {label}
                               </div>
-                              <p style={{fontSize:15,color:C.textMuted,lineHeight:1.8,fontStyle:"italic",margin:0}}>
+                              <p style={{fontSize:17,color:C.textMuted,lineHeight:1.85,fontStyle:"italic",margin:0}}>
                                 {text}
                               </p>
                             </div>
@@ -1064,8 +1064,8 @@ export default function App() {
           <div className="modal-box" style={{maxWidth:370}} onClick={e=>e.stopPropagation()}>
             <div style={{padding:"30px",textAlign:"center"}}>
               <div style={{fontSize:36,marginBottom:14}}>🗑</div>
-              <h3 style={{fontFamily:"'Cinzel', serif",color:C.text,marginBottom:12,fontSize:16,letterSpacing:1}}>RIMUOVI VINO</h3>
-              <p style={{color:C.textMuted,marginBottom:24,fontSize:16}}>Eliminare <strong style={{color:C.gold}}>{deleteConfirm.name}</strong>?</p>
+              <h3 style={{fontFamily:"'Cinzel', serif",color:C.text,marginBottom:12,fontSize:18,letterSpacing:1}}>RIMUOVI VINO</h3>
+              <p style={{color:C.textMuted,marginBottom:24,fontSize:18}}>Eliminare <strong style={{color:C.gold}}>{deleteConfirm.name}</strong>?</p>
               <div style={{display:"flex",gap:12,justifyContent:"center"}}>
                 <button className="btn-ghost" onClick={()=>setDeleteConfirm(null)}>ANNULLA</button>
                 <button className="btn-gold" style={{background:"linear-gradient(135deg, #7a2020, #c04040)"}}
@@ -1082,8 +1082,8 @@ export default function App() {
           <div className="modal-box" style={{maxWidth:400}} onClick={e=>e.stopPropagation()}>
             <div style={{padding:"30px",textAlign:"center"}}>
               <div style={{fontSize:36,marginBottom:14}}>🗄</div>
-              <h3 style={{fontFamily:"'Cinzel', serif",color:C.text,marginBottom:12,fontSize:16,letterSpacing:1}}>ELIMINA SCAFFALE</h3>
-              <p style={{color:C.textMuted,marginBottom:10,fontSize:16}}>Eliminare <strong style={{color:C.gold}}>{deleteRackConfirm.name}</strong>?</p>
+              <h3 style={{fontFamily:"'Cinzel', serif",color:C.text,marginBottom:12,fontSize:18,letterSpacing:1}}>ELIMINA SCAFFALE</h3>
+              <p style={{color:C.textMuted,marginBottom:10,fontSize:18}}>Eliminare <strong style={{color:C.gold}}>{deleteRackConfirm.name}</strong>?</p>
               <p style={{color:"#c07070",marginBottom:24,fontSize:14,fontStyle:"italic"}}>Le posizioni dei vini assegnati verranno azzerate.</p>
               <div style={{display:"flex",gap:12,justifyContent:"center"}}>
                 <button className="btn-ghost" onClick={()=>setDeleteRackConfirm(null)}>ANNULLA</button>
@@ -1096,7 +1096,7 @@ export default function App() {
 
       {/* Toast */}
       {toast&&(
-        <div style={{position:"fixed",bottom:26,right:26,background:C.surface,border:`1px solid ${C.border}`,borderRadius:9,padding:"13px 20px",color:C.gold,fontFamily:"'Cinzel', serif",fontSize:14,letterSpacing:1,boxShadow:"0 8px 24px rgba(0,0,0,0.4)",zIndex:300,animation:"fadeUp 0.2s ease"}}>
+        <div style={{position:"fixed",bottom:26,right:26,background:C.surface,border:`1px solid ${C.border}`,borderRadius:9,padding:"13px 20px",color:C.gold,fontFamily:"'Cinzel', serif",fontSize:16,letterSpacing:1,boxShadow:"0 8px 24px rgba(0,0,0,0.4)",zIndex:300,animation:"fadeUp 0.2s ease"}}>
           {toast}
         </div>
       )}
