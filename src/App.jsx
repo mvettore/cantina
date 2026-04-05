@@ -296,7 +296,11 @@ export default function App() {
     setScanError(null);
     setScanning(true);
     try {
-      const dataUrl = await resizeImage(file, 500, 0.65);
+      // Ridimensiona aggressivamente: max 350px, qualità 55%
+      // Il corpo della richiesta deve stare sotto i 4MB di Netlify
+      const dataUrl = await resizeImage(file, 350, 0.55);
+      const sizeKB = Math.round(dataUrl.length * 0.75 / 1024);
+      console.log(`Immagine scan: ~${sizeKB}KB`);
       const info    = await scanLabel(dataUrl);
 
       // Store a smaller thumbnail for display

@@ -6,6 +6,9 @@
 [functions."scan-label"]
   timeout = 26
 
+[functions."enrich-wine"]
+  timeout = 26
+
 [[redirects]]
   from = "/api/data"
   to = "/.netlify/functions/data"

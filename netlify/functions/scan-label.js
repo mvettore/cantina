@@ -1,7 +1,6 @@
 /**
  * Netlify Function: scan-label
- * Riceve l'immagine in base64, chiama Anthropic Vision, restituisce JSON del vino.
- * Timeout esplicito a 24s per stare dentro il limite Netlify di 26s.
+ * Usa claude-haiku (più veloce) per leggere l'etichetta — risponde in 2-4s.
  */
 
 const handler = async (event) => {
@@ -18,29 +17,29 @@ const handler = async (event) => {
 
   const { base64, mediaType } = body;
   if (!base64 || !mediaType) {
-    return { statusCode: 400, body: JSON.stringify({ error: "Campi mancanti: base64, mediaType" }) };
+    return { statusCode: 400, body: JSON.stringify({ error: "Campi mancanti" }) };
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: "ANTHROPIC_API_KEY non configurata" }) };
+    return { statusCode: 500, body: JSON.stringify({ error: "API key non configurata" }) };
   }
 
-  const prompt = `Sei un esperto enologo. Analizza questa etichetta di vino.
-Restituisci ESCLUSIVAMENTE un oggetto JSON valido (niente testo prima o dopo) con questi campi:
+  console.log(`Immagine ricevuta: ~${Math.round(base64.length * 0.75 / 1024)}KB`);
+
+  const prompt = `Leggi questa etichetta di vino e restituisci SOLO un oggetto JSON valido:
 {
-  "name": "nome commerciale del vino",
-  "producer": "nome della cantina/produttore",
+  "name": "nome commerciale del vino (non il produttore)",
+  "producer": "cantina o produttore",
   "year": 2019,
-  "type": "uno tra: Rosso, Bianco, Rosato, Spumante, Dolce, Passito",
+  "type": "Rosso|Bianco|Rosato|Spumante|Dolce|Passito",
   "region": "regione italiana o paese",
   "grape": "vitigno principale",
-  "notes": "2-3 frasi descrittive sul vino",
+  "notes": "1-2 frasi descrittive",
   "price": null
 }
-Se un campo non è determinabile usa null. Deduci il tipo dal vitigno o dalla denominazione.`;
+Usa null per i campi non leggibili. Niente testo fuori dal JSON.`;
 
-  // Timeout esplicito a 24 secondi (il limite Netlify è 26s)
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 24000);
 
@@ -54,8 +53,8 @@ Se un campo non è determinabile usa null. Deduci il tipo dal vitigno o dalla de
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 800,
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 500,
         messages: [{
           role: "user",
           content: [
@@ -70,26 +69,15 @@ Se un campo non è determinabile usa null. Deduci il tipo dal vitigno o dalla de
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Anthropic API error:", response.status, errText);
-      return {
-        statusCode: response.status,
-        body: JSON.stringify({ error: `Anthropic error ${response.status}: ${errText}` }),
-      };
+      console.error("API error:", response.status, errText);
+      return { statusCode: response.status, body: JSON.stringify({ error: errText }) };
     }
 
     const data = await response.json();
-    console.log("Stop reason:", data.stop_reason);
+    const raw = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
+    console.log("Risposta raw:", raw.slice(0, 200));
 
-    const textBlocks = (data.content || []).filter(b => b.type === "text");
-    const raw = textBlocks.map(b => b.text).join("").trim();
-    console.log("Raw (first 300):", raw.slice(0, 300));
-
-    const clean = raw
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
-
+    const clean = raw.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
     const parsed = JSON.parse(clean);
 
     return {
@@ -100,8 +88,8 @@ Se un campo non è determinabile usa null. Deduci il tipo dal vitigno o dalla de
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === "AbortError") {
-      console.error("Timeout: Anthropic non ha risposto in 24s");
-      return { statusCode: 504, body: JSON.stringify({ error: "Timeout: riprova con una foto più piccola" }) };
+      console.error("Timeout 24s");
+      return { statusCode: 504, body: JSON.stringify({ error: "Timeout — riprova" }) };
     }
     console.error("Errore:", err.message);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
