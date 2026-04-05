@@ -469,7 +469,8 @@ export default function App() {
       gusto_tannini: "",
       gusto_persistenza: "",
       gusto_equilibrio: "",
-      notes: "",
+      notes: wine.notes || "",
+      wineEnrichment: wine.enrichment || null,
     });
     setLogModal("add");
   };
@@ -1903,6 +1904,32 @@ export default function App() {
                   </div>
                 </>);
               })()}
+
+              {/* ── ANALISI DEL VINO (salvata dalla scheda) ── */}
+              {logEntry.wineEnrichment && (() => {
+                const d = logEntry.wineEnrichment;
+                return (
+                  <div style={{ background: C.bg, borderRadius: 9, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+                    <div style={{ fontSize: 13, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginBottom: 10, fontWeight: 700 }}>ANALISI DEL VINO</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {[
+                        ["🍇 Il Vitigno", d.grapeProfile],
+                        ["👃 Sentori & Degustazione", d.tastingNotes],
+                        ["🌍 Territorio", d.territory],
+                        ["⏳ Invecchiamento", d.aging],
+                        ["🍽 Abbinamenti", d.foodPairing],
+                        ["💡 Lo sapevi?", d.curiosity],
+                      ].filter(([, v]) => v).map(([label, text]) => (
+                        <div key={label}>
+                          <div style={{ fontSize: 12, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginBottom: 2 }}>{label}</div>
+                          <p style={{ fontSize: 15, color: C.textMuted, lineHeight: 1.6, fontFamily: "'EB Garamond', serif", margin: 0 }}>{text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div style={{ position: "sticky", bottom: 0, background: C.surface,
                 borderTop: `1px solid ${C.border}`, padding: "12px 0 4px",
                 display: "flex", gap: 10, justifyContent: "flex-end",
