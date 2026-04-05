@@ -22,7 +22,7 @@ const handler = async (event) => {
   }
 
   const prompt = `Sei un sommelier esperto e storico del vino italiano.
-Fornisci informazioni dettagliate su questo vino:
+Cerca online una scheda autorevole per questo vino (vivino.com, wine-searcher.com, gamberorosso.it, winemag.it, decanter.com, o il sito del produttore), poi fornisci informazioni dettagliate:
 
 Nome: ${wine.name || "—"}
 Produttore: ${wine.producer || "—"}
@@ -38,7 +38,8 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON)
   "territory": "2-3 frasi sul territorio e denominazione: suolo, microclima, perché quella zona è vocata per questo vitigno",
   "aging": "1-2 frasi sul potenziale di invecchiamento e se aprire ora o aspettare",
   "foodPairing": "3-4 abbinamenti gastronomici ideali, separati da virgola",
-  "curiosity": "1 curiosità storica o aneddoto interessante su questo vino o produttore"
+  "curiosity": "1 curiosità storica o aneddoto interessante su questo vino o produttore",
+  "wineCardUrl": "url diretto alla scheda del vino trovata online (es. pagina vivino, gambero rosso, wine-searcher, sito produttore), oppure null se non trovata"
 }`;
 
   const controller = new AbortController();
@@ -52,10 +53,12 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON)
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        "anthropic-beta": "web-search-2025-03-05",
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 1200,
+        max_tokens: 2000,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: [{ role: "user", content: prompt }],
       }),
     });

@@ -1439,6 +1439,23 @@ export default function App() {
                             </div>
                           ))}
 
+                          {/* Link scheda online */}
+                          {displayData.wineCardUrl && (
+                            <a href={displayData.wineCardUrl} target="_blank" rel="noopener noreferrer"
+                              style={{
+                                alignSelf:"flex-start", display:"inline-block",
+                                border:`1px solid ${C.border}`, borderRadius:6,
+                                color:C.textMuted, padding:"7px 14px",
+                                fontFamily:"'Cinzel', serif", fontSize:12, letterSpacing:1,
+                                textDecoration:"none", transition:"all 0.15s",
+                              }}
+                              onMouseEnter={e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}
+                              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}}
+                            >
+                              🔗 Scheda online
+                            </a>
+                          )}
+
                           {/* Bottone per copiare solo i sentori nelle note */}
                           {displayData.tastingNotes && (
                             <button onClick={()=>{
@@ -1931,6 +1948,19 @@ export default function App() {
                           <p style={{ fontSize: 15, color: C.textMuted, lineHeight: 1.6, fontFamily: "'EB Garamond', serif", margin: 0 }}>{text}</p>
                         </div>
                       ))}
+                      {d.wineCardUrl && (
+                        <a href={d.wineCardUrl} target="_blank" rel="noopener noreferrer"
+                          style={{
+                            alignSelf: "flex-start", display: "inline-block",
+                            border: `1px solid ${C.border}`, borderRadius: 6,
+                            color: C.textMuted, padding: "6px 12px",
+                            fontFamily: "'Cinzel', serif", fontSize: 11, letterSpacing: 1,
+                            textDecoration: "none",
+                          }}
+                        >
+                          🔗 Scheda online
+                        </a>
+                      )}
                     </div>
                   </div>
                 );
