@@ -700,7 +700,7 @@ export default function App() {
         .nav-btn:hover:not(.active) { color: ${C.textMuted}; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: flex-end; justify-content: center; z-index: 200; padding: 0; backdrop-filter: blur(4px); }
         @media (min-width: 600px) { .modal-overlay { align-items: center; padding: 8px; } }
-        .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(98vw, 1100px); max-height: 96vh; overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 16px); }
+        .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(98vw, 1100px); max-height: 96vh; overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; padding-bottom: env(safe-area-inset-bottom, 16px); }
         @keyframes fadeUp { from { opacity:0; transform: translateY(18px) scale(0.97); } to { opacity:1; transform: none; } }
 
         @media (max-width: 600px) {
@@ -1228,7 +1228,7 @@ export default function App() {
               <div style={{height:4,background:`linear-gradient(90deg, ${tc.bar}, ${C.gold})`,borderRadius:"14px 14px 0 0"}}/>
 
               {/* X close button — sticky, always visible while scrolling */}
-              <div style={{position:"sticky",top:0,zIndex:10,display:"flex",justifyContent:"flex-end",pointerEvents:"none"}}>
+              <div style={{position:"sticky",top:"env(safe-area-inset-top, 0px)",zIndex:10,display:"flex",justifyContent:"flex-end",pointerEvents:"none"}}>
                 <button onClick={()=>{setModal(null);setEnrichData(null);setEnrichError(null);}}
                   style={{
                     pointerEvents:"all",
