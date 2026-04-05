@@ -503,6 +503,24 @@ export default function App() {
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 8px; backdrop-filter: blur(4px); }
         .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(98vw, 1100px); max-height: 96vh; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; }
         @keyframes fadeUp { from { opacity:0; transform: translateY(18px) scale(0.97); } to { opacity:1; transform: none; } }
+
+        @media (max-width: 600px) {
+          /* Compact cards on mobile */
+          .wine-card { font-size: 15px !important; }
+          .wine-card h3 { font-size: 17px !important; }
+          .wine-card p  { font-size: 14px !important; }
+
+          /* Compact filter tabs */
+          .tab-btn { padding: 5px 10px !important; font-size: 12px !important; }
+          .nav-btn  { padding: 9px 14px !important; font-size: 13px !important; }
+
+          /* Modal almost full screen */
+          .modal-overlay { padding: 4px !important; align-items: flex-end !important; }
+          .modal-box { border-radius: 16px 16px 0 0 !important; max-height: 97vh !important; }
+
+          /* Smaller header on mobile */
+          .mobile-header-title { font-size: 18px !important; }
+        }
         @keyframes spin { to { transform: rotate(360deg); } }
         .rack-card { background: ${C.surface2}; border: 1px solid ${C.border}; border-radius: 12px; overflow: hidden; }
         .action-btn { flex: 1; background: none; border: none; cursor: pointer; padding: 10px; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: color 0.15s, background 0.15s; }
@@ -526,7 +544,7 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontSize: 34 }}>🍷</span>
           <div>
-            <h1 style={{ fontFamily: "'Cinzel', serif", fontSize: 26, fontWeight: 700, color: C.gold, letterSpacing: 3 }}>LA MIA CANTINA</h1>
+            <h1 className="mobile-header-title" style={{ fontFamily: "'Cinzel', serif", fontSize: 26, fontWeight: 700, color: C.gold, letterSpacing: 3 }}>LA MIA CANTINA</h1>
             <p style={{ fontSize: 15, color: C.textFaint, letterSpacing: 2, fontFamily: "'Cinzel', serif", marginTop: 2 }}>CATALOGO VINI</p>
           </div>
         </div>
@@ -587,7 +605,7 @@ export default function App() {
               <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 2, fontSize: 15 }}>{wines.length===0?"LA CANTINA È VUOTA":"NESSUN RISULTATO"}</p>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 18 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 18 }}>
               {filtered.map(wine => {
                 const tc = typeColors[wine.type] || { bar: "#888" };
                 const rack = racks.find(r => r.id === wine.rackId);
@@ -604,14 +622,14 @@ export default function App() {
                       </div>
                     )}
 
-                    <div style={{ padding: "15px 18px 13px" }}>
+                    <div style={{ padding: "13px 15px 11px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 9 }}>
                         <TypeBadge type={wine.type} />
-                        <span style={{ fontSize: 17, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1 }}>{wine.year}</span>
+                        <span style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1 }}>{wine.year}</span>
                       </div>
-                      <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 22, fontWeight: 600, color: C.text, marginBottom: 5, lineHeight: 1.3 }}>{wine.name}</h3>
-                      <p style={{ fontSize: 19, color: C.textMuted, fontStyle: "italic", marginBottom: 10 }}>{wine.producer}</p>
-                      <div style={{ display: "flex", gap: 12, marginBottom: 10, fontSize: 16, color: C.textFaint, flexWrap: "wrap" }}>
+                      <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 19, fontWeight: 600, color: C.text, marginBottom: 4, lineHeight: 1.3 }}>{wine.name}</h3>
+                      <p style={{ fontSize: 16, color: C.textMuted, fontStyle: "italic", marginBottom: 8 }}>{wine.producer}</p>
+                      <div style={{ display: "flex", gap: 10, marginBottom: 8, fontSize: 14, color: C.textFaint, flexWrap: "wrap" }}>
                         {wine.region && <span>📍 {wine.region}</span>}
                         {wine.grape  && <span>🍇 {wine.grape}</span>}
                       </div>
@@ -1032,19 +1050,23 @@ export default function App() {
                   );
                 })()}
 
-                <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-                  <button className="btn-danger" onClick={()=>{setModal(null);setDeleteConfirm(editing);}}>ELIMINA</button>
-                  <button className="btn-ghost" onClick={()=>{setModal(null);setEnrichData(null);setEnrichError(null);}}>CHIUDI</button>
-                  {editing.quantity > 0 && (
-                    <button onClick={()=>handleDrinkOne(editing)} style={{
-                      background:"linear-gradient(135deg, #3a1a5a, #7a3a9a)",
-                      color:"#f0d0ff", border:"none", borderRadius:8,
-                      padding:"10px 18px", cursor:"pointer",
-                      fontFamily:"'Cinzel', serif", fontSize:13, letterSpacing:1, fontWeight:700,
-                      transition:"opacity 0.15s",
-                    }}>🍷 BEVI UNA</button>
-                  )}
-                  <button className="btn-gold" onClick={()=>{setScanError(null);setModal("edit");}}>MODIFICA</button>
+                <div style={{display:"flex",gap:8,justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
+                  {/* Sinistra: elimina */}
+                  <button className="btn-danger" onClick={()=>{setModal(null);setDeleteConfirm(editing);}}>✕ ELIMINA</button>
+                  {/* Destra: azioni principali */}
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                    {editing.quantity > 0 && (
+                      <button onClick={()=>handleDrinkOne(editing)} style={{
+                        background:"linear-gradient(135deg, #3a1a5a, #7a3a9a)",
+                        color:"#f0d0ff", border:"none", borderRadius:8,
+                        padding:"10px 16px", cursor:"pointer",
+                        fontFamily:"'Cinzel', serif", fontSize:14, letterSpacing:1, fontWeight:700,
+                        transition:"opacity 0.15s", whiteSpace:"nowrap",
+                      }}>🍷 BEVI</button>
+                    )}
+                    <button className="btn-ghost" style={{padding:"10px 16px"}} onClick={()=>{setModal(null);setEnrichData(null);setEnrichError(null);}}>CHIUDI</button>
+                    <button className="btn-gold" style={{padding:"10px 16px"}} onClick={()=>{setScanError(null);setModal("edit");}}>MODIFICA</button>
+                  </div>
                 </div>
               </div>
             </div>
