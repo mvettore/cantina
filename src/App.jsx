@@ -739,7 +739,7 @@ export default function App() {
       `}</style>
 
       {/* ── HEADER ── */}
-      <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, overflow: "hidden" }}>
+      <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "16px 20px", paddingTop: "calc(16px + env(safe-area-inset-top, 0px))", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontSize: 34 }}>🍷</span>
           <div>
