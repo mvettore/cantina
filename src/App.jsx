@@ -290,6 +290,9 @@ export default function App() {
   const [scanError, setScanError] = useState(null);
   const [drinkModal, setDrinkModal] = useState(null);
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
+  const [cantinaName, setCantinaName] = useState(() => loadLocal('cantina-name', 'CANTINA VETTORELLO'));
+  const [editingName, setEditingName] = useState(false);
+  const [pendingDrink, setPendingDrink] = useState(null); // {wine, newQty, newPositions}
   const [log, setLog] = useState(() => loadLocal(LOG_KEY, []));
   const [logModal, setLogModal] = useState(null); // wine being logged
   const [logEntry, setLogEntry] = useState(null); // current entry being edited
@@ -333,6 +336,7 @@ export default function App() {
   const saveWines = (w) => { setWines(w); saveLocal(STORAGE_KEY, w); cloudSave({ wines: w }); };
   const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY,  r); cloudSave({ racks: r }); };
   const saveLog   = (l) => { setLog(l);   saveLocal(LOG_KEY,   l); cloudSave({ log:   l }); };
+  const saveName  = (n) => { setCantinaName(n); saveLocal('cantina-name', n); };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
   const filtered = wines
@@ -423,7 +427,8 @@ export default function App() {
     }
   };
 
-  // Conferma la bevuta: aggiorna cantina e apre il form dello storico
+  // Conferma la bevuta: memorizza il pending e apre il form storico
+  // La cantina viene aggiornata SOLO quando si salva il log (o si salta)
   const commitDrink = (wine, posToRemove) => {
     const newQty = wine.quantity - 1;
     const positions = wine.positions || [];
@@ -431,17 +436,8 @@ export default function App() {
       ? positions.filter(p => p !== posToRemove)
       : positions.slice(0, -1);
 
-    // Aggiorna la cantina
-    const shouldDelete = newQty <= 0;
-    if (!shouldDelete) {
-      const updated = { ...wine, quantity: newQty, positions: newPositions };
-      saveWines(wines.map(w => w.id === wine.id ? updated : w));
-      setEditing(updated);
-    } else {
-      saveWines(wines.filter(w => w.id !== wine.id));
-      setEditing(null);
-      setModal(null);
-    }
+    // Salva il pending — verrà applicato al salvataggio o allo skip
+    setPendingDrink({ wine, newQty, newPositions });
     setDrinkModal(null);
 
     // Apri il form per registrare la bevuta nello storico
@@ -463,6 +459,7 @@ export default function App() {
       rating: 0,
       vista_limpidezza: "",
       vista_colore: "",
+      vista_intensita_colore: "",
       olfatto_intensita: "",
       olfatto_qualita: "",
       olfatto_descrizione: "",
@@ -700,25 +697,18 @@ export default function App() {
         .nav-btn { background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; padding: 12px 22px; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 2px; transition: all 0.15s; color: ${C.textFaint}; }
         .nav-btn.active { color: ${C.gold}; border-bottom-color: ${C.gold}; }
         .nav-btn:hover:not(.active) { color: ${C.textMuted}; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 8px; backdrop-filter: blur(4px); }
-        .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(98vw, 1100px); max-height: 96vh; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: flex-end; justify-content: center; z-index: 200; padding: 0; backdrop-filter: blur(4px); }
+        @media (min-width: 600px) { .modal-overlay { align-items: center; padding: 8px; } }
+        .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(98vw, 1100px); max-height: 96vh; overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; padding-bottom: env(safe-area-inset-bottom, 16px); }
         @keyframes fadeUp { from { opacity:0; transform: translateY(18px) scale(0.97); } to { opacity:1; transform: none; } }
 
         @media (max-width: 600px) {
-          /* Compact cards on mobile */
           .wine-card { font-size: 15px !important; }
           .wine-card h3 { font-size: 17px !important; }
           .wine-card p  { font-size: 14px !important; }
-
-          /* Compact filter tabs */
           .tab-btn { padding: 5px 10px !important; font-size: 12px !important; }
           .nav-btn  { padding: 9px 14px !important; font-size: 13px !important; }
-
-          /* Modal almost full screen */
-          .modal-overlay { padding: 4px !important; align-items: flex-end !important; }
-          .modal-box { border-radius: 16px 16px 0 0 !important; max-height: 97vh !important; }
-
-          /* Smaller header on mobile */
+          .modal-box { border-radius: 20px 20px 0 0 !important; max-height: 95vh !important; }
           .mobile-header-title { font-size: 18px !important; }
         }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -744,7 +734,30 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontSize: 34 }}>🍷</span>
           <div>
-            <h1 className="mobile-header-title" style={{ fontFamily: "'Cinzel', serif", fontSize: 26, fontWeight: 700, color: C.gold, letterSpacing: 3 }}>CANTINA VETTORELLO</h1>
+            editingName ? (
+            <input
+              autoFocus
+              value={cantinaName}
+              onChange={e => setCantinaName(e.target.value)}
+              onBlur={() => { saveName(cantinaName); setEditingName(false); }}
+              onKeyDown={e => { if (e.key === "Enter") { saveName(cantinaName); setEditingName(false); } if (e.key === "Escape") setEditingName(false); }}
+              style={{ fontFamily: "'Cinzel', serif", fontSize: 22, fontWeight: 700, color: C.gold,
+                letterSpacing: 2, background: "transparent", border: "none",
+                borderBottom: `2px solid ${C.gold}`, outline: "none", padding: "2px 0",
+                width: "100%", maxWidth: 300 }}
+            />
+          ) : (
+            <h1 className="mobile-header-title"
+              onClick={() => setEditingName(true)}
+              title="Tocca per rinominare"
+              style={{ fontFamily: "'Cinzel', serif", fontSize: 22, fontWeight: 700,
+                color: C.gold, letterSpacing: 3, cursor: "pointer",
+                borderBottom: `1px dashed transparent`,
+                transition: "border-color 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.borderBottomColor = C.gold}
+              onMouseLeave={e => e.currentTarget.style.borderBottomColor = "transparent"}
+            >{cantinaName} ✎</h1>
+          )
           </div>
         </div>
         <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
@@ -1063,20 +1076,27 @@ export default function App() {
           </div>
         );
         return (
-          <div style={{ padding:"28px 32px", display:"flex", flexDirection:"column", gap:20 }}>
+          <div style={{ padding:"20px 16px", display:"flex", flexDirection:"column", gap:16 }}>
             <h2 style={{ fontFamily:"'Cinzel', serif", fontSize:18, color:C.gold, letterSpacing:2 }}>COMPOSIZIONE DELLA CANTINA</h2>
-            {/* Riepilogo */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(140px,1fr))", gap:12 }}>
-              {[["🍷","Bottiglie totali",totalBt],["🏷","Etichette",wines.length],["🗄","Scaffali",racks.length],
-                ["💰","Valore stimato",`€${wines.reduce((s,w)=>s+w.quantity*(parseFloat(w.price)||0),0).toFixed(0)}`]
+
+            {/* KPI */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(120px,1fr))", gap:10 }}>
+              {[
+                ["🍾","Bottiglie",totalBt],
+                ["🏷","Etichette",wines.length],
+                ["🗄","Scaffali",racks.length],
+                ["📖","Degustazioni",log.length],
+                ["💰","Valore",`€${wines.reduce((s,w)=>s+w.quantity*(parseFloat(w.price)||0),0).toFixed(0)}`],
               ].map(([icon,label,val])=>(
-                <div key={label} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:"14px 16px", textAlign:"center" }}>
-                  <div style={{ fontSize:24, marginBottom:4 }}>{icon}</div>
-                  <div style={{ fontSize:22, fontWeight:300, color:C.gold, fontFamily:"'Cinzel', serif" }}>{val}</div>
-                  <div style={{ fontSize:12, color:C.textFaint, fontFamily:"'Cinzel', serif", letterSpacing:1, marginTop:3 }}>{label.toUpperCase()}</div>
+                <div key={label} style={{ background:C.surface, border:`1px solid ${C.border}`,
+                  borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+                  <div style={{ fontSize:20, marginBottom:3 }}>{icon}</div>
+                  <div style={{ fontSize:22, fontWeight:300, color:C.gold, fontFamily:"'Cinzel',serif" }}>{val}</div>
+                  <div style={{ fontSize:11, color:C.textFaint, fontFamily:"'Cinzel',serif", letterSpacing:1, marginTop:2 }}>{label.toUpperCase()}</div>
                 </div>
               ))}
             </div>
+
             <Section title="PER TIPOLOGIA" rows={mkRows(byType)} color={C.gold}/>
             <Section title="PER VITIGNO"   rows={mkRows(byGrape)} color="#7a9aba"/>
             <Section title="PER REGIONE"   rows={mkRows(byRegion)} color="#8aba7a"/>
@@ -1790,11 +1810,19 @@ export default function App() {
                         {sel("vista_limpidezza", ["Limpido","Abbastanza limpido","Velato","Torbido"])}
                       </div>
                       <div>
-                        <label style={labelStyle}>Colore / Intensità</label>
-                        <input style={{ ...inputStyle, fontSize: 15, padding: "7px 10px" }}
-                          value={logEntry.vista_colore||""}
-                          onChange={e => setLogEntry(v => ({ ...v, vista_colore: e.target.value }))}
-                          placeholder="es. Rosso rubino intenso" />
+                        <label style={labelStyle}>Colore</label>
+                        {sel("vista_colore", logEntry.wineType === "Bianco"
+                          ? ["Giallo verdolino","Giallo paglierino","Giallo dorato","Giallo ambrato"]
+                          : logEntry.wineType === "Rosato"
+                          ? ["Rosa tenue","Rosa cerasuolo","Rosa chiaretto"]
+                          : logEntry.wineType === "Spumante"
+                          ? ["Bianco","Giallo paglierino","Giallo dorato","Rosato"]
+                          : ["Rosso porpora","Rosso rubino","Rosso granato","Rosso aranciato"]
+                        )}
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Intensità colore</label>
+                        {sel("vista_intensita_colore", ["Tenue","Poco intenso","Abbastanza intenso","Intenso","Molto intenso"])}
                       </div>
                     </div>
                   </div>
@@ -1870,8 +1898,26 @@ export default function App() {
                   </div>
                 </>);
               })()}
-              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
-                <button className="btn-ghost" onClick={() => setLogModal(null)}>{logModal === "edit" ? "ANNULLA" : "SALTA"}</button>
+              <div style={{ position: "sticky", bottom: 0, background: C.surface,
+                borderTop: `1px solid ${C.border}`, padding: "12px 0 4px",
+                display: "flex", gap: 10, justifyContent: "flex-end",
+                paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+                <button className="btn-ghost" onClick={() => {
+                  // Se si salta, aggiorna comunque la cantina
+                  if (logModal !== "edit" && pendingDrink) {
+                    const { wine, newQty, newPositions } = pendingDrink;
+                    if (newQty <= 0) {
+                      saveWines(wines.filter(w => w.id !== wine.id));
+                      setEditing(null); setModal(null);
+                    } else {
+                      const updated = { ...wine, quantity: newQty, positions: newPositions };
+                      saveWines(wines.map(w => w.id === wine.id ? updated : w));
+                      setEditing(updated);
+                    }
+                    setPendingDrink(null);
+                  }
+                  setLogModal(null);
+                }}>{logModal === "edit" ? "ANNULLA" : "SALTA"}</button>
                 {logModal === "edit" && (
                   <button className="btn-danger" onClick={() => {
                     saveLog(log.filter(l => l.id !== logEntry.id));
@@ -1885,6 +1931,19 @@ export default function App() {
                     showToast("✏ Voce aggiornata");
                   } else {
                     saveLog([logEntry, ...log]);
+                    // Applica la modifica alla cantina ora che è confermato
+                    if (pendingDrink) {
+                      const { wine, newQty, newPositions } = pendingDrink;
+                      if (newQty <= 0) {
+                        saveWines(wines.filter(w => w.id !== wine.id));
+                        setEditing(null); setModal(null);
+                      } else {
+                        const updated = { ...wine, quantity: newQty, positions: newPositions };
+                        saveWines(wines.map(w => w.id === wine.id ? updated : w));
+                        setEditing(updated);
+                      }
+                      setPendingDrink(null);
+                    }
                     showToast("🍷 Bevuta registrata nello storico");
                   }
                   setLogModal(null);
