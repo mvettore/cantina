@@ -192,10 +192,11 @@ export default function App() {
   const [wines,   setWines]   = useState(() => migrateWines(loadLocal(STORAGE_KEY, INITIAL_WINES)));
   const [racks,   setRacks]   = useState(() => loadLocal(RACKS_KEY, INITIAL_RACKS));
   const [syncing, setSyncing] = useState(IS_NETLIFY); // true while loading from cloud
-  const [view,    setView]    = useState("catalog");
+  const [view,    setView]    = useState("catalog"); // "catalog" | "racks" | "stats"
   const [search,  setSearch]  = useState("");
   const [filterType, setFilterType] = useState("Tutti");
   const [filterAging, setFilterAging] = useState("Tutti");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortBy,  setSortBy]  = useState("name");
   const [sortDir, setSortDir] = useState("desc");
   const [modal,   setModal]   = useState(null);
@@ -619,8 +620,7 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontSize: 34 }}>🍷</span>
           <div>
-            <h1 className="mobile-header-title" style={{ fontFamily: "'Cinzel', serif", fontSize: 26, fontWeight: 700, color: C.gold, letterSpacing: 3 }}>LA MIA CANTINA</h1>
-            <p style={{ fontSize: 15, color: C.textFaint, letterSpacing: 2, fontFamily: "'Cinzel', serif", marginTop: 2 }}>CATALOGO VINI</p>
+            <h1 className="mobile-header-title" style={{ fontFamily: "'Cinzel', serif", fontSize: 26, fontWeight: 700, color: C.gold, letterSpacing: 3 }}>CANTINA VETTORELLO</h1>
           </div>
         </div>
         <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
@@ -640,67 +640,94 @@ export default function App() {
 
       {/* ── NAV ── */}
       <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 32px", display: "flex" }}>
-        {[["catalog","📋  CATALOGO"],["racks","🗄  SCAFFALI"]].map(([v,l]) => (
+        {[["catalog","📋  CATALOGO"],["racks","🗄  SCAFFALI"],["stats","📊  STATISTICHE"]].map(([v,l]) => (
           <button key={v} className={`nav-btn ${view===v?"active":""}`} onClick={() => setView(v)}>{l}</button>
         ))}
       </div>
 
       {/* ══════ CATALOG VIEW ══════ */}
       {view === "catalog" && <>
-        <div style={{ padding: "14px 24px", background: C.surface, borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 10 }}>
-          {/* Riga 1: barra di ricerca */}
-          <div style={{ position: "relative" }}>
-            <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 16 }}>🔍</span>
-            <input placeholder="Cerca in tutti i campi…" value={search} onChange={e => setSearch(e.target.value)}
-              style={{ ...inputStyle, paddingLeft: 40, paddingRight: search ? 38 : 14 }} />
-            {search && (
-              <button onClick={() => setSearch("")} style={{
-                position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                background: C.border, border: "none", borderRadius: "50%",
-                width: 22, height: 22, cursor: "pointer", color: C.text,
-                fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
-                lineHeight: 1,
-              }}>✕</button>
+        <div style={{ padding: "12px 24px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+          {/* Barra ricerca + toggle filtri */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ flex: 1, position: "relative" }}>
+              <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 16 }}>🔍</span>
+              <input placeholder="Cerca in tutti i campi…" value={search} onChange={e => setSearch(e.target.value)}
+                style={{ ...inputStyle, paddingLeft: 40, paddingRight: search ? 38 : 14 }} />
+              {search && (
+                <button onClick={() => setSearch("")} style={{
+                  position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                  background: C.border, border: "none", borderRadius: "50%",
+                  width: 22, height: 22, cursor: "pointer", color: C.text,
+                  fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
+                }}>✕</button>
+              )}
+            </div>
+            {/* Indicatori filtri attivi */}
+            {(filterType !== "Tutti" || filterAging !== "Tutti") && (
+              <span style={{ fontSize: 12, color: C.gold, fontFamily: "'Cinzel', serif", whiteSpace: "nowrap" }}>
+                {[filterType !== "Tutti" ? filterType : null, filterAging !== "Tutti" ? filterAging : null].filter(Boolean).join(" · ")}
+              </span>
             )}
+            {/* Toggle filtri */}
+            <button onClick={() => setFiltersOpen(o => !o)} style={{
+              background: filtersOpen ? "rgba(201,149,58,0.14)" : C.surface2,
+              border: `1px solid ${filtersOpen ? "rgba(201,149,58,0.4)" : C.border}`,
+              borderRadius: 8, padding: "8px 13px", cursor: "pointer",
+              color: filtersOpen ? C.gold : C.textFaint,
+              fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1,
+              display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s",
+              whiteSpace: "nowrap",
+            }}>
+              FILTRI {filtersOpen ? "▲" : "▼"}
+            </button>
           </div>
-          {/* Riga 2: filtri tipologia */}
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginRight: 2 }}>TIPO</span>
-            {["Tutti",...WINE_TYPES].map(t => (
-              <button key={t} className="tab-btn" onClick={() => setFilterType(t)} style={{ color: filterType===t?C.gold:C.textFaint, background: filterType===t?"rgba(201,149,58,0.14)":"none", border: filterType===t?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent" }}>{t.toUpperCase()}</button>
-            ))}
-          </div>
-          {/* Riga 3: filtri maturità */}
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginRight: 2 }}>STATO</span>
-            {[
-              { key: "Tutti",   label: "Tutti",   icon: "" },
-              { key: "Giovane", label: "Giovane", icon: "🌱" },
-              { key: "Apice",   label: "Apice",   icon: "⭐" },
-              { key: "Maturo",  label: "Maturo",  icon: "🍂" },
-              { key: "Declino", label: "Declino", icon: "📉" },
-            ].map(({ key, label, icon }) => (
-              <button key={key} className="tab-btn" onClick={() => setFilterAging(key)} style={{
-                color: filterAging===key ? C.gold : C.textFaint,
-                background: filterAging===key ? "rgba(201,149,58,0.14)" : "none",
-                border: filterAging===key ? `1px solid rgba(201,149,58,0.4)` : "1px solid transparent",
-              }}>{icon} {label.toUpperCase()}</button>
-            ))}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1 }}>ORDINA</span>
-            <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ ...inputStyle, width: "auto", fontSize: 15, padding: "9px 12px" }}>
-              <option value="name">Nome</option>
-              <option value="year">Annata</option>
-              <option value="rating">Valutazione</option>
-              <option value="quantity">Quantità</option>
-            </select>
-            {sortBy === "year" && (
-              <button onClick={() => setSortDir(d => d==="asc"?"desc":"asc")} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.gold, cursor: "pointer", padding: "9px 14px", fontFamily: "'Cinzel', serif", fontSize: 14, whiteSpace: "nowrap" }}>
-                {sortDir==="asc" ? "↑ Più vecchi" : "↓ Più recenti"}
-              </button>
-            )}
-          </div>
+
+          {/* Filtri espandibili */}
+          {filtersOpen && (
+            <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+              {/* Tipo */}
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 38 }}>TIPO</span>
+                {["Tutti",...WINE_TYPES].map(t => (
+                  <button key={t} className="tab-btn" onClick={() => setFilterType(t)} style={{ color: filterType===t?C.gold:C.textFaint, background: filterType===t?"rgba(201,149,58,0.14)":"none", border: filterType===t?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent" }}>{t.toUpperCase()}</button>
+                ))}
+              </div>
+              {/* Stato */}
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 38 }}>STATO</span>
+                {[
+                  { key: "Tutti", label: "Tutti", icon: "" },
+                  { key: "Giovane", label: "Giovane", icon: "🌱" },
+                  { key: "Apice", label: "Apice", icon: "⭐" },
+                  { key: "Maturo", label: "Maturo", icon: "🍂" },
+                  { key: "Declino", label: "Declino", icon: "📉" },
+                ].map(({ key, label, icon }) => (
+                  <button key={key} className="tab-btn" onClick={() => setFilterAging(key)} style={{
+                    color: filterAging===key?C.gold:C.textFaint,
+                    background: filterAging===key?"rgba(201,149,58,0.14)":"none",
+                    border: filterAging===key?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent",
+                  }}>{icon} {label.toUpperCase()}</button>
+                ))}
+              </div>
+              {/* Ordina */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 38 }}>ORDINA</span>
+                <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ ...inputStyle, width: "auto", fontSize: 14, padding: "7px 10px" }}>
+                  <option value="name">Nome</option>
+                  <option value="year">Annata</option>
+                  <option value="rating">Valutazione</option>
+                  <option value="quantity">Quantità</option>
+                </select>
+                {sortBy === "year" && (
+                  <button onClick={() => setSortDir(d => d==="asc"?"desc":"asc")} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.gold, cursor: "pointer", padding: "7px 12px", fontFamily: "'Cinzel', serif", fontSize: 13 }}>
+                    {sortDir==="asc" ? "↑ Più vecchi" : "↓ Più recenti"}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
         </div>
 
         <div style={{ padding: "28px 32px" }}>
@@ -871,6 +898,63 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ══════ STATS VIEW ══════ */}
+      {view === "stats" && (() => {
+        const totalBt = wines.reduce((s,w) => s+w.quantity, 0);
+        const byType  = {}, byGrape = {}, byRegion = {};
+        wines.forEach(w => {
+          const q = w.quantity || 1;
+          byType[w.type]     = (byType[w.type]     || 0) + q;
+          if (w.grape)  byGrape[w.grape]   = (byGrape[w.grape]   || 0) + q;
+          if (w.region) byRegion[w.region] = (byRegion[w.region] || 0) + q;
+        });
+        const mkRows = (obj) => Object.entries(obj).sort(([,a],[,b])=>b-a).map(([k,v])=>({ label:k, count:v, pct: totalBt>0?Math.round(v/totalBt*100):0 }));
+        const Bar = ({ pct, color }) => (
+          <div style={{ flex:1, height:8, background:`${color}22`, borderRadius:4, overflow:"hidden" }}>
+            <div style={{ width:`${pct}%`, height:"100%", background:color, borderRadius:4, transition:"width 0.6s ease" }}/>
+          </div>
+        );
+        const Section = ({ title, rows, color }) => (
+          <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
+            <div style={{ padding:"14px 20px", borderBottom:`1px solid ${C.border}`, fontFamily:"'Cinzel', serif", fontSize:15, color:C.gold, letterSpacing:2 }}>{title}</div>
+            <div style={{ padding:"12px 20px", display:"flex", flexDirection:"column", gap:10 }}>
+              {rows.map(r => (
+                <div key={r.label}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                    <span style={{ fontSize:16, color:C.text, fontFamily:"'EB Garamond', serif" }}>{r.label}</span>
+                    <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                      <span style={{ fontSize:14, color:C.textFaint }}>{r.count} bt</span>
+                      <span style={{ fontSize:15, color:color, fontFamily:"'Cinzel', serif", fontWeight:700, minWidth:38, textAlign:"right" }}>{r.pct}%</span>
+                    </div>
+                  </div>
+                  <Bar pct={r.pct} color={color}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+        return (
+          <div style={{ padding:"28px 32px", display:"flex", flexDirection:"column", gap:20 }}>
+            <h2 style={{ fontFamily:"'Cinzel', serif", fontSize:18, color:C.gold, letterSpacing:2 }}>COMPOSIZIONE DELLA CANTINA</h2>
+            {/* Riepilogo */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(140px,1fr))", gap:12 }}>
+              {[["🍷","Bottiglie totali",totalBt],["🏷","Etichette",wines.length],["🗄","Scaffali",racks.length],
+                ["💰","Valore stimato",`€${wines.reduce((s,w)=>s+w.quantity*(parseFloat(w.price)||0),0).toFixed(0)}`]
+              ].map(([icon,label,val])=>(
+                <div key={label} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:"14px 16px", textAlign:"center" }}>
+                  <div style={{ fontSize:24, marginBottom:4 }}>{icon}</div>
+                  <div style={{ fontSize:22, fontWeight:300, color:C.gold, fontFamily:"'Cinzel', serif" }}>{val}</div>
+                  <div style={{ fontSize:12, color:C.textFaint, fontFamily:"'Cinzel', serif", letterSpacing:1, marginTop:3 }}>{label.toUpperCase()}</div>
+                </div>
+              ))}
+            </div>
+            <Section title="PER TIPOLOGIA" rows={mkRows(byType)} color={C.gold}/>
+            <Section title="PER VITIGNO"   rows={mkRows(byGrape)} color="#7a9aba"/>
+            <Section title="PER REGIONE"   rows={mkRows(byRegion)} color="#8aba7a"/>
+          </div>
+        );
+      })()}
 
       {/* ══════ MODAL ADD / EDIT WINE ══════ */}
       {(modal==="add"||modal==="edit") && editing && (
