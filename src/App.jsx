@@ -195,6 +195,7 @@ export default function App() {
   const [view,    setView]    = useState("catalog");
   const [search,  setSearch]  = useState("");
   const [filterType, setFilterType] = useState("Tutti");
+  const [filterAging, setFilterAging] = useState("Tutti");
   const [sortBy,  setSortBy]  = useState("name");
   const [sortDir, setSortDir] = useState("desc");
   const [modal,   setModal]   = useState(null);
@@ -255,6 +256,7 @@ export default function App() {
 
   const filtered = wines
     .filter(w => filterType === "Tutti" || w.type === filterType)
+    .filter(w => filterAging === "Tutti" || getAgingStatus(w)?.s === filterAging)
     .filter(w => {
       const q = search.toLowerCase();
       // Costruisce array di tutti i campi testuali ricercabili
@@ -645,14 +647,44 @@ export default function App() {
 
       {/* ══════ CATALOG VIEW ══════ */}
       {view === "catalog" && <>
-        <div style={{ padding: "18px 32px", background: C.surface, borderBottom: `1px solid ${C.border}`, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ flex: 1, minWidth: 220, position: "relative" }}>
+        <div style={{ padding: "14px 24px", background: C.surface, borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* Riga 1: barra di ricerca */}
+          <div style={{ position: "relative" }}>
             <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 16 }}>🔍</span>
-            <input placeholder="Cerca nome, produttore, vitigno…" value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, paddingLeft: 40 }} />
+            <input placeholder="Cerca in tutti i campi…" value={search} onChange={e => setSearch(e.target.value)}
+              style={{ ...inputStyle, paddingLeft: 40, paddingRight: search ? 38 : 14 }} />
+            {search && (
+              <button onClick={() => setSearch("")} style={{
+                position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                background: C.border, border: "none", borderRadius: "50%",
+                width: 22, height: 22, cursor: "pointer", color: C.text,
+                fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
+                lineHeight: 1,
+              }}>✕</button>
+            )}
           </div>
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          {/* Riga 2: filtri tipologia */}
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginRight: 2 }}>TIPO</span>
             {["Tutti",...WINE_TYPES].map(t => (
               <button key={t} className="tab-btn" onClick={() => setFilterType(t)} style={{ color: filterType===t?C.gold:C.textFaint, background: filterType===t?"rgba(201,149,58,0.14)":"none", border: filterType===t?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent" }}>{t.toUpperCase()}</button>
+            ))}
+          </div>
+          {/* Riga 3: filtri maturità */}
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginRight: 2 }}>STATO</span>
+            {[
+              { key: "Tutti",   label: "Tutti",   icon: "" },
+              { key: "Giovane", label: "Giovane", icon: "🌱" },
+              { key: "Apice",   label: "Apice",   icon: "⭐" },
+              { key: "Maturo",  label: "Maturo",  icon: "🍂" },
+              { key: "Declino", label: "Declino", icon: "📉" },
+            ].map(({ key, label, icon }) => (
+              <button key={key} className="tab-btn" onClick={() => setFilterAging(key)} style={{
+                color: filterAging===key ? C.gold : C.textFaint,
+                background: filterAging===key ? "rgba(201,149,58,0.14)" : "none",
+                border: filterAging===key ? `1px solid rgba(201,149,58,0.4)` : "1px solid transparent",
+              }}>{icon} {label.toUpperCase()}</button>
             ))}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
