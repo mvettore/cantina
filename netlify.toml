@@ -3,7 +3,7 @@
   publish = "dist"
   functions = "netlify/functions"
 
-[functions]
+[functions."scan-label"]
   timeout = 26
 
 [[redirects]]
