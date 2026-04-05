@@ -241,11 +241,11 @@ export default function App() {
     setScanError(null);
     setScanning(true);
     try {
-      const dataUrl = await resizeImage(file, 900, 0.82);
+      const dataUrl = await resizeImage(file, 500, 0.65);
       const info    = await scanLabel(dataUrl);
 
       // Store a smaller thumbnail for display
-      const thumb = await resizeImage(file, 500, 0.78);
+      const thumb = await resizeImage(file, 400, 0.65);
 
       setEditing(prev => ({
         ...prev,

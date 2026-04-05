@@ -3,6 +3,9 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[functions]
+  timeout = 26
+
 [[redirects]]
   from = "/api/data"
   to = "/.netlify/functions/data"

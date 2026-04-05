@@ -1,3 +1,9 @@
+/**
+ * Netlify Function: scan-label
+ * Riceve l'immagine in base64, chiama Anthropic Vision, restituisce JSON del vino.
+ * Timeout esplicito a 24s per stare dentro il limite Netlify di 26s.
+ */
+
 const handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -21,7 +27,6 @@ const handler = async (event) => {
   }
 
   const prompt = `Sei un esperto enologo. Analizza questa etichetta di vino.
-Usa la ricerca web per trovare informazioni aggiuntive se necessario.
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido (niente testo prima o dopo) con questi campi:
 {
   "name": "nome commerciale del vino",
@@ -30,14 +35,19 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido (niente testo prima o dopo) co
   "type": "uno tra: Rosso, Bianco, Rosato, Spumante, Dolce, Passito",
   "region": "regione italiana o paese",
   "grape": "vitigno principale",
-  "notes": "2-3 frasi descrittive",
+  "notes": "2-3 frasi descrittive sul vino",
   "price": null
 }
-Se un campo non è determinabile usa null.`;
+Se un campo non è determinabile usa null. Deduci il tipo dal vitigno o dalla denominazione.`;
+
+  // Timeout esplicito a 24 secondi (il limite Netlify è 26s)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 24000);
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
@@ -45,8 +55,7 @@ Se un campo non è determinabile usa null.`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        
+        max_tokens: 800,
         messages: [{
           role: "user",
           content: [
@@ -56,6 +65,8 @@ Se un campo non è determinabile usa null.`;
         }],
       }),
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errText = await response.text();
@@ -67,11 +78,11 @@ Se un campo non è determinabile usa null.`;
     }
 
     const data = await response.json();
-    console.log("Anthropic response stop_reason:", data.stop_reason);
+    console.log("Stop reason:", data.stop_reason);
 
     const textBlocks = (data.content || []).filter(b => b.type === "text");
     const raw = textBlocks.map(b => b.text).join("").trim();
-    console.log("Raw text:", raw.slice(0, 200));
+    console.log("Raw (first 300):", raw.slice(0, 300));
 
     const clean = raw
       .replace(/^```json\s*/i, "")
@@ -79,7 +90,6 @@ Se un campo non è determinabile usa null.`;
       .replace(/```\s*$/i, "")
       .trim();
 
-    // Valida il JSON
     const parsed = JSON.parse(clean);
 
     return {
@@ -88,11 +98,13 @@ Se un campo non è determinabile usa null.`;
       body: JSON.stringify(parsed),
     };
   } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      console.error("Timeout: Anthropic non ha risposto in 24s");
+      return { statusCode: 504, body: JSON.stringify({ error: "Timeout: riprova con una foto più piccola" }) };
+    }
     console.error("Errore:", err.message);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: err.message }),
-    };
+    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
 
