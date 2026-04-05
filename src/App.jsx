@@ -190,6 +190,9 @@ export default function App() {
   const [toast,   setToast]   = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState(null);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichData, setEnrichData] = useState(null);
+  const [enrichError, setEnrichError] = useState(null);
   const scanInputRef = useRef(null);
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
@@ -265,6 +268,46 @@ export default function App() {
       setScanError("Non sono riuscito a leggere l'etichetta. Riprova con una foto più nitida.");
     } finally {
       setScanning(false);
+    }
+  };
+
+  // Bevi una bottiglia: -1 quantità, rimuove l'ultima posizione
+  const handleDrinkOne = (wine) => {
+    const newQty = wine.quantity - 1;
+    const newPositions = (wine.positions || []).slice(0, -1);
+    if (newQty <= 0) {
+      // ultima bottiglia: chiedi conferma eliminazione
+      setModal(null);
+      setDeleteConfirm(wine);
+      return;
+    }
+    const updated = { ...wine, quantity: newQty, positions: newPositions };
+    saveWines(wines.map(w => w.id === wine.id ? updated : w));
+    setEditing(updated);
+    showToast(`Una bottiglia di "${wine.name}" bevuta — ne rimangono ${newQty}`);
+  };
+
+  // Approfondisci: chiama Claude per info dettagliate su vitigno e vino
+  const handleEnrich = async (wine) => {
+    setEnriching(true);
+    setEnrichData(null);
+    setEnrichError(null);
+    try {
+      const resp = await fetch("/.netlify/functions/enrich-wine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: wine.name, producer: wine.producer, year: wine.year,
+          type: wine.type, region: wine.region, grape: wine.grape,
+        }),
+      });
+      if (!resp.ok) throw new Error(`Errore ${resp.status}`);
+      const data = await resp.json();
+      setEnrichData(data);
+    } catch (err) {
+      setEnrichError("Non sono riuscito a recuperare le informazioni. Riprova.");
+    } finally {
+      setEnriching(false);
     }
   };
 
@@ -530,7 +573,7 @@ export default function App() {
                 const rack = racks.find(r => r.id === wine.rackId);
                 return (
                   <div key={wine.id} className="wine-card" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,0.25)" }}
-                    onClick={() => { setEditing({...wine}); setModal("view"); }}>
+                    onClick={() => { setEditing({...wine}); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
                     <div style={{ height: 3, background: `linear-gradient(90deg, ${tc.bar}, ${C.gold})` }} />
 
                     {/* Photo strip */}
@@ -858,9 +901,96 @@ export default function App() {
                     <p style={{fontSize:16,color:C.textMuted,lineHeight:1.7,fontStyle:"italic"}}>{editing.notes}</p>
                   </div>
                 )}
+                {/* ── APPROFONDISCI ── */}
+                <div style={{background:C.bg,borderRadius:9,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.border}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom: enrichData||enriching||enrichError ? 14 : 0}}>
+                    <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif"}}>
+                      🔍 APPROFONDISCI IL VINO
+                    </div>
+                    <button onClick={()=>handleEnrich(editing)} disabled={enriching}
+                      style={{
+                        background: enriching ? "rgba(201,149,58,0.1)" : "linear-gradient(135deg, #a07828, #c9953a)",
+                        color: enriching ? C.gold : "#1a0800",
+                        border: enriching ? `1px solid ${C.gold}` : "none",
+                        borderRadius:7, padding:"8px 16px", cursor: enriching ? "not-allowed" : "pointer",
+                        fontFamily:"'Cinzel', serif", fontSize:12, letterSpacing:1.5, fontWeight:700,
+                        display:"flex", alignItems:"center", gap:8, transition:"opacity 0.15s",
+                      }}>
+                      {enriching
+                        ? <><div style={{width:14,height:14,border:"2px solid rgba(201,149,58,0.3)",borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/> Ricerca in corso…</>
+                        : enrichData ? "🔄 Aggiorna" : "✨ Analizza"}
+                    </button>
+                  </div>
+
+                  {enriching && (
+                    <p style={{fontSize:13,color:C.textMuted,fontStyle:"italic",marginTop:4}}>
+                      Sto raccogliendo informazioni su {editing.name}…
+                    </p>
+                  )}
+
+                  {enrichError && (
+                    <p style={{fontSize:13,color:"#c07070",marginTop:4}}>{enrichError}</p>
+                  )}
+
+                  {enrichData && !enriching && (
+                    <div style={{display:"flex",flexDirection:"column",gap:14,marginTop:4}}>
+                      {[
+                        ["🍇 Il Vitigno", enrichData.grapeProfile],
+                        ["👃 Sentori & Degustazione", enrichData.tastingNotes],
+                        ["🌍 Territorio", enrichData.territory],
+                        ["⏳ Invecchiamento", enrichData.aging],
+                        ["🍽 Abbinamenti", enrichData.foodPairing],
+                        ["💡 Lo sapevi?", enrichData.curiosity],
+                      ].filter(([,v]) => v).map(([label, text]) => (
+                        <div key={label}>
+                          <div style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:5,fontWeight:700}}>
+                            {label}
+                          </div>
+                          <p style={{fontSize:15,color:C.textMuted,lineHeight:1.75,fontStyle:"italic",margin:0}}>
+                            {text}
+                          </p>
+                        </div>
+                      ))}
+
+                      <button onClick={()=>{
+                        const updated = {...editing, notes: enrichData.tastingNotes || editing.notes};
+                        saveWines(wines.map(w => w.id === editing.id ? updated : w));
+                        setEditing(updated);
+                        showToast("Note di degustazione aggiornate");
+                      }} style={{
+                        alignSelf:"flex-start", background:"transparent",
+                        border:`1px solid ${C.border}`, borderRadius:6,
+                        color:C.textMuted, cursor:"pointer", padding:"7px 14px",
+                        fontFamily:"'Cinzel', serif", fontSize:12, letterSpacing:1,
+                        transition:"all 0.15s",
+                      }}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}}
+                      >
+                        💾 Salva note nella scheda
+                      </button>
+                    </div>
+                  )}
+
+                  {!enrichData && !enriching && !enrichError && (
+                    <p style={{fontSize:13,color:C.textFaint,fontStyle:"italic",marginTop:6}}>
+                      Clicca "Analizza" per ricevere informazioni dettagliate su vitigno, sentori, territorio e abbinamenti.
+                    </p>
+                  )}
+                </div>
+
                 <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
                   <button className="btn-danger" onClick={()=>{setModal(null);setDeleteConfirm(editing);}}>ELIMINA</button>
-                  <button className="btn-ghost" onClick={()=>setModal(null)}>CHIUDI</button>
+                  <button className="btn-ghost" onClick={()=>{setModal(null);setEnrichData(null);setEnrichError(null);}}>CHIUDI</button>
+                  {editing.quantity > 0 && (
+                    <button onClick={()=>handleDrinkOne(editing)} style={{
+                      background:"linear-gradient(135deg, #3a1a5a, #7a3a9a)",
+                      color:"#f0d0ff", border:"none", borderRadius:8,
+                      padding:"10px 18px", cursor:"pointer",
+                      fontFamily:"'Cinzel', serif", fontSize:13, letterSpacing:1, fontWeight:700,
+                      transition:"opacity 0.15s",
+                    }}>🍷 BEVI UNA</button>
+                  )}
                   <button className="btn-gold" onClick={()=>{setScanError(null);setModal("edit");}}>MODIFICA</button>
                 </div>
               </div>
