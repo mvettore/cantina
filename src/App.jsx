@@ -190,6 +190,7 @@ export default function App() {
   const [toast,   setToast]   = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState(null);
+  const [drinkModal, setDrinkModal] = useState(null); // wine to drink from
   const [enriching, setEnriching] = useState(false);
   const [enrichData, setEnrichData] = useState(null);
   const [enrichError, setEnrichError] = useState(null);
@@ -271,12 +272,25 @@ export default function App() {
     }
   };
 
-  // Bevi una bottiglia: -1 quantità, rimuove l'ultima posizione
+  // Bevi una bottiglia: apre il selettore di posizione se ne ha, altrimenti decrementa
   const handleDrinkOne = (wine) => {
+    if ((wine.positions || []).length > 0) {
+      setDrinkModal(wine); // apri selettore posizione
+    } else {
+      commitDrink(wine, null);
+    }
+  };
+
+  // Conferma la bevuta rimuovendo una posizione specifica (o l'ultima se null)
+  const commitDrink = (wine, posToRemove) => {
     const newQty = wine.quantity - 1;
-    const newPositions = (wine.positions || []).slice(0, -1);
+    const positions = wine.positions || [];
+    const newPositions = posToRemove
+      ? positions.filter(p => p !== posToRemove)
+      : positions.slice(0, -1);
+
     if (newQty <= 0) {
-      // ultima bottiglia: chiedi conferma eliminazione
+      setDrinkModal(null);
       setModal(null);
       setDeleteConfirm(wine);
       return;
@@ -284,7 +298,8 @@ export default function App() {
     const updated = { ...wine, quantity: newQty, positions: newPositions };
     saveWines(wines.map(w => w.id === wine.id ? updated : w));
     setEditing(updated);
-    showToast(`Una bottiglia di "${wine.name}" bevuta — ne rimangono ${newQty}`);
+    setDrinkModal(null);
+    showToast(`🍷 "${wine.name}" — ne rimangono ${newQty}`);
   };
 
   // Approfondisci: chiama Claude, salva automaticamente il risultato nella bottiglia
@@ -360,7 +375,7 @@ export default function App() {
   const inputStyle = {
     background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7,
     color: C.text, padding: "11px 14px", width: "100%",
-    fontFamily: "'Cormorant Garamond', serif", fontSize: 19, outline: "none",
+    fontFamily: "'EB Garamond', serif", fontSize: 20, outline: "none",
     transition: "border-color 0.15s",
   };
   const labelStyle = {
@@ -460,9 +475,9 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cormorant Garamond', serif", color: C.text, fontSize: 18 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'EB Garamond', serif", color: C.text, fontSize: 20 }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: ${C.bg}; }
@@ -594,8 +609,8 @@ export default function App() {
                         <TypeBadge type={wine.type} />
                         <span style={{ fontSize: 17, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1 }}>{wine.year}</span>
                       </div>
-                      <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, fontWeight: 600, color: C.text, marginBottom: 5, lineHeight: 1.3 }}>{wine.name}</h3>
-                      <p style={{ fontSize: 17, color: C.textMuted, fontStyle: "italic", marginBottom: 10 }}>{wine.producer}</p>
+                      <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 22, fontWeight: 600, color: C.text, marginBottom: 5, lineHeight: 1.3 }}>{wine.name}</h3>
+                      <p style={{ fontSize: 19, color: C.textMuted, fontStyle: "italic", marginBottom: 10 }}>{wine.producer}</p>
                       <div style={{ display: "flex", gap: 12, marginBottom: 10, fontSize: 16, color: C.textFaint, flexWrap: "wrap" }}>
                         {wine.region && <span>📍 {wine.region}</span>}
                         {wine.grape  && <span>🍇 {wine.grape}</span>}
@@ -884,7 +899,7 @@ export default function App() {
                   ].map(([l,v,highlight])=>(
                     <div key={l} style={{background:C.bg,borderRadius:8,padding:"11px 14px"}}>
                       <div style={{fontSize:15,color:C.textFaint,letterSpacing:1,fontFamily:"'Cinzel', serif",marginBottom:5}}>{l}</div>
-                      <div style={{fontSize:highlight?26:18,color:highlight?C.gold:C.text,fontFamily:highlight?"'Cinzel', serif":"inherit",fontWeight:highlight?700:400}}>{v}</div>
+                      <div style={{fontSize:highlight?28:20,color:highlight?C.gold:C.text,fontFamily:highlight?"'Cinzel', serif":"inherit",fontWeight:highlight?700:400}}>{v}</div>
                     </div>
                   ))}
                 </div>
@@ -903,7 +918,7 @@ export default function App() {
                 {editing.notes&&(
                   <div style={{background:C.bg,borderRadius:8,padding:"14px 16px",borderLeft:`2px solid ${C.border}`,marginBottom:16}}>
                     <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:6}}>NOTE DI DEGUSTAZIONE</div>
-                    <p style={{fontSize:18,color:C.textMuted,lineHeight:1.8,fontStyle:"italic"}}>{editing.notes}</p>
+                    <p style={{fontSize:21,color:C.textMuted,lineHeight:1.9,fontFamily:"'EB Garamond', serif"}}>{editing.notes}</p>
                   </div>
                 )}
                 {/* ── APPROFONDISCI ── */}
@@ -962,7 +977,7 @@ export default function App() {
                               <div style={{fontSize:15,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:6,fontWeight:700}}>
                                 {label}
                               </div>
-                              <p style={{fontSize:17,color:C.textMuted,lineHeight:1.85,fontStyle:"italic",margin:0}}>
+                              <p style={{fontSize:20,color:C.textMuted,lineHeight:1.9,fontFamily:"'EB Garamond', serif",margin:0}}>
                                 {text}
                               </p>
                             </div>
@@ -1093,6 +1108,88 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ── DRINK POSITION MODAL ── */}
+      {drinkModal && (() => {
+        const wine = drinkModal;
+        const rack = racks.find(r => r.id === wine.rackId);
+        const positions = wine.positions || [];
+        return (
+          <div className="modal-overlay" onClick={() => setDrinkModal(null)}>
+            <div className="modal-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+              <div style={{ height: 4, background: `linear-gradient(90deg, #7a2a9a, #c9953a)`, borderRadius: "14px 14px 0 0" }} />
+              <div style={{ padding: "22px 26px" }}>
+                <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2, marginBottom: 6 }}>
+                  🍷 QUALE BOTTIGLIA PRELEVI?
+                </h2>
+                <p style={{ fontSize: 17, color: C.textMuted, marginBottom: 20, fontFamily: "'EB Garamond', serif" }}>
+                  {wine.name} · {wine.year}
+                </p>
+
+                {rack && positions.length > 0 ? (
+                  <>
+                    <p style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginBottom: 14 }}>
+                      SELEZIONA LA CELLA DA SVUOTARE — {rack.name}
+                    </p>
+                    {/* Col headers */}
+                    <div style={{ display: "flex", gap: 4, marginBottom: 4, marginLeft: 30 }}>
+                      {Array.from({ length: rack.cols }, (_, c) => (
+                        <div key={c} style={{ width: 46, textAlign: "center", fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{c + 1}</div>
+                      ))}
+                    </div>
+                    {Array.from({ length: rack.rows }, (_, r) => (
+                      <div key={r} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                        <div style={{ width: 26, textAlign: "center", fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{ROW_LABELS[r]}</div>
+                        {Array.from({ length: rack.cols }, (_, c) => {
+                          const pos = `${ROW_LABELS[r]}${c + 1}`;
+                          const isThis = positions.includes(pos);
+                          const otherWine = !isThis && wines.find(w => w.rackId === rack.id && (w.positions||[]).includes(pos));
+                          const otc = otherWine ? typeColors[otherWine.type] : null;
+                          return (
+                            <div key={c}
+                              onClick={() => isThis && commitDrink(wine, pos)}
+                              title={isThis ? `Preleva da ${pos}` : otherWine ? otherWine.name : "Libera"}
+                              style={{
+                                width: 46, height: 38, borderRadius: 6,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                cursor: isThis ? "pointer" : "default",
+                                background: isThis ? "rgba(122,42,154,0.3)" : otherWine ? `${otc.badge}99` : C.surface,
+                                border: isThis ? `2px solid #9a4aba` : otherWine ? `1px solid ${otc.bar}` : `1px dashed ${C.border}`,
+                                color: isThis ? "#e0b0ff" : otherWine ? otc.text : C.textFaint,
+                                fontSize: 12, fontFamily: "'Cinzel', serif", fontWeight: isThis ? 700 : 400,
+                                transition: "all 0.12s",
+                              }}
+                              onMouseEnter={e => { if (isThis) { e.currentTarget.style.background = "rgba(154,74,186,0.5)"; e.currentTarget.style.transform = "scale(1.1)"; }}}
+                              onMouseLeave={e => { if (isThis) { e.currentTarget.style.background = "rgba(122,42,154,0.3)"; e.currentTarget.style.transform = ""; }}}
+                            >
+                              {isThis ? pos : otherWine ? "●" : ""}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                    <p style={{ fontSize: 14, color: C.textFaint, fontStyle: "italic", marginTop: 12 }}>
+                      Le celle viola sono le tue bottiglie di questo vino. Clicca su quella che stai prelevando.
+                    </p>
+                  </>
+                ) : (
+                  // Nessuna posizione assegnata — mostra solo conferma
+                  <p style={{ fontSize: 17, color: C.textMuted, fontFamily: "'EB Garamond', serif", marginBottom: 20 }}>
+                    Nessuna posizione assegnata. Verrà decrementata la quantità.
+                  </p>
+                )}
+
+                <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
+                  <button className="btn-ghost" onClick={() => setDrinkModal(null)}>ANNULLA</button>
+                  {positions.length === 0 && (
+                    <button className="btn-gold" onClick={() => commitDrink(wine, null)}>CONFERMA</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Toast */}
       {toast&&(
