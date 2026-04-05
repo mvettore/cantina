@@ -755,9 +755,6 @@ export default function App() {
             )}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
-          <button className="btn-gold" onClick={() => { setEditing(emptyWine()); setScanError(null); setModal("add"); }}>+ AGGIUNGI VINO</button>
-        </div>
       </header>
 
       {/* ── NAV ── */}
@@ -1997,6 +1994,20 @@ export default function App() {
           <p style={{fontFamily:"'Cormorant Garamond', serif",color:C.textMuted,fontSize:14,marginTop:8,fontStyle:"italic"}}>Caricamento dati dalla cantina</p>
         </div>
       )}
+      {/* ── FAB AGGIUNGI VINO ── */}
+      <button
+        onClick={() => { setEditing(emptyWine()); setScanError(null); setModal("add"); }}
+        title="Aggiungi vino"
+        style={{
+          position: "fixed", bottom: 28, right: 24, zIndex: 300,
+          width: 56, height: 56, borderRadius: "50%",
+          background: "linear-gradient(135deg, #c9953a, #a06820)",
+          border: "none", color: "#fff",
+          fontSize: 30, lineHeight: 1,
+          boxShadow: "0 4px 18px rgba(0,0,0,0.5)",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+      >+</button>
     </div>
   );
 }
