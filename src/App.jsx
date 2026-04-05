@@ -165,6 +165,22 @@ const TypeBadge = ({ type }) => {
   );
 };
 
+// ── Aging status calculator ──
+const AGING_PROFILES = {
+  "Bianco":   [{ max: 2, s: "Giovane", c: "#6aaa6a" }, { max: 5, s: "Apice", c: "#c9953a" }, { max: 8, s: "Maturo", c: "#b07030" }, { max: 999, s: "Declino", c: "#9a5050" }],
+  "Rosato":   [{ max: 2, s: "Giovane", c: "#6aaa6a" }, { max: 4, s: "Apice", c: "#c9953a" }, { max: 6, s: "Maturo", c: "#b07030" }, { max: 999, s: "Declino", c: "#9a5050" }],
+  "Spumante": [{ max: 3, s: "Giovane", c: "#6aaa6a" }, { max: 6, s: "Apice", c: "#c9953a" }, { max: 10, s: "Maturo", c: "#b07030" }, { max: 999, s: "Declino", c: "#9a5050" }],
+  "Rosso":    [{ max: 3, s: "Giovane", c: "#6aaa6a" }, { max: 8, s: "Apice", c: "#c9953a" }, { max: 15, s: "Maturo", c: "#b07030" }, { max: 999, s: "Declino", c: "#9a5050" }],
+  "Dolce":    [{ max: 3, s: "Giovane", c: "#6aaa6a" }, { max: 10, s: "Apice", c: "#c9953a" }, { max: 20, s: "Maturo", c: "#b07030" }, { max: 999, s: "Declino", c: "#9a5050" }],
+  "Passito":  [{ max: 5, s: "Giovane", c: "#6aaa6a" }, { max: 15, s: "Apice", c: "#c9953a" }, { max: 25, s: "Maturo", c: "#b07030" }, { max: 999, s: "Declino", c: "#9a5050" }],
+};
+function getAgingStatus(wine) {
+  if (!wine.year) return null;
+  const age = new Date().getFullYear() - wine.year;
+  const profile = AGING_PROFILES[wine.type] || AGING_PROFILES["Rosso"];
+  return profile.find(p => age <= p.max) || profile[profile.length - 1];
+}
+
 const emptyWine = () => ({
   id: null, name: "", producer: "", year: new Date().getFullYear(),
   region: "Toscana", grape: "", type: "Rosso",
@@ -226,7 +242,13 @@ export default function App() {
     .filter(w => filterType === "Tutti" || w.type === filterType)
     .filter(w => {
       const q = search.toLowerCase();
-      return !q || [w.name, w.producer, w.region, w.grape].some(f => f?.toLowerCase().includes(q));
+      return !q || [
+        w.name, w.producer, w.region, w.grape, w.type,
+        w.notes, String(w.year), String(w.price||""),
+        ...(w.positions||[]),
+        w.enrichment?.grapeProfile, w.enrichment?.tastingNotes,
+        w.enrichment?.territory, w.enrichment?.foodPairing,
+      ].some(f => f?.toLowerCase().includes(q));
     })
     .sort((a, b) => {
       if (sortBy === "name")     return a.name.localeCompare(b.name);
@@ -334,13 +356,36 @@ export default function App() {
   const handleSaveWine = () => {
     if (!editing.name.trim()) return;
     if (modal === "add") {
-      saveWines([...wines, { ...editing, id: nextWineId.current++ }]);
-      showToast(`"${editing.name}" aggiunto`);
+      const wine = { ...editing, id: nextWineId.current++ };
+      const newList = [...wines, wine];
+      saveWines(newList);
+      setModal(null);
+      showToast(`"${wine.name}" aggiunto — analisi in corso…`);
+      setTimeout(() => autoEnrich(wine, newList), 500);
     } else {
       saveWines(wines.map(w => w.id === editing.id ? editing : w));
       showToast(`"${editing.name}" aggiornato`);
+      setModal(null);
     }
-    setModal(null);
+  };
+
+  // Analisi automatica in background senza bloccare la UI
+  const autoEnrich = async (wine, baseList) => {
+    try {
+      const resp = await fetch("/.netlify/functions/enrich-wine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: wine.name, producer: wine.producer, year: wine.year,
+          type: wine.type, region: wine.region, grape: wine.grape,
+        }),
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const updated = { ...wine, enrichment: data };
+      saveWines(baseList.map(w => w.id === wine.id ? updated : w));
+      showToast(`✨ Analisi di "${wine.name}" completata`);
+    } catch { /* silenzioso */ }
   };
 
   const handleSaveRack = () => {
@@ -641,7 +686,7 @@ export default function App() {
                         <StarRating value={wine.rating} readonly />
                       </div>
 
-                      {/* Riga 4: regione + vitigno + posizione + prezzo in una riga */}
+                      {/* Riga 4: regione + vitigno + posizione + prezzo */}
                       <div style={{ display: "flex", gap: 8, fontSize: 13, color: C.textFaint, flexWrap: "wrap", alignItems: "center" }}>
                         {wine.region && <span>📍 {wine.region}</span>}
                         {wine.grape  && <span>🍇 {wine.grape}</span>}
@@ -652,6 +697,22 @@ export default function App() {
                         )}
                         {wine.price && <span style={{ marginLeft: "auto", color: C.textFaint }}>€{wine.price}</span>}
                       </div>
+
+                      {/* Riga 5: stato invecchiamento */}
+                      {(()=>{ const ag = getAgingStatus(wine); if (!ag) return null;
+                        const age = new Date().getFullYear() - wine.year;
+                        const tip = wine.enrichment?.aging || null;
+                        return (
+                          <div style={{ marginTop: 7, display: "flex", alignItems: "flex-start", gap: 8, background: `${ag.c}18`, border: `1px solid ${ag.c}44`, borderRadius: 7, padding: "5px 10px" }}>
+                            <span style={{ fontSize: 13, color: ag.c, fontFamily: "'Cinzel', serif", fontWeight: 700, whiteSpace: "nowrap" }}>
+                              {ag.s === "Giovane" ? "🌱" : ag.s === "Apice" ? "⭐" : ag.s === "Maturo" ? "🍂" : "📉"} {ag.s.toUpperCase()}
+                            </span>
+                            <span style={{ fontSize: 12, color: C.textFaint }}>
+                              {age} {age === 1 ? "anno" : "anni"}{tip ? ` · ${tip}` : ""}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Azioni: compatte */}
@@ -910,7 +971,7 @@ export default function App() {
 
               {/* Photo hero */}
               {editing.photo && (
-                <div style={{height:220,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08"}}>
+                <div style={{height:160,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08"}}>
                   <img src={editing.photo} alt={editing.name} style={{maxHeight:"100%",maxWidth:"100%",objectFit:"contain"}}/>
                   <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, transparent 40%, rgba(62,42,22,0.95) 100%)"}}/>
                   <div style={{position:"absolute",bottom:14,left:22,right:22}}>
@@ -920,47 +981,77 @@ export default function App() {
                 </div>
               )}
 
-              <div style={{padding:"22px 26px"}}>
+              <div style={{padding:"16px 20px"}}>
                 {!editing.photo && (
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
                     <TypeBadge type={editing.type}/>
                     <span style={{fontSize:30,fontWeight:300,color:C.gold,fontFamily:"'Cinzel', serif"}}>{editing.year}</span>
                   </div>
                 )}
-                <h2 style={{fontFamily:"'Cinzel', serif",fontSize:24,color:C.text,marginBottom:5,marginTop:editing.photo?8:0}}>{editing.name}</h2>
-                <p style={{fontSize:17,color:C.textMuted,fontStyle:"italic",marginBottom:18}}>{editing.producer}</p>
+                <h2 style={{fontFamily:"'Cinzel', serif",fontSize:22,color:C.text,marginBottom:3,marginTop:editing.photo?6:0}}>{editing.name}</h2>
+                <p style={{fontSize:16,color:C.textMuted,fontStyle:"italic",marginBottom:10}}>{editing.producer}</p>
 
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))",gap:12,marginBottom:18}}>
+                {/* Info compatte: riga orizzontale di pill */}
+                <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
                   {[
-                    ["📍 Regione", editing.region, false],
-                    ["🍇 Vitigno", editing.grape||"—", false],
-                    ["🍾 Bottiglie", editing.quantity, false],
-                    ["💰 Prezzo", editing.price?`€${editing.price}`:"—", false],
-                    ...(rack?[["🗄 Scaffale",rack.name,false]]:[]),
-                    ...((editing.positions||[]).length?[["📌 Posizioni",(editing.positions||[]).join(", "),true]]:[]),
-                  ].map(([l,v,highlight])=>(
-                    <div key={l} style={{background:C.bg,borderRadius:8,padding:"11px 14px"}}>
-                      <div style={{fontSize:15,color:C.textFaint,letterSpacing:1,fontFamily:"'Cinzel', serif",marginBottom:5}}>{l}</div>
-                      <div style={{fontSize:highlight?28:20,color:highlight?C.gold:C.text,fontFamily:highlight?"'Cinzel', serif":"inherit",fontWeight:highlight?700:400}}>{v}</div>
-                    </div>
+                    ["📍", editing.region],
+                    ["🍇", editing.grape||null],
+                    ["🍾", `${editing.quantity} bt`],
+                    ...(editing.price?[["💰", `€${editing.price}`]]:[]),
+                    ...(rack?[["🗄", rack.name]]:[]),
+                    ...((editing.positions||[]).length?[["📌", (editing.positions||[]).join(", ")]]:[]),
+                  ].filter(([,v])=>v).map(([icon,val])=>(
+                    <span key={icon+val} style={{
+                      display:"inline-flex", alignItems:"center", gap:4,
+                      background:C.bg, border:`1px solid ${C.border}`,
+                      borderRadius:20, padding:"5px 12px",
+                      fontSize:15, color:C.text,
+                    }}>
+                      <span>{icon}</span>
+                      <span style={{fontFamily:"'EB Garamond', serif"}}>{val}</span>
+                    </span>
                   ))}
+                  {/* Posizioni evidenziate */}
+                  {(editing.positions||[]).length > 0 && rack && (
+                    <span style={{
+                      display:"inline-flex", alignItems:"center", gap:4,
+                      background:"rgba(201,149,58,0.12)", border:`1px solid rgba(201,149,58,0.35)`,
+                      borderRadius:20, padding:"5px 14px",
+                      fontSize:15, color:C.gold, fontFamily:"'Cinzel', serif", fontWeight:700,
+                    }}>
+                      📌 {(editing.positions||[]).join(" · ")}
+                    </span>
+                  )}
                 </div>
 
+                {/* Aging badge */}
+                {(()=>{ const ag = getAgingStatus(editing); if(!ag) return null;
+                  const age = new Date().getFullYear() - editing.year;
+                  return (
+                    <div style={{display:"inline-flex",alignItems:"center",gap:8,background:`${ag.c}18`,border:`1px solid ${ag.c}55`,borderRadius:20,padding:"5px 14px",marginBottom:12}}>
+                      <span style={{fontSize:16,color:ag.c,fontFamily:"'Cinzel', serif",fontWeight:700}}>
+                        {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s.toUpperCase()}
+                      </span>
+                      <span style={{fontSize:14,color:C.textFaint}}>{age} {age===1?"anno":"anni"}</span>
+                    </div>
+                  );
+                })()}
+
                 {rack&&(editing.positions||[]).length>0&&(
-                  <div style={{background:C.bg,borderRadius:9,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-                    <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:10}}>POSIZIONE NELLO SCAFFALE — {rack.name}</div>
+                  <div style={{background:C.bg,borderRadius:9,padding:"10px 12px",marginBottom:10,border:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:12,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:8}}>POSIZIONE — {rack.name}</div>
                     <MiniRackMap rack={rack} highlightPositions={editing.positions||[]}/>
                   </div>
                 )}
 
-                <div style={{marginBottom:16}}>
-                  <div style={{fontSize:15,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:8}}>VALUTAZIONE</div>
+                <div style={{marginBottom:10,display:"flex",alignItems:"center",gap:14}}>
+                  <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif"}}>VALUTAZIONE</div>
                   <StarRating value={editing.rating} readonly/>
                 </div>
                 {editing.notes&&(
-                  <div style={{background:C.bg,borderRadius:8,padding:"14px 16px",borderLeft:`2px solid ${C.border}`,marginBottom:16}}>
-                    <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:6}}>NOTE DI DEGUSTAZIONE</div>
-                    <p style={{fontSize:21,color:C.textMuted,lineHeight:1.9,fontFamily:"'EB Garamond', serif"}}>{editing.notes}</p>
+                  <div style={{background:C.bg,borderRadius:8,padding:"10px 14px",marginBottom:10}}>
+                    <div style={{fontSize:12,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:4}}>NOTE DI DEGUSTAZIONE</div>
+                    <p style={{fontSize:17,color:C.textMuted,lineHeight:1.7,fontFamily:"'EB Garamond', serif"}}>{editing.notes}</p>
                   </div>
                 )}
                 {/* ── APPROFONDISCI ── */}
@@ -968,8 +1059,8 @@ export default function App() {
                   // Mostra i dati salvati nella bottiglia, o quelli appena scaricati
                   const displayData = enrichData || editing.enrichment || null;
                   return (
-                    <div style={{background:C.bg,borderRadius:9,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom: displayData||enriching||enrichError ? 16 : 0}}>
+                    <div style={{background:C.bg,borderRadius:9,padding:"10px 14px",marginBottom:10,border:`1px solid ${C.border}`}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom: displayData||enriching||enrichError ? 12 : 0}}>
                         <div>
                           <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif"}}>
                             🔍 ANALISI DEL VINO
@@ -1006,7 +1097,7 @@ export default function App() {
                       )}
 
                       {displayData && !enriching && (
-                        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                        <div style={{display:"flex",flexDirection:"column",gap:10}}>
                           {[
                             ["🍇 Il Vitigno", displayData.grapeProfile],
                             ["👃 Sentori & Degustazione", displayData.tastingNotes],
@@ -1016,10 +1107,10 @@ export default function App() {
                             ["💡 Lo sapevi?", displayData.curiosity],
                           ].filter(([,v]) => v).map(([label, text]) => (
                             <div key={label} style={{paddingLeft:0}}>
-                              <div style={{fontSize:15,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:6,fontWeight:700}}>
+                              <div style={{fontSize:13,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:3,fontWeight:700}}>
                                 {label}
                               </div>
-                              <p style={{fontSize:20,color:C.textMuted,lineHeight:1.9,fontFamily:"'EB Garamond', serif",margin:0}}>
+                              <p style={{fontSize:17,color:C.textMuted,lineHeight:1.7,fontFamily:"'EB Garamond', serif",margin:0}}>
                                 {text}
                               </p>
                             </div>
@@ -1181,7 +1272,7 @@ export default function App() {
           <div className="modal-overlay" onClick={() => setDrinkModal(null)}>
             <div className="modal-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
               <div style={{ height: 4, background: `linear-gradient(90deg, #7a2a9a, #c9953a)`, borderRadius: "14px 14px 0 0" }} />
-              <div style={{ padding: "26px 36px" }}>
+              <div style={{ padding: "20px 22px" }}>
                 <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2, marginBottom: 6 }}>
                   🍷 QUALE BOTTIGLIA PRELEVI?
                 </h2>
