@@ -853,7 +853,6 @@ export default function App() {
                 <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ ...inputStyle, width: "auto", fontSize: 14, padding: "7px 10px" }}>
                   <option value="name">Nome</option>
                   <option value="year">Annata</option>
-                  <option value="rating">Valutazione</option>
                   <option value="quantity">Quantità</option>
                 </select>
                 {sortBy === "year" && (
@@ -1217,10 +1216,6 @@ export default function App() {
                 </div>
 
                 <div style={{gridColumn:"1/-1"}}>
-                  <label style={labelStyle}>Valutazione</label>
-                  <StarRating value={editing.rating} onChange={r=>setEditing(v=>({...v,rating:r}))}/>
-                </div>
-                <div style={{gridColumn:"1/-1"}}>
                   <label style={labelStyle}>Note di degustazione</label>
                   <textarea style={{...inputStyle,minHeight:80,resize:"vertical",lineHeight:1.6}}
                     value={editing.notes} onChange={e=>setEditing(v=>({...v,notes:e.target.value}))}
@@ -1374,10 +1369,6 @@ export default function App() {
                   </div>
                 )}
 
-                <div style={{marginBottom:10,display:"flex",alignItems:"center",gap:14}}>
-                  <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif"}}>VALUTAZIONE</div>
-                  <StarRating value={editing.rating} readonly/>
-                </div>
                 {editing.notes&&(
                   <div style={{background:C.bg,borderRadius:8,padding:"10px 14px",marginBottom:10}}>
                     <div style={{fontSize:12,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:4}}>NOTE DI DEGUSTAZIONE</div>
@@ -1744,9 +1735,11 @@ export default function App() {
                         <div style={{ fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>
                           {new Date(entry.date).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" })}
                         </div>
-                        <div style={{ marginTop: 3 }}>
-                          {[1,2,3,4,5].map(s => <span key={s} style={{ fontSize: 13, color: s <= entry.rating ? C.gold : C.border }}>★</span>)}
-                        </div>
+                        {entry.rating > 0 && (
+                          <div style={{ marginTop: 3, fontFamily: "'Cinzel', serif", fontSize: 13, color: C.gold }}>
+                            {entry.rating}/100
+                          </div>
+                        )}
                       </div>
                     </div>
                     {/* Contesto */}
@@ -1897,15 +1890,15 @@ export default function App() {
 
                   {/* Valutazione globale */}
                   <div style={sectionStyle}>
-                    <p style={{ ...labelStyle, marginBottom: 8, color: C.gold }}>⭐ VALUTAZIONE VINO</p>
-                    <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                      {[1,2,3,4,5].map(s => (
-                        <span key={s} onClick={() => setLogEntry(v => ({ ...v, rating: s }))} style={{
-                          cursor: "pointer", fontSize: 32,
-                          color: s <= (logEntry.rating||0) ? C.gold : C.border,
-                          transition: "color 0.15s", userSelect: "none",
-                        }}>★</span>
-                      ))}
+                    <p style={{ ...labelStyle, marginBottom: 8, color: C.gold }}>PUNTEGGIO AIS</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                      <input type="range" min={0} max={100} step={1}
+                        value={logEntry.rating||0}
+                        onChange={e => setLogEntry(v => ({ ...v, rating: parseInt(e.target.value) }))}
+                        style={{ flex: 1, accentColor: C.gold }} />
+                      <span style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, minWidth: 48, textAlign: "right" }}>
+                        {logEntry.rating||0}/100
+                      </span>
                     </div>
                     <div>
                       <label style={labelStyle}>Note finali</label>
