@@ -48,7 +48,7 @@ function resizeImage(file, maxPx = 900, quality = 0.82) {
 
 // ── Call backend proxy → structured JSON ──
 // In locale (npm run dev) chiama l'API Anthropic direttamente.
-// In produzione (Netlify) chiama /api/scan-label che fa da proxy sicuro.
+// In produzione (Netlify) chiama /.netlify/functions/scan-label che fa da proxy sicuro.
 async function scanLabel(base64DataUrl) {
   const base64    = base64DataUrl.split(",")[1];
   const mediaType = base64DataUrl.split(";")[0].split(":")[1] || "image/jpeg";
@@ -58,7 +58,7 @@ async function scanLabel(base64DataUrl) {
 
   if (isNetlify) {
     // ── Produzione: chiama la Netlify Function (chiave API sicura sul server) ──
-    const resp = await fetch("/api/scan-label", {
+    const resp = await fetch("/.netlify/functions/scan-label", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ base64, mediaType }),
