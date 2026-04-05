@@ -214,15 +214,30 @@ export default function App() {
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
 
-  // Carica dal cloud al primo avvio (sovrascrive il localStorage locale)
+  // Carica dal cloud al primo avvio, poi ri-analizza i vini con analisi scaduta (>6 mesi)
   useEffect(() => {
     if (!IS_NETLIFY) return;
     cloudLoad().then(data => {
+      let loadedWines = null;
       if (data) {
-        if (data.wines) { const w = migrateWines(data.wines); setWines(w); saveLocal(STORAGE_KEY, w); }
+        if (data.wines) { loadedWines = migrateWines(data.wines); setWines(loadedWines); saveLocal(STORAGE_KEY, loadedWines); }
         if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
       }
       setSyncing(false);
+      // Ri-analizza i vini con analisi scaduta (>6 mesi)
+      if (loadedWines) {
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const stale = loadedWines.filter(w =>
+          w.enrichment?.enrichedAt && new Date(w.enrichment.enrichedAt) < sixMonthsAgo
+        );
+        if (stale.length > 0) {
+          showToast(`🔄 Aggiornamento analisi per ${stale.length} vino/i…`);
+          stale.forEach((wine, i) => {
+            setTimeout(() => autoEnrich(wine, loadedWines), i * 3000); // 3s di gap tra una e l'altra
+          });
+        }
+      }
     });
   }, []);
 
@@ -242,22 +257,24 @@ export default function App() {
     .filter(w => filterType === "Tutti" || w.type === filterType)
     .filter(w => {
       const q = search.toLowerCase();
+      // Costruisce array di tutti i campi testuali ricercabili
       const fields = [
-        w.name, w.producer, w.region, w.grape, w.type,
-        w.notes, String(w.year || ""), String(w.price || ""),
-        ...(w.positions || []),
+        w.name || "",
+        w.producer || "",
+        w.region || "",
+        w.grape || "",
+        w.type || "",
+        w.notes || "",
+        w.year ? String(w.year) : "",
+        w.price ? String(w.price) : "",
+        ...(Array.isArray(w.positions) ? w.positions : []),
       ];
-      if (w.enrichment) {
-        fields.push(
-          w.enrichment.grapeProfile,
-          w.enrichment.tastingNotes,
-          w.enrichment.territory,
-          w.enrichment.foodPairing,
-          w.enrichment.aging,
-          w.enrichment.curiosity,
-        );
+      if (w.enrichment && typeof w.enrichment === "object") {
+        ["grapeProfile","tastingNotes","territory","foodPairing","aging","curiosity"].forEach(k => {
+          if (typeof w.enrichment[k] === "string") fields.push(w.enrichment[k]);
+        });
       }
-      return !q || fields.some(f => typeof f === "string" && f.toLowerCase().includes(q));
+      return !q || fields.some(f => f.toLowerCase().includes(q));
     })
     .sort((a, b) => {
       if (sortBy === "name")     return a.name.localeCompare(b.name);
@@ -349,9 +366,10 @@ export default function App() {
       });
       if (!resp.ok) throw new Error(`Errore ${resp.status}`);
       const data = await resp.json();
-      setEnrichData(data);
+      const enrichment = { ...data, enrichedAt: new Date().toISOString() };
+      setEnrichData(enrichment);
       // Salva automaticamente l'analisi nella bottiglia
-      const updated = { ...wine, enrichment: data };
+      const updated = { ...wine, enrichment };
       saveWines(wines.map(w => w.id === wine.id ? updated : w));
       setEditing(updated);
       showToast("Analisi salvata nella scheda");
@@ -391,7 +409,8 @@ export default function App() {
       });
       if (!resp.ok) return;
       const data = await resp.json();
-      const updated = { ...wine, enrichment: data };
+      const enrichment = { ...data, enrichedAt: new Date().toISOString() };
+      const updated = { ...wine, enrichment };
       saveWines(baseList.map(w => w.id === wine.id ? updated : w));
       showToast(`✨ Analisi di "${wine.name}" completata`);
     } catch { /* silenzioso */ }
@@ -707,18 +726,15 @@ export default function App() {
                         {wine.price && <span style={{ marginLeft: "auto", color: C.textFaint }}>€{wine.price}</span>}
                       </div>
 
-                      {/* Riga 5: stato invecchiamento */}
+                      {/* Riga 5: stato invecchiamento — solo badge */}
                       {(()=>{ const ag = getAgingStatus(wine); if (!ag) return null;
                         const age = new Date().getFullYear() - wine.year;
-                        const tip = wine.enrichment?.aging || null;
                         return (
-                          <div style={{ marginTop: 7, display: "flex", alignItems: "flex-start", gap: 8, background: `${ag.c}18`, border: `1px solid ${ag.c}44`, borderRadius: 7, padding: "5px 10px" }}>
-                            <span style={{ fontSize: 13, color: ag.c, fontFamily: "'Cinzel', serif", fontWeight: 700, whiteSpace: "nowrap" }}>
-                              {ag.s === "Giovane" ? "🌱" : ag.s === "Apice" ? "⭐" : ag.s === "Maturo" ? "🍂" : "📉"} {ag.s.toUpperCase()}
+                          <div style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 6, background: `${ag.c}18`, border: `1px solid ${ag.c}44`, borderRadius: 20, padding: "3px 10px" }}>
+                            <span style={{ fontSize: 12, color: ag.c, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
+                              {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s.toUpperCase()}
                             </span>
-                            <span style={{ fontSize: 12, color: C.textFaint }}>
-                              {age} {age === 1 ? "anno" : "anni"}{tip ? ` · ${tip}` : ""}
-                            </span>
+                            <span style={{ fontSize: 11, color: C.textFaint }}>{age} {age===1?"anno":"anni"}</span>
                           </div>
                         );
                       })()}
@@ -1032,15 +1048,50 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Aging badge */}
-                {(()=>{ const ag = getAgingStatus(editing); if(!ag) return null;
+                {/* ── Stato del Vino ── */}
+                {(()=>{
+                  const ag = getAgingStatus(editing);
+                  if (!ag) return null;
                   const age = new Date().getFullYear() - editing.year;
+                  const agingNote = editing.enrichment?.aging || null;
                   return (
-                    <div style={{display:"inline-flex",alignItems:"center",gap:8,background:`${ag.c}18`,border:`1px solid ${ag.c}55`,borderRadius:20,padding:"5px 14px",marginBottom:12}}>
-                      <span style={{fontSize:16,color:ag.c,fontFamily:"'Cinzel', serif",fontWeight:700}}>
-                        {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s.toUpperCase()}
-                      </span>
-                      <span style={{fontSize:14,color:C.textFaint}}>{age} {age===1?"anno":"anni"}</span>
+                    <div style={{background:C.bg, border:`1px solid ${ag.c}44`, borderRadius:10, padding:"14px 16px", marginBottom:14}}>
+                      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: agingNote ? 10 : 0}}>
+                        <div style={{display:"flex", alignItems:"center", gap:10}}>
+                          <span style={{fontSize:28}}>
+                            {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"}
+                          </span>
+                          <div>
+                            <div style={{fontSize:16, color:ag.c, fontFamily:"'Cinzel', serif", fontWeight:700, letterSpacing:1}}>{ag.s.toUpperCase()}</div>
+                            <div style={{fontSize:14, color:C.textFaint}}>{age} {age===1?"anno":"anni"} · {editing.type}</div>
+                          </div>
+                        </div>
+                        {/* Barra visiva invecchiamento */}
+                        {(()=>{
+                          const profile = [
+                            {label:"Giovane", c:"#6aaa6a"},
+                            {label:"Apice",   c:"#c9953a"},
+                            {label:"Maturo",  c:"#b07030"},
+                            {label:"Declino", c:"#9a5050"},
+                          ];
+                          return (
+                            <div style={{display:"flex", gap:3}}>
+                              {profile.map(p => (
+                                <div key={p.label} title={p.label} style={{
+                                  width:10, height:10, borderRadius:"50%",
+                                  background: p.label===ag.s ? p.c : `${p.c}33`,
+                                  border: `1px solid ${p.c}88`,
+                                }}/>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      {agingNote && (
+                        <p style={{fontSize:17, color:C.textMuted, fontFamily:"'EB Garamond', serif", lineHeight:1.7, margin:0}}>
+                          {agingNote}
+                        </p>
+                      )}
                     </div>
                   );
                 })()}
@@ -1074,8 +1125,10 @@ export default function App() {
                             🔍 ANALISI DEL VINO
                           </div>
                           {editing.enrichment && !enriching && (
-                            <div style={{fontSize:13,color:C.textFaint,marginTop:3,fontStyle:"italic"}}>
-                              Analisi salvata · clicca per aggiornare
+                            <div style={{fontSize:12,color:C.textFaint,marginTop:3,fontStyle:"italic"}}>
+                              {editing.enrichment.enrichedAt
+                                ? `Analisi del ${new Date(editing.enrichment.enrichedAt).toLocaleDateString("it-IT",{day:"2-digit",month:"long",year:"numeric"})} · clicca per aggiornare`
+                                : "Analisi salvata · clicca per aggiornare"}
                             </div>
                           )}
                         </div>
