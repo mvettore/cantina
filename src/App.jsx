@@ -286,6 +286,7 @@ export default function App() {
   const [editingRack,       setEditingRack]       = useState(null);
   const [deleteRackConfirm, setDeleteRackConfirm] = useState(null);
   const [toast,   setToast]   = useState(null);
+  const [undoState, setUndoState] = useState(null); // {msg, restore: fn}
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState(null);
   const [drinkModal, setDrinkModal] = useState(null);
@@ -338,7 +339,13 @@ export default function App() {
   const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY,  r); cloudSave({ racks: r }); };
   const saveLog   = (l) => { setLog(l);   saveLocal(LOG_KEY,   l); cloudSave({ log:   l }); };
   const saveName  = (n) => { setCantinaName(n); saveLocal('cantina-name', n); };
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+  const showToast = (msg) => { setToast(msg); setUndoState(null); setTimeout(() => setToast(null), 3000); };
+  const showUndoToast = (msg, restore) => {
+    setToast(msg);
+    setUndoState({ restore });
+    const t = setTimeout(() => { setToast(null); setUndoState(null); }, 5000);
+    setUndoState({ restore, timer: t });
+  };
 
   const filtered = wines
     .filter(w => filterType === "Tutti" || w.type === filterType)
@@ -1553,7 +1560,7 @@ export default function App() {
               <div style={{display:"flex",gap:12,justifyContent:"center"}}>
                 <button className="btn-ghost" onClick={()=>setDeleteConfirm(null)}>ANNULLA</button>
                 <button className="btn-gold" style={{background:"linear-gradient(135deg, #7a2020, #c04040)"}}
-                  onClick={()=>{saveWines(wines.filter(w=>w.id!==deleteConfirm.id));showToast(`"${deleteConfirm.name}" rimosso`);setDeleteConfirm(null);}}>ELIMINA</button>
+                  onClick={()=>{ const removed=deleteConfirm; saveWines(wines.filter(w=>w.id!==removed.id)); setDeleteConfirm(null); showUndoToast(`"${removed.name}" rimosso`, ()=>saveWines([...wines.filter(w=>w.id!==removed.id), removed])); }}>ELIMINA</button>
               </div>
             </div>
           </div>
@@ -1706,12 +1713,6 @@ export default function App() {
                   onClick={() => { setLogEntry(entry); setLogModal("edit"); }}
                   style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", display: "flex", gap: 0 }}
                   className="wine-card">
-                  {/* Foto miniatura */}
-                  {entry.winePhoto && (
-                    <div style={{ width: 60, flexShrink: 0, overflow: "hidden" }}>
-                      <img src={entry.winePhoto} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt={entry.wineName} />
-                    </div>
-                  )}
                   <div style={{ flex: 1, padding: "12px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <div>
@@ -1743,7 +1744,7 @@ export default function App() {
                     )}
                     {entry.notes && <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", lineHeight: 1.5, margin: 0 }}>"{entry.notes}"</p>}
                   </div>
-                  <button onClick={e => { e.stopPropagation(); saveLog(log.filter(l => l.id !== entry.id)); showToast("Voce eliminata"); }}
+                  <button onClick={e => { e.stopPropagation(); const removed = entry; saveLog(log.filter(l => l.id !== entry.id)); showUndoToast("Voce eliminata", () => saveLog([removed, ...log.filter(l => l.id !== removed.id)])); }}
                     style={{ alignSelf: "stretch", background: "none", border: "none", borderLeft: `1px solid ${C.bg}`, padding: "0 12px", cursor: "pointer", color: "#7a4040", fontSize: 16, transition: "color 0.15s" }}
                     onMouseEnter={e => e.currentTarget.style.color="#d07070"}
                     onMouseLeave={e => e.currentTarget.style.color="#7a4040"}
@@ -1952,9 +1953,10 @@ export default function App() {
                 }}>{logModal === "edit" ? "ANNULLA" : "SALTA"}</button>
                 {logModal === "edit" && (
                   <button className="btn-danger" onClick={() => {
+                    const removed = logEntry;
                     saveLog(log.filter(l => l.id !== logEntry.id));
                     setLogModal(null);
-                    showToast("Voce eliminata");
+                    showUndoToast("Voce eliminata", () => saveLog([removed, ...log.filter(l => l.id !== removed.id)]));
                   }}>ELIMINA</button>
                 )}
                 <button className="btn-gold" onClick={() => {
@@ -2008,8 +2010,18 @@ export default function App() {
 
       {/* Toast */}
       {toast&&(
-        <div style={{position:"fixed",bottom:26,right:26,background:C.surface,border:`1px solid ${C.border}`,borderRadius:9,padding:"13px 20px",color:C.gold,fontFamily:"'Cinzel', serif",fontSize:16,letterSpacing:1,boxShadow:"0 8px 24px rgba(0,0,0,0.4)",zIndex:300,animation:"fadeUp 0.2s ease"}}>
-          {toast}
+        <div style={{position:"fixed",bottom:26,left:"50%",transform:"translateX(-50%)",background:C.surface,border:`1px solid ${C.border}`,borderRadius:9,padding:"13px 20px",color:C.gold,fontFamily:"'Cinzel', serif",fontSize:15,letterSpacing:1,boxShadow:"0 8px 24px rgba(0,0,0,0.4)",zIndex:300,animation:"fadeUp 0.2s ease",display:"flex",alignItems:"center",gap:16,whiteSpace:"nowrap"}}>
+          <span>{toast}</span>
+          {undoState && (
+            <button onClick={() => {
+              clearTimeout(undoState.timer);
+              undoState.restore();
+              setToast(null); setUndoState(null);
+              showToast("✓ Ripristinato");
+            }} style={{background:"none",border:`1px solid ${C.gold}`,borderRadius:6,color:C.gold,cursor:"pointer",padding:"4px 12px",fontFamily:"'Cinzel', serif",fontSize:13,letterSpacing:1}}>
+              ANNULLA
+            </button>
+          )}
         </div>
       )}
 
