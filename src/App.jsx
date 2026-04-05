@@ -59,12 +59,12 @@ async function cloudSave(payload) {
 }
 
 const typeColors = {
-  "Rosso":    { bar: "#9b3030", badge: "#6a2020", text: "#fcd8d8" },
-  "Bianco":   { bar: "#9b9b30", badge: "#4a4a20", text: "#faf0c0" },
-  "Rosato":   { bar: "#9b3060", badge: "#6a2040", text: "#fcd8e8" },
-  "Spumante": { bar: "#307090", badge: "#204a60", text: "#c8eafa" },
-  "Dolce":    { bar: "#9b6830", badge: "#5a3820", text: "#fae0b0" },
-  "Passito":  { bar: "#602090", badge: "#3a1860", text: "#e0c8fa" },
+  "Rosso":    { bar: "#9b1c2e", badge: "#6a2020", text: "#fcd8d8" }, // rubino
+  "Bianco":   { bar: "#c8b84a", badge: "#4a4a20", text: "#faf0c0" }, // paglierino
+  "Rosato":   { bar: "#d4607a", badge: "#6a2040", text: "#fcd8e8" }, // rosato
+  "Spumante": { bar: "#a0c4a0", badge: "#204a60", text: "#c8eafa" }, // verde acqua/perlage
+  "Dolce":    { bar: "#e0a030", badge: "#5a3820", text: "#fae0b0" }, // miele
+  "Passito":  { bar: "#c07820", badge: "#3a1860", text: "#e0c8fa" }, // ambra
 };
 
 // ── Utility: resize an image File to JPEG base64 ──
