@@ -1,9 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const WINE_TYPES = ["Rosso", "Bianco", "Rosato", "Spumante", "Dolce", "Passito"];
 const REGIONS = ["Piemonte", "Toscana", "Veneto", "Lombardia", "Sicilia", "Campania", "Sardegna", "Umbria", "Marche", "Puglia", "Altro"];
 const ROW_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-const STORAGE_KEY = "cantina-wines-v2";
+const STORAGE_KEY = "cantina-wines-v3";
 const RACKS_KEY  = "cantina-racks-v2";
 
 const INITIAL_RACKS = [
@@ -11,15 +11,51 @@ const INITIAL_RACKS = [
   { id: 2, name: "Scaffale 2", rows: 3, cols: 8 },
 ];
 const INITIAL_WINES = [
-  { id: 1, name: "Barolo Riserva", producer: "Giacomo Conterno", year: 2017, region: "Piemonte", grape: "Nebbiolo", type: "Rosso", rating: 5, notes: "Struttura imponente, tannini setosi, finale lunghissimo.", quantity: 6, price: 120, rackId: 1, position: "A1", photo: null },
-  { id: 2, name: "Brunello di Montalcino", producer: "Biondi Santi", year: 2016, region: "Toscana", grape: "Sangiovese Grosso", type: "Rosso", rating: 5, notes: "Eleganza assoluta, profumi di ciliegia e spezie.", quantity: 3, price: 180, rackId: 1, position: "B3", photo: null },
-  { id: 3, name: "Soave Classico", producer: "Pieropan", year: 2022, region: "Veneto", grape: "Garganega", type: "Bianco", rating: 4, notes: "Fresco, minerale, ottimo con pesce.", quantity: 12, price: 18, rackId: 2, position: "A2", photo: null },
+  { id: 1, name: "Barolo Riserva", producer: "Giacomo Conterno", year: 2017, region: "Piemonte", grape: "Nebbiolo", type: "Rosso", rating: 5, notes: "Struttura imponente, tannini setosi, finale lunghissimo.", quantity: 6, price: 120, rackId: 1, positions: ["A1","A2","A3","A4","A5","A6"], photo: null },
+  { id: 2, name: "Brunello di Montalcino", producer: "Biondi Santi", year: 2016, region: "Toscana", grape: "Sangiovese Grosso", type: "Rosso", rating: 5, notes: "Eleganza assoluta, profumi di ciliegia e spezie.", quantity: 3, price: 180, rackId: 1, positions: ["B1","B2","B3"], photo: null },
+  { id: 3, name: "Soave Classico", producer: "Pieropan", year: 2022, region: "Veneto", grape: "Garganega", type: "Bianco", rating: 4, notes: "Fresco, minerale, ottimo con pesce.", quantity: 12, price: 18, rackId: 2, positions: ["A1","A2","A3","A4","A5","A6","B1","B2","B3","B4","B5","B6"], photo: null },
 ];
 
-function loadFromStorage(key, fallback) {
+// Migrazione dati vecchi (position -> positions)
+function migrateWines(wines) {
+  return wines.map(w => {
+    if (w.position !== undefined && w.positions === undefined) {
+      const { position, ...rest } = w;
+      return { ...rest, positions: position ? [position] : [] };
+    }
+    if (w.positions === undefined) return { ...w, positions: [] };
+    return w;
+  });
+}
+
+// ── Local cache (usata come fallback offline) ──
+function loadLocal(key, fallback) {
   try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; } catch { return fallback; }
 }
-function saveToStorage(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+function saveLocal(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+
+// ── Cloud sync via Netlify Function ──
+const IS_NETLIFY = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+
+async function cloudLoad() {
+  if (!IS_NETLIFY) return null;
+  try {
+    const r = await fetch("/.netlify/functions/data");
+    if (!r.ok) return null;
+    return await r.json(); // { wines, racks }
+  } catch { return null; }
+}
+
+async function cloudSave(payload) {
+  if (!IS_NETLIFY) return;
+  try {
+    await fetch("/.netlify/functions/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) { console.warn("Cloud save failed:", e.message); }
+}
 
 const typeColors = {
   "Rosso":    { bar: "#9b3030", badge: "#6a2020", text: "#fcd8d8" },
@@ -48,7 +84,7 @@ function resizeImage(file, maxPx = 900, quality = 0.82) {
 
 // ── Call backend proxy → structured JSON ──
 // In locale (npm run dev) chiama l'API Anthropic direttamente.
-// In produzione (Netlify) chiama /.netlify/functions/scan-label che fa da proxy sicuro.
+// In produzione (Netlify) chiama /api/scan-label che fa da proxy sicuro.
 async function scanLabel(base64DataUrl) {
   const base64    = base64DataUrl.split(",")[1];
   const mediaType = base64DataUrl.split(";")[0].split(":")[1] || "image/jpeg";
@@ -132,13 +168,14 @@ const TypeBadge = ({ type }) => {
 const emptyWine = () => ({
   id: null, name: "", producer: "", year: new Date().getFullYear(),
   region: "Toscana", grape: "", type: "Rosso",
-  rating: 3, notes: "", quantity: 1, price: "", rackId: null, position: "", photo: null,
+  rating: 3, notes: "", quantity: 1, price: "", rackId: null, positions: [], photo: null,
 });
 const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6 });
 
 export default function App() {
-  const [wines,   setWines]   = useState(() => loadFromStorage(STORAGE_KEY, INITIAL_WINES));
-  const [racks,   setRacks]   = useState(() => loadFromStorage(RACKS_KEY,  INITIAL_RACKS));
+  const [wines,   setWines]   = useState(() => migrateWines(loadLocal(STORAGE_KEY, INITIAL_WINES)));
+  const [racks,   setRacks]   = useState(() => loadLocal(RACKS_KEY, INITIAL_RACKS));
+  const [syncing, setSyncing] = useState(IS_NETLIFY); // true while loading from cloud
   const [view,    setView]    = useState("catalog");
   const [search,  setSearch]  = useState("");
   const [filterType, setFilterType] = useState("Tutti");
@@ -157,8 +194,28 @@ export default function App() {
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
 
-  const saveWines = (w) => { setWines(w); saveToStorage(STORAGE_KEY, w); };
-  const saveRacks = (r) => { setRacks(r); saveToStorage(RACKS_KEY,  r); };
+  // Carica dal cloud al primo avvio (sovrascrive il localStorage locale)
+  useEffect(() => {
+    if (!IS_NETLIFY) return;
+    cloudLoad().then(data => {
+      if (data) {
+        if (data.wines) { const w = migrateWines(data.wines); setWines(w); saveLocal(STORAGE_KEY, w); }
+        if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
+      }
+      setSyncing(false);
+    });
+  }, []);
+
+  const saveWines = (w) => {
+    setWines(w);
+    saveLocal(STORAGE_KEY, w);
+    cloudSave({ wines: w });
+  };
+  const saveRacks = (r) => {
+    setRacks(r);
+    saveLocal(RACKS_KEY, r);
+    cloudSave({ racks: r });
+  };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
   const filtered = wines
@@ -184,11 +241,11 @@ export default function App() {
     setScanError(null);
     setScanning(true);
     try {
-      const dataUrl = await resizeImage(file, 600, 0.7);
+      const dataUrl = await resizeImage(file, 900, 0.82);
       const info    = await scanLabel(dataUrl);
 
       // Store a smaller thumbnail for display
-      const thumb = await resizeImage(file, 400, 0.7);
+      const thumb = await resizeImage(file, 500, 0.78);
 
       setEditing(prev => ({
         ...prev,
@@ -238,12 +295,12 @@ export default function App() {
 
   const handleDeleteRack = (rack) => {
     saveRacks(racks.filter(r => r.id !== rack.id));
-    saveWines(wines.map(w => w.rackId === rack.id ? { ...w, rackId: null, position: "" } : w));
+    saveWines(wines.map(w => w.rackId === rack.id ? { ...w, rackId: null, positions: [] } : w));
     setDeleteRackConfirm(null);
     showToast(`Scaffale "${rack.name}" eliminato`);
   };
 
-  const getWineAtPosition = (rackId, pos) => wines.find(w => w.rackId === rackId && w.position === pos);
+  const getWineAtPosition = (rackId, pos) => wines.find(w => w.rackId === rackId && (w.positions||[]).includes(pos));
 
   const C = {
     bg: "#2e1f0f", surface: "#3e2a16", surface2: "#4e3520",
@@ -263,7 +320,7 @@ export default function App() {
     fontFamily: "'Cinzel', serif", textTransform: "uppercase", marginBottom: 6, display: "block",
   };
 
-  const MiniRackMap = ({ rack, highlightPos }) => (
+  const MiniRackMap = ({ rack, highlightPositions }) => (
     <div style={{ overflowX: "auto" }}>
       <div style={{ display: "flex", gap: 3, marginBottom: 3, marginLeft: 28 }}>
         {Array.from({ length: rack.cols }, (_, c) => (
@@ -275,9 +332,9 @@ export default function App() {
           <div style={{ width: 24, textAlign: "center", fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{ROW_LABELS[r]}</div>
           {Array.from({ length: rack.cols }, (_, c) => {
             const pos = `${ROW_LABELS[r]}${c + 1}`;
-            const isThis  = pos === highlightPos;
-            const occupant = wines.find(w => w.rackId === rack.id && w.position === pos);
-            const isOther  = occupant && occupant.id !== editing?.id;
+            const isThis = (highlightPositions||[]).includes(pos);
+            const occupant = wines.find(w => w.rackId === rack.id && (w.positions||[]).includes(pos));
+            const isOther = occupant && occupant.id !== editing?.id;
             const otc = isOther ? typeColors[occupant.type] : null;
             return (
               <div key={c} title={isThis ? "Qui!" : isOther ? occupant.name : pos} style={{
@@ -299,40 +356,60 @@ export default function App() {
     </div>
   );
 
-  const PositionGrid = ({ rack, value, onChange }) => (
-    <div style={{ overflowX: "auto", marginTop: 10 }}>
-      <div style={{ display: "flex", gap: 3, marginBottom: 3, marginLeft: 28 }}>
-        {Array.from({ length: rack.cols }, (_, c) => (
-          <div key={c} style={{ width: 40, textAlign: "center", fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{c + 1}</div>
+  // Multi-position picker: ogni cella selezionata = una bottiglia
+  const PositionGrid = ({ rack, values, onChange, maxSelections }) => {
+    const togglePos = (pos) => {
+      const occupant = getWineAtPosition(rack.id, pos);
+      const isSelf = occupant?.id === editing?.id;
+      if (occupant && !isSelf) return; // occupata da altro vino
+      const selected = values.includes(pos);
+      if (selected) {
+        onChange(values.filter(p => p !== pos));
+      } else {
+        if (values.length >= maxSelections) return; // raggiunto il limite
+        onChange([...values, pos]);
+      }
+    };
+    return (
+      <div style={{ overflowX: "auto", marginTop: 10 }}>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontStyle: "italic" }}>
+          Seleziona fino a {maxSelections} celle ({values.length}/{maxSelections} selezionate) — una per bottiglia
+        </div>
+        <div style={{ display: "flex", gap: 3, marginBottom: 3, marginLeft: 28 }}>
+          {Array.from({ length: rack.cols }, (_, c) => (
+            <div key={c} style={{ width: 40, textAlign: "center", fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{c + 1}</div>
+          ))}
+        </div>
+        {Array.from({ length: rack.rows }, (_, r) => (
+          <div key={r} style={{ display: "flex", alignItems: "center", gap: 3, marginBottom: 3 }}>
+            <div style={{ width: 24, fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif", fontWeight: 700, textAlign: "center" }}>{ROW_LABELS[r]}</div>
+            {Array.from({ length: rack.cols }, (_, c) => {
+              const pos = `${ROW_LABELS[r]}${c + 1}`;
+              const occupant = getWineAtPosition(rack.id, pos);
+              const isSelf = occupant?.id === editing?.id;
+              const isOtherWine = occupant && !isSelf;
+              const selected = values.includes(pos);
+              const atLimit = values.length >= maxSelections && !selected;
+              const disabled = isOtherWine || atLimit;
+              return (
+                <div key={c} onClick={() => !disabled && togglePos(pos)} style={{
+                  width: 40, height: 32, borderRadius: 5,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: disabled ? "not-allowed" : "pointer", fontSize: 10, fontFamily: "'Cinzel', serif",
+                  background: selected ? C.gold : isOtherWine ? "rgba(150,50,50,0.3)" : atLimit ? "rgba(80,80,80,0.2)" : C.surface,
+                  border: selected ? `2px solid ${C.goldLight}` : isOtherWine ? "1px solid rgba(180,60,60,0.5)" : `1px dashed ${C.border}`,
+                  color: selected ? "#1a0800" : isOtherWine ? "#c07070" : atLimit ? C.textFaint : C.textFaint,
+                  fontWeight: selected ? 700 : 400, opacity: atLimit ? 0.4 : 1, transition: "all 0.12s",
+                }} title={isOtherWine ? `Occupata: ${occupant.name}` : selected ? `Rimuovi ${pos}` : atLimit ? "Limite raggiunto" : pos}>
+                  {selected ? "✓" : isOtherWine ? "●" : pos}
+                </div>
+              );
+            })}
+          </div>
         ))}
       </div>
-      {Array.from({ length: rack.rows }, (_, r) => (
-        <div key={r} style={{ display: "flex", alignItems: "center", gap: 3, marginBottom: 3 }}>
-          <div style={{ width: 24, fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif", fontWeight: 700, textAlign: "center" }}>{ROW_LABELS[r]}</div>
-          {Array.from({ length: rack.cols }, (_, c) => {
-            const pos = `${ROW_LABELS[r]}${c + 1}`;
-            const occupant = getWineAtPosition(rack.id, pos);
-            const isSelf = occupant?.id === editing?.id;
-            const free = !occupant || isSelf;
-            const selected = value === pos;
-            return (
-              <div key={c} onClick={() => free && onChange(pos)} style={{
-                width: 40, height: 32, borderRadius: 5,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: free ? "pointer" : "not-allowed", fontSize: 10, fontFamily: "'Cinzel', serif",
-                background: selected ? C.gold : !free ? "rgba(150,50,50,0.3)" : C.surface,
-                border: selected ? `1px solid ${C.goldLight}` : !free ? "1px solid rgba(180,60,60,0.5)" : `1px dashed ${C.border}`,
-                color: selected ? "#1a0800" : !free ? "#c07070" : C.textFaint,
-                fontWeight: selected ? 700 : 400, transition: "all 0.12s",
-              }} title={!free ? `Occupata: ${occupant.name}` : pos}>
-                {selected ? "✓" : !free ? "●" : pos}
-              </div>
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  );
+    );
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Cormorant Garamond', serif", color: C.text, fontSize: 16 }}>
@@ -475,11 +552,11 @@ export default function App() {
                         {wine.region && <span>📍 {wine.region}</span>}
                         {wine.grape  && <span>🍇 {wine.grape}</span>}
                       </div>
-                      {rack && wine.position && (
+                      {rack && (wine.positions||[]).length > 0 && (
                         <div style={{ marginBottom: 9, display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(201,149,58,0.1)", border: `1px solid rgba(201,149,58,0.25)`, borderRadius: 7, padding: "5px 11px" }}>
                           <span style={{ fontSize: 13, color: C.textFaint }}>🗄</span>
                           <span style={{ fontSize: 14, color: C.textMuted, fontFamily: "'Cinzel', serif" }}>{rack.name}</span>
-                          <span style={{ fontSize: 16, color: C.gold, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{wine.position}</span>
+                          <span style={{ fontSize: 15, color: C.gold, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{(wine.positions||[]).join(", ")}</span>
                         </div>
                       )}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -680,30 +757,19 @@ export default function App() {
                 {/* Shelf picker */}
                 <div style={{gridColumn:"1/-1",background:C.bg,borderRadius:9,padding:"16px 18px",border:`1px solid ${C.border}`}}>
                   <p style={{...labelStyle,marginBottom:12}}>🗄 Posizione nello Scaffale</p>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:8}}>
-                    <div>
-                      <label style={labelStyle}>Scaffale</label>
-                      <select style={inputStyle} value={editing.rackId||""} onChange={e=>setEditing(v=>({...v,rackId:e.target.value?parseInt(e.target.value):null,position:""}))}>
-                        <option value="">— Nessuno —</option>
-                        {racks.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Posizione</label>
-                      <input style={{...inputStyle,fontFamily:"'Cinzel', serif",fontWeight:700,color:editing.position?C.gold:C.text}}
-                        value={editing.position||""} disabled={!editing.rackId}
-                        onChange={e=>setEditing(v=>({...v,position:e.target.value.toUpperCase()}))}
-                        placeholder={editing.rackId?"es. A3":"—"}/>
-                    </div>
+                  <div style={{marginBottom:10}}>
+                    <label style={labelStyle}>Scaffale</label>
+                    <select style={inputStyle} value={editing.rackId||""} onChange={e=>setEditing(v=>({...v,rackId:e.target.value?parseInt(e.target.value):null,positions:[]}))}>
+                      <option value="">— Nessuno —</option>
+                      {racks.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+                    </select>
                   </div>
                   {editing.rackId&&(()=>{
                     const rack=racks.find(r=>r.id===editing.rackId);
                     if(!rack) return null;
                     return(
-                      <>
-                        <p style={{fontSize:13,color:C.textFaint,marginBottom:7,fontFamily:"'Cinzel', serif"}}>Clicca per selezionare — {rack.name}</p>
-                        <PositionGrid rack={rack} value={editing.position} onChange={pos=>setEditing(v=>({...v,position:pos}))}/>
-                      </>
+                      <PositionGrid rack={rack} values={editing.positions||[]} maxSelections={editing.quantity||1}
+                        onChange={ps=>setEditing(v=>({...v,positions:ps}))}/>
                     );
                   })()}
                 </div>
@@ -739,8 +805,8 @@ export default function App() {
 
               {/* Photo hero */}
               {editing.photo && (
-                <div style={{height:200,overflow:"hidden",position:"relative"}}>
-                  <img src={editing.photo} alt={editing.name} style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top"}}/>
+                <div style={{height:220,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08"}}>
+                  <img src={editing.photo} alt={editing.name} style={{maxHeight:"100%",maxWidth:"100%",objectFit:"contain"}}/>
                   <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, transparent 40%, rgba(62,42,22,0.95) 100%)"}}/>
                   <div style={{position:"absolute",bottom:14,left:22,right:22}}>
                     <TypeBadge type={editing.type}/>
@@ -766,7 +832,7 @@ export default function App() {
                     ["🍾 Bottiglie", editing.quantity, false],
                     ["💰 Prezzo", editing.price?`€${editing.price}`:"—", false],
                     ...(rack?[["🗄 Scaffale",rack.name,false]]:[]),
-                    ...(editing.position?[["📌 Posizione",editing.position,true]]:[]),
+                    ...((editing.positions||[]).length?[["📌 Posizioni",(editing.positions||[]).join(", "),true]]:[]),
                   ].map(([l,v,highlight])=>(
                     <div key={l} style={{background:C.bg,borderRadius:8,padding:"11px 14px"}}>
                       <div style={{fontSize:13,color:C.textFaint,letterSpacing:1,fontFamily:"'Cinzel', serif",marginBottom:4}}>{l}</div>
@@ -775,10 +841,10 @@ export default function App() {
                   ))}
                 </div>
 
-                {rack&&editing.position&&(
+                {rack&&(editing.positions||[]).length>0&&(
                   <div style={{background:C.bg,borderRadius:9,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.border}`}}>
                     <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:10}}>POSIZIONE NELLO SCAFFALE — {rack.name}</div>
-                    <MiniRackMap rack={rack} highlightPos={editing.position}/>
+                    <MiniRackMap rack={rack} highlightPositions={editing.positions||[]}/>
                   </div>
                 )}
 
@@ -881,6 +947,15 @@ export default function App() {
       {toast&&(
         <div style={{position:"fixed",bottom:26,right:26,background:C.surface,border:`1px solid ${C.border}`,borderRadius:9,padding:"13px 20px",color:C.gold,fontFamily:"'Cinzel', serif",fontSize:14,letterSpacing:1,boxShadow:"0 8px 24px rgba(0,0,0,0.4)",zIndex:300,animation:"fadeUp 0.2s ease"}}>
           {toast}
+        </div>
+      )}
+
+      {/* Syncing overlay — mostrato solo al primo caricamento dal cloud */}
+      {syncing&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(46,31,15,0.92)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:400,backdropFilter:"blur(6px)"}}>
+          <div style={{width:48,height:48,border:"3px solid rgba(201,149,58,0.3)",borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.8s linear infinite",marginBottom:22}}/>
+          <p style={{fontFamily:"'Cinzel', serif",color:C.gold,fontSize:16,letterSpacing:2}}>SINCRONIZZAZIONE…</p>
+          <p style={{fontFamily:"'Cormorant Garamond', serif",color:C.textMuted,fontSize:14,marginTop:8,fontStyle:"italic"}}>Caricamento dati dalla cantina</p>
         </div>
       )}
     </div>
