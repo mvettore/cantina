@@ -866,6 +866,23 @@ export default function App() {
             <div className="modal-box" onClick={e=>e.stopPropagation()}>
               <div style={{height:4,background:`linear-gradient(90deg, ${tc.bar}, ${C.gold})`,borderRadius:"14px 14px 0 0"}}/>
 
+              {/* X close button — sticky, always visible while scrolling */}
+              <div style={{position:"sticky",top:0,zIndex:10,display:"flex",justifyContent:"flex-end",pointerEvents:"none"}}>
+                <button onClick={()=>{setModal(null);setEnrichData(null);setEnrichError(null);}}
+                  style={{
+                    pointerEvents:"all",
+                    margin:"12px 14px 0 0",
+                    background:"rgba(30,15,5,0.75)", border:`1px solid ${C.border}`,
+                    borderRadius:"50%", width:42, height:42, cursor:"pointer",
+                    color:C.textMuted, fontSize:18, lineHeight:1,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    backdropFilter:"blur(6px)", transition:"background 0.15s, color 0.15s",
+                  }}
+                  onMouseEnter={e=>{e.currentTarget.style.background="rgba(60,30,10,0.95)";e.currentTarget.style.color=C.gold;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="rgba(30,15,5,0.75)";e.currentTarget.style.color=C.textMuted;}}
+                >✕</button>
+              </div>
+
               {/* Photo hero */}
               {editing.photo && (
                 <div style={{height:220,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08"}}>
