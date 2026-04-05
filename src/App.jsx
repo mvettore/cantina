@@ -168,7 +168,7 @@ const TypeBadge = ({ type }) => {
 const emptyWine = () => ({
   id: null, name: "", producer: "", year: new Date().getFullYear(),
   region: "Toscana", grape: "", type: "Rosso",
-  rating: 3, notes: "", quantity: 1, price: "", rackId: null, positions: [], photo: null,
+  rating: 3, notes: "", quantity: 1, price: "", rackId: null, positions: [], photo: null, enrichment: null,
 });
 const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6 });
 
@@ -287,7 +287,7 @@ export default function App() {
     showToast(`Una bottiglia di "${wine.name}" bevuta — ne rimangono ${newQty}`);
   };
 
-  // Approfondisci: chiama Claude per info dettagliate su vitigno e vino
+  // Approfondisci: chiama Claude, salva automaticamente il risultato nella bottiglia
   const handleEnrich = async (wine) => {
     setEnriching(true);
     setEnrichData(null);
@@ -304,6 +304,11 @@ export default function App() {
       if (!resp.ok) throw new Error(`Errore ${resp.status}`);
       const data = await resp.json();
       setEnrichData(data);
+      // Salva automaticamente l'analisi nella bottiglia
+      const updated = { ...wine, enrichment: data };
+      saveWines(wines.map(w => w.id === wine.id ? updated : w));
+      setEditing(updated);
+      showToast("Analisi salvata nella scheda");
     } catch (err) {
       setEnrichError("Non sono riuscito a recuperare le informazioni. Riprova.");
     } finally {
@@ -902,82 +907,98 @@ export default function App() {
                   </div>
                 )}
                 {/* ── APPROFONDISCI ── */}
-                <div style={{background:C.bg,borderRadius:9,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.border}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom: enrichData||enriching||enrichError ? 14 : 0}}>
-                    <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif"}}>
-                      🔍 APPROFONDISCI IL VINO
-                    </div>
-                    <button onClick={()=>handleEnrich(editing)} disabled={enriching}
-                      style={{
-                        background: enriching ? "rgba(201,149,58,0.1)" : "linear-gradient(135deg, #a07828, #c9953a)",
-                        color: enriching ? C.gold : "#1a0800",
-                        border: enriching ? `1px solid ${C.gold}` : "none",
-                        borderRadius:7, padding:"8px 16px", cursor: enriching ? "not-allowed" : "pointer",
-                        fontFamily:"'Cinzel', serif", fontSize:12, letterSpacing:1.5, fontWeight:700,
-                        display:"flex", alignItems:"center", gap:8, transition:"opacity 0.15s",
-                      }}>
-                      {enriching
-                        ? <><div style={{width:14,height:14,border:"2px solid rgba(201,149,58,0.3)",borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/> Ricerca in corso…</>
-                        : enrichData ? "🔄 Aggiorna" : "✨ Analizza"}
-                    </button>
-                  </div>
-
-                  {enriching && (
-                    <p style={{fontSize:13,color:C.textMuted,fontStyle:"italic",marginTop:4}}>
-                      Sto raccogliendo informazioni su {editing.name}…
-                    </p>
-                  )}
-
-                  {enrichError && (
-                    <p style={{fontSize:13,color:"#c07070",marginTop:4}}>{enrichError}</p>
-                  )}
-
-                  {enrichData && !enriching && (
-                    <div style={{display:"flex",flexDirection:"column",gap:14,marginTop:4}}>
-                      {[
-                        ["🍇 Il Vitigno", enrichData.grapeProfile],
-                        ["👃 Sentori & Degustazione", enrichData.tastingNotes],
-                        ["🌍 Territorio", enrichData.territory],
-                        ["⏳ Invecchiamento", enrichData.aging],
-                        ["🍽 Abbinamenti", enrichData.foodPairing],
-                        ["💡 Lo sapevi?", enrichData.curiosity],
-                      ].filter(([,v]) => v).map(([label, text]) => (
-                        <div key={label}>
-                          <div style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:5,fontWeight:700}}>
-                            {label}
+                {(()=>{
+                  // Mostra i dati salvati nella bottiglia, o quelli appena scaricati
+                  const displayData = enrichData || editing.enrichment || null;
+                  return (
+                    <div style={{background:C.bg,borderRadius:9,padding:"14px 16px",marginBottom:16,border:`1px solid ${C.border}`}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom: displayData||enriching||enrichError ? 16 : 0}}>
+                        <div>
+                          <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif"}}>
+                            🔍 ANALISI DEL VINO
                           </div>
-                          <p style={{fontSize:15,color:C.textMuted,lineHeight:1.75,fontStyle:"italic",margin:0}}>
-                            {text}
-                          </p>
+                          {editing.enrichment && !enriching && (
+                            <div style={{fontSize:11,color:C.textFaint,marginTop:3,fontStyle:"italic"}}>
+                              Analisi salvata · clicca per aggiornare
+                            </div>
+                          )}
                         </div>
-                      ))}
+                        <button onClick={()=>handleEnrich(editing)} disabled={enriching}
+                          style={{
+                            background: enriching ? "rgba(201,149,58,0.1)" : "linear-gradient(135deg, #a07828, #c9953a)",
+                            color: enriching ? C.gold : "#1a0800",
+                            border: enriching ? `1px solid ${C.gold}` : "none",
+                            borderRadius:7, padding:"8px 16px", cursor: enriching ? "not-allowed" : "pointer",
+                            fontFamily:"'Cinzel', serif", fontSize:12, letterSpacing:1.5, fontWeight:700,
+                            display:"flex", alignItems:"center", gap:8, transition:"opacity 0.15s",
+                          }}>
+                          {enriching
+                            ? <><div style={{width:14,height:14,border:"2px solid rgba(201,149,58,0.3)",borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/> Analisi in corso…</>
+                            : editing.enrichment ? "🔄 Rianalizza" : "✨ Analizza"}
+                        </button>
+                      </div>
 
-                      <button onClick={()=>{
-                        const updated = {...editing, notes: enrichData.tastingNotes || editing.notes};
-                        saveWines(wines.map(w => w.id === editing.id ? updated : w));
-                        setEditing(updated);
-                        showToast("Note di degustazione aggiornate");
-                      }} style={{
-                        alignSelf:"flex-start", background:"transparent",
-                        border:`1px solid ${C.border}`, borderRadius:6,
-                        color:C.textMuted, cursor:"pointer", padding:"7px 14px",
-                        fontFamily:"'Cinzel', serif", fontSize:12, letterSpacing:1,
-                        transition:"all 0.15s",
-                      }}
-                        onMouseEnter={e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}
-                        onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}}
-                      >
-                        💾 Salva note nella scheda
-                      </button>
+                      {enriching && (
+                        <p style={{fontSize:13,color:C.textMuted,fontStyle:"italic"}}>
+                          Sto raccogliendo informazioni approfondite su {editing.name}…
+                        </p>
+                      )}
+
+                      {enrichError && (
+                        <p style={{fontSize:13,color:"#c07070"}}>{enrichError}</p>
+                      )}
+
+                      {displayData && !enriching && (
+                        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                          {[
+                            ["🍇 Il Vitigno", displayData.grapeProfile],
+                            ["👃 Sentori & Degustazione", displayData.tastingNotes],
+                            ["🌍 Territorio & Denominazione", displayData.territory],
+                            ["⏳ Invecchiamento", displayData.aging],
+                            ["🍽 Abbinamenti Gastronomici", displayData.foodPairing],
+                            ["💡 Lo sapevi?", displayData.curiosity],
+                          ].filter(([,v]) => v).map(([label, text]) => (
+                            <div key={label} style={{borderLeft:`2px solid ${C.border}`,paddingLeft:12}}>
+                              <div style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:5,fontWeight:700}}>
+                                {label}
+                              </div>
+                              <p style={{fontSize:15,color:C.textMuted,lineHeight:1.8,fontStyle:"italic",margin:0}}>
+                                {text}
+                              </p>
+                            </div>
+                          ))}
+
+                          {/* Bottone per copiare solo i sentori nelle note */}
+                          {displayData.tastingNotes && (
+                            <button onClick={()=>{
+                              const updated = {...editing, notes: displayData.tastingNotes};
+                              saveWines(wines.map(w => w.id === editing.id ? updated : w));
+                              setEditing(updated);
+                              showToast("Note di degustazione aggiornate");
+                            }} style={{
+                              alignSelf:"flex-start", background:"transparent",
+                              border:`1px solid ${C.border}`, borderRadius:6,
+                              color:C.textMuted, cursor:"pointer", padding:"7px 14px",
+                              fontFamily:"'Cinzel', serif", fontSize:12, letterSpacing:1,
+                              transition:"all 0.15s",
+                            }}
+                              onMouseEnter={e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}
+                              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}}
+                            >
+                              📝 Copia sentori nelle note
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {!displayData && !enriching && !enrichError && (
+                        <p style={{fontSize:13,color:C.textFaint,fontStyle:"italic"}}>
+                          Clicca "Analizza" per ricevere informazioni approfondite su vitigno, sentori, territorio e abbinamenti. L'analisi viene salvata automaticamente.
+                        </p>
+                      )}
                     </div>
-                  )}
-
-                  {!enrichData && !enriching && !enrichError && (
-                    <p style={{fontSize:13,color:C.textFaint,fontStyle:"italic",marginTop:6}}>
-                      Clicca "Analizza" per ricevere informazioni dettagliate su vitigno, sentori, territorio e abbinamenti.
-                    </p>
-                  )}
-                </div>
+                  );
+                })()}
 
                 <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
                   <button className="btn-danger" onClick={()=>{setModal(null);setDeleteConfirm(editing);}}>ELIMINA</button>
