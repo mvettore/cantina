@@ -297,6 +297,7 @@ export default function App() {
   const [logModal, setLogModal] = useState(null); // wine being logged
   const [logEntry, setLogEntry] = useState(null); // current entry being edited
   const [logView, setLogView] = useState("list"); // "list" | "entry"
+  const [logSearch, setLogSearch] = useState("");
   const [viewingEntry, setViewingEntry] = useState(null); // wine to drink from
   const [enriching, setEnriching] = useState(false);
   const [enrichData, setEnrichData] = useState(null);
@@ -734,30 +735,24 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontSize: 34 }}>🍷</span>
           <div>
-            editingName ? (
-            <input
-              autoFocus
-              value={cantinaName}
-              onChange={e => setCantinaName(e.target.value)}
-              onBlur={() => { saveName(cantinaName); setEditingName(false); }}
-              onKeyDown={e => { if (e.key === "Enter") { saveName(cantinaName); setEditingName(false); } if (e.key === "Escape") setEditingName(false); }}
-              style={{ fontFamily: "'Cinzel', serif", fontSize: 22, fontWeight: 700, color: C.gold,
-                letterSpacing: 2, background: "transparent", border: "none",
-                borderBottom: `2px solid ${C.gold}`, outline: "none", padding: "2px 0",
-                width: "100%", maxWidth: 300 }}
-            />
-          ) : (
-            <h1 className="mobile-header-title"
-              onClick={() => setEditingName(true)}
-              title="Tocca per rinominare"
-              style={{ fontFamily: "'Cinzel', serif", fontSize: 22, fontWeight: 700,
-                color: C.gold, letterSpacing: 3, cursor: "pointer",
-                borderBottom: `1px dashed transparent`,
-                transition: "border-color 0.2s" }}
-              onMouseEnter={e => e.currentTarget.style.borderBottomColor = C.gold}
-              onMouseLeave={e => e.currentTarget.style.borderBottomColor = "transparent"}
-            >{cantinaName} ✎</h1>
-          )
+            {editingName ? (
+              <input autoFocus value={cantinaName}
+                onChange={e => setCantinaName(e.target.value)}
+                onBlur={() => { saveName(cantinaName); setEditingName(false); }}
+                onKeyDown={e => { if (e.key==="Enter"){saveName(cantinaName);setEditingName(false);} if(e.key==="Escape")setEditingName(false); }}
+                style={{ fontFamily:"'Cinzel',serif", fontSize:20, fontWeight:700, color:C.gold,
+                  letterSpacing:2, background:"transparent", border:"none",
+                  borderBottom:`2px solid ${C.gold}`, outline:"none", padding:"2px 0", width:260 }}
+              />
+            ) : (
+              <h1 className="mobile-header-title"
+                onClick={() => setEditingName(true)}
+                style={{ fontFamily:"'Cinzel',serif", fontSize:20, fontWeight:700, color:C.gold,
+                  letterSpacing:3, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+                {cantinaName}
+                <span style={{fontSize:13,color:C.textFaint,fontWeight:400}}>✎</span>
+              </h1>
+            )}
           </div>
         </div>
         <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
@@ -1680,12 +1675,24 @@ export default function App() {
       {/* ══════ STORICO VIEW ══════ */}
       {view === "logview" && (
         <div style={{ padding: "20px 16px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
-            <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO BOTTIGLIE BEVUTE</h2>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length === 1 ? "bottiglia" : "bottiglie"}</div>
-              <div style={{ fontSize: 12, color: C.textFaint, fontStyle: "italic", marginTop: 2 }}>Tocca una voce per modificarla</div>
-            </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO BEVUTE</h2>
+            <span style={{ fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length===1?"bottiglia":"bottiglie"}</span>
+          </div>
+          {/* Search bar */}
+          <div style={{ position: "relative", marginBottom: 16 }}>
+            <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 15 }}>🔍</span>
+            <input placeholder="Cerca per vino, produttore, note, occasione…"
+              value={logSearch} onChange={e => setLogSearch(e.target.value)}
+              style={{ ...inputStyle, paddingLeft: 38, paddingRight: logSearch ? 36 : 14 }} />
+            {logSearch && (
+              <button onClick={() => setLogSearch("")} style={{
+                position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                background: C.border, border: "none", borderRadius: "50%",
+                width: 22, height: 22, cursor: "pointer", color: C.text,
+                fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
+              }}>✕</button>
+            )}
           </div>
           {log.length === 0 ? (
             <div style={{ textAlign: "center", padding: "60px 20px", color: C.textFaint }}>
@@ -1695,7 +1702,18 @@ export default function App() {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {[...log].sort((a,b) => b.date.localeCompare(a.date)).map(entry => (
+              {[...log]
+                .filter(entry => {
+                  if (!logSearch) return true;
+                  const q = logSearch.toLowerCase();
+                  return [
+                    entry.wineName, entry.wineProducer, entry.wineGrape,
+                    entry.wineRegion, entry.occasion, entry.companions,
+                    entry.notes, entry.olfatto_descrizione,
+                    entry.wineYear ? String(entry.wineYear) : "",
+                  ].some(f => f?.toLowerCase().includes(q));
+                })
+                .sort((a,b) => b.date.localeCompare(a.date)).map(entry => (
                 <div key={entry.id}
                   onClick={() => { setLogEntry(entry); setLogModal("edit"); }}
                   style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", display: "flex", gap: 0 }}
