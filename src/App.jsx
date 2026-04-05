@@ -1716,8 +1716,10 @@ export default function App() {
                   <div style={{ flex: 1, padding: "12px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <div>
-                        <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 17, color: C.text, marginBottom: 2 }}>{entry.wineName}</h3>
-                        <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic" }}>{entry.wineProducer} · {entry.wineYear}</p>
+                        <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 17, color: C.text, marginBottom: 2 }}>
+                          {entry.wineType === "Bianco" ? "🍋" : "🍇"} {entry.wineName}
+                        </h3>
+                        <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic" }}>{entry.wineProducer}{entry.wineYear ? ` · ${entry.wineYear}` : ""}</p>
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>
