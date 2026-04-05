@@ -892,7 +892,6 @@ export default function App() {
                             {wine.name}
                           </h3>
                           <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                            <span style={{fontSize:14,color:C.textFaint,fontFamily:"'Cinzel',serif",letterSpacing:0.5}}>{wine.year}</span>
                             <span style={{
                               background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
                               color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
@@ -906,7 +905,7 @@ export default function App() {
                         <p style={{fontFamily:"'EB Garamond',serif",fontSize:15,
                           color:C.textMuted,margin:0,lineHeight:1.2,
                           overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                          {[wine.denomination, wine.producer].filter(Boolean).join(" · ")}
+                          {[wine.denomination, wine.producer, wine.year].filter(Boolean).join(" · ")}
                         </p>
 
                         {/* Riga C: tipo · vitigno · prezzo */}
