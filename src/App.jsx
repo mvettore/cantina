@@ -1671,7 +1671,7 @@ export default function App() {
       {view === "logview" && (
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO BEVUTE</h2>
+            <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO DEGUSTAZIONI</h2>
             <span style={{ fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length===1?"bottiglia":"bottiglie"}</span>
           </div>
           {/* Search bar */}
@@ -1705,7 +1705,11 @@ export default function App() {
                     entry.wineName, entry.wineProducer, entry.wineGrape,
                     entry.wineRegion, entry.occasion, entry.companions,
                     entry.notes, entry.olfatto_descrizione,
+                    entry.gusto_corpo, entry.gusto_equilibrio, entry.gusto_persistenza,
+                    entry.gusto_acidita, entry.gusto_tannini, entry.vista_colore,
+                    entry.olfatto_intensita, entry.olfatto_qualita,
                     entry.wineYear ? String(entry.wineYear) : "",
+                    entry.wineType,
                   ].some(f => f?.toLowerCase().includes(q));
                 })
                 .sort((a,b) => b.date.localeCompare(a.date)).map(entry => (
@@ -1740,14 +1744,6 @@ export default function App() {
                       {entry.occasion && <span>📅 {entry.occasion}</span>}
                       {entry.companions && <span>👥 {entry.companions}</span>}
                     </div>
-                    {/* AIS snippet */}
-                    {(entry.olfatto_descrizione || entry.gusto_corpo || entry.gusto_equilibrio) && (
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
-                        {entry.gusto_corpo && <span style={{ fontSize: 12, color: C.textFaint, background: C.surface2, borderRadius: 20, padding: "1px 8px" }}>{entry.gusto_corpo}</span>}
-                        {entry.gusto_equilibrio && <span style={{ fontSize: 12, color: C.textFaint, background: C.surface2, borderRadius: 20, padding: "1px 8px" }}>{entry.gusto_equilibrio}</span>}
-                        {entry.gusto_persistenza && <span style={{ fontSize: 12, color: C.textFaint, background: C.surface2, borderRadius: 20, padding: "1px 8px" }}>{entry.gusto_persistenza}</span>}
-                      </div>
-                    )}
                     {entry.notes && <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", lineHeight: 1.5, margin: 0 }}>"{entry.notes}"</p>}
                   </div>
                   <button onClick={e => { e.stopPropagation(); const removed = entry; saveLog(log.filter(l => l.id !== entry.id)); showUndoToast("Voce eliminata", () => saveLog([removed, ...log.filter(l => l.id !== removed.id)])); }}
