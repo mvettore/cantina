@@ -259,7 +259,7 @@ function getAgingStatus(wine) {
 
 const emptyWine = () => ({
   id: null, name: "", producer: "", year: new Date().getFullYear(),
-  region: "Toscana", grape: "", type: "Rosso",
+  region: "Toscana", grape: "", type: "Rosso", denomination: "",
   rating: 3, notes: "", quantity: 1, price: "", rackId: null, positions: [], photo: null, enrichment: null,
 });
 const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6 });
@@ -339,6 +339,7 @@ export default function App() {
       // Costruisce array di tutti i campi testuali ricercabili
       const fields = [
         w.name || "",
+        w.denomination || "",
         w.producer || "",
         w.region || "",
         w.grape || "",
@@ -389,8 +390,9 @@ export default function App() {
 
       setEditing(prev => ({
         ...prev,
-        name:     info.name     || prev.name,
-        producer: info.producer || prev.producer,
+        name:        info.name        || prev.name,
+        denomination: info.denomination || prev.denomination || "",
+        producer:    info.producer    || prev.producer,
         year:     info.year     || prev.year,
         type:     WINE_TYPES.includes(info.type) ? info.type : prev.type,
         region:   info.region   || prev.region,
@@ -852,75 +854,71 @@ export default function App() {
                     onClick={() => { setEditing({...wine}); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
                     <div style={{ height: 3, background: `linear-gradient(90deg, ${tc.bar}, ${C.gold})` }} />
 
-                    <div style={{ display: "flex", gap: 0 }}>
-                      {/* Thumbnail verticale */}
+                    <div style={{ display: "flex" }}>
+                      {/* Foto verticale */}
                       {wine.photo && (
-                        <div onClick={e => { e.stopPropagation(); setLightboxPhoto(wine.photo); }}
-                          style={{ flexShrink: 0, width: 62, cursor: "zoom-in", overflow: "hidden",
-                            borderRight: `1px solid ${C.border}` }}>
-                          <img src={wine.photo} alt={wine.name}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                        <div onClick={e=>{e.stopPropagation();setLightboxPhoto(wine.photo);}}
+                          style={{flexShrink:0,width:58,cursor:"zoom-in",overflow:"hidden",borderRight:`1px solid ${C.border}`}}>
+                          <img src={wine.photo} alt={wine.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         </div>
                       )}
-                      <div style={{ flex: 1, minWidth: 0, padding: "12px 14px 12px" }}>
-                        {/* Riga 1: tipo · anno ·· quantità */}
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <TypeBadge type={wine.type} />
-                            <span style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1 }}>{wine.year}</span>
+                      <div style={{flex:1,minWidth:0,padding:"10px 13px 10px"}}>
+
+                        {/* Intestazione: tipo + anno + bt */}
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                          <div style={{display:"flex",alignItems:"center",gap:7}}>
+                            <TypeBadge type={wine.type}/>
+                            <span style={{fontSize:15,color:C.textFaint,fontFamily:"'Cinzel',serif",letterSpacing:1}}>{wine.year}</span>
                           </div>
                           <span style={{
-                            background: wine.quantity===0?"rgba(180,60,60,0.2)":wine.quantity<=2?"rgba(180,150,60,0.2)":"rgba(60,150,60,0.2)",
-                            color: wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
-                            padding: "2px 10px", borderRadius: 20, fontSize: 14, fontFamily: "'Cinzel', serif", fontWeight: 600,
+                            background:wine.quantity===0?"rgba(180,60,60,0.2)":wine.quantity<=2?"rgba(180,150,60,0.2)":"rgba(60,150,60,0.2)",
+                            color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
+                            padding:"2px 9px",borderRadius:20,fontSize:14,fontFamily:"'Cinzel',serif",fontWeight:600,
                           }}>{wine.quantity} bt</span>
                         </div>
 
-                        {/* Riga 2: nome */}
-                        <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 19, fontWeight: 600,
-                          color: C.text, margin: "0 0 3px", lineHeight: 1.2 }}>{wine.name}</h3>
+                        {/* Nome + denominazione su due righe strette */}
+                        <h3 style={{fontFamily:"'Cinzel',serif",fontSize:18,fontWeight:600,color:C.text,margin:"0 0 1px",lineHeight:1.2}}>{wine.name}</h3>
+                        {wine.denomination && (
+                          <p style={{fontFamily:"'EB Garamond',serif",fontSize:15,color:C.textMuted,margin:"0 0 2px",lineHeight:1.2}}>{wine.denomination}</p>
+                        )}
+                        <p style={{fontFamily:"'EB Garamond',serif",fontSize:15,color:C.textFaint,fontStyle:"italic",margin:"0 0 7px",lineHeight:1.2}}>{wine.producer}</p>
 
-                        {/* Riga 3: produttore */}
-                        <p style={{ fontFamily: "'EB Garamond', serif", fontSize: 15, color: C.textMuted,
-                          fontStyle: "italic", margin: "0 0 8px" }}>{wine.producer}</p>
-
-                        {/* Riga 4: stelle + meta info */}
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                          <StarRating value={wine.rating} readonly />
-                          <div style={{ display: "flex", gap: 10, fontSize: 14, color: C.textFaint, alignItems: "center" }}>
-                            {wine.grape && <span style={{ fontFamily: "'EB Garamond', serif" }}>🍇 {wine.grape}</span>}
-                            {wine.price && <span style={{ fontFamily: "'EB Garamond', serif" }}>€{wine.price}</span>}
+                        {/* Stelle + vitigno + prezzo */}
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                          <StarRating value={wine.rating} readonly/>
+                          <div style={{display:"flex",gap:8,fontSize:14,color:C.textFaint,fontFamily:"'EB Garamond',serif",alignItems:"center"}}>
+                            {wine.grape && <span>🍇 {wine.grape}</span>}
+                            {wine.price && <span>€{wine.price}</span>}
                           </div>
                         </div>
 
-                        {/* Riga 5: posizione scaffale */}
-                        {rack && (wine.positions||[]).length > 0 && (
-                          <div style={{ display: "inline-flex", alignItems: "center", gap: 6,
-                            background: "rgba(201,149,58,0.1)", border: `1px solid rgba(201,149,58,0.25)`,
-                            borderRadius: 20, padding: "3px 10px", marginBottom: 6 }}>
-                            <span style={{ fontSize: 13, color: C.textMuted, fontFamily: "'EB Garamond', serif" }}>🗄 {rack.name}</span>
-                            <span style={{ fontSize: 14, color: C.gold, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
-                              {(wine.positions||[]).join(" · ")}
+                        {/* Posizione + stato su una riga */}
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                          {rack && (wine.positions||[]).length>0 && (
+                            <span style={{display:"inline-flex",alignItems:"center",gap:5,
+                              background:"rgba(201,149,58,0.1)",border:`1px solid rgba(201,149,58,0.25)`,
+                              borderRadius:20,padding:"2px 9px",fontSize:13,fontFamily:"'Cinzel',serif"}}>
+                              <span style={{color:C.textMuted,fontSize:12}}>🗄</span>
+                              <span style={{color:C.textMuted}}>{rack.name}</span>
+                              <span style={{color:C.gold,fontWeight:700}}>{(wine.positions||[]).join("·")}</span>
                             </span>
-                          </div>
-                        )}
+                          )}
+                          {(()=>{ const ag=getAgingStatus(wine); if(!ag) return null;
+                            const age=new Date().getFullYear()-wine.year;
+                            return (
+                              <span style={{display:"inline-flex",alignItems:"center",gap:4,
+                                background:`${ag.c}15`,border:`1px solid ${ag.c}40`,
+                                borderRadius:20,padding:"2px 9px"}}>
+                                <span style={{fontSize:12,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700}}>
+                                  {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s.toUpperCase()}
+                                </span>
+                                <span style={{fontSize:12,color:C.textFaint,fontFamily:"'EB Garamond',serif"}}>{age}a</span>
+                              </span>
+                            );
+                          })()}
+                        </div>
 
-                        {/* Riga 6: stato invecchiamento */}
-                        {(()=>{ const ag = getAgingStatus(wine); if (!ag) return null;
-                          const age = new Date().getFullYear() - wine.year;
-                          return (
-                            <div style={{ display: "inline-flex", alignItems: "center", gap: 5,
-                              background: `${ag.c}18`, border: `1px solid ${ag.c}44`,
-                              borderRadius: 20, padding: "2px 10px" }}>
-                              <span style={{ fontSize: 13, color: ag.c, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
-                                {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s.toUpperCase()}
-                              </span>
-                              <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'EB Garamond', serif" }}>
-                                {age} {age===1?"anno":"anni"}
-                              </span>
-                            </div>
-                          );
-                        })()}
                       </div>
                     </div>
                   </div>
@@ -1122,7 +1120,11 @@ export default function App() {
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:15}}>
                 <div style={{gridColumn:"1/-1"}}>
                   <label style={labelStyle}>Nome Vino *</label>
-                  <input style={inputStyle} value={editing.name} onChange={e=>setEditing(v=>({...v,name:e.target.value}))} placeholder="es. Barolo Riserva"/>
+                  <input style={inputStyle} value={editing.name} onChange={e=>setEditing(v=>({...v,name:e.target.value}))} placeholder="es. Adornes"/>
+                </div>
+                <div style={{gridColumn:"1/-1"}}>
+                  <label style={labelStyle}>Denominazione / Tipologia</label>
+                  <input style={inputStyle} value={editing.denomination||""} onChange={e=>setEditing(v=>({...v,denomination:e.target.value}))} placeholder="es. Barbera d'Asti Superiore, Barolo DOCG…"/>
                 </div>
                 <div>
                   <label style={labelStyle}>Produttore</label>
@@ -1244,8 +1246,9 @@ export default function App() {
                     <span style={{fontSize:30,fontWeight:300,color:C.gold,fontFamily:"'Cinzel', serif"}}>{editing.year}</span>
                   </div>
                 )}
-                <h2 style={{fontFamily:"'Cinzel', serif",fontSize:22,color:C.text,marginBottom:3,marginTop:editing.photo?6:0}}>{editing.name}</h2>
-                <p style={{fontSize:16,color:C.textMuted,fontStyle:"italic",marginBottom:10}}>{editing.producer}</p>
+                <h2 style={{fontFamily:"'Cinzel', serif",fontSize:22,color:C.text,marginBottom:2,marginTop:editing.photo?6:0}}>{editing.name}</h2>
+                {editing.denomination && <p style={{fontFamily:"'EB Garamond', serif",fontSize:17,color:C.textMuted,marginBottom:2}}>{editing.denomination}</p>}
+                <p style={{fontFamily:"'EB Garamond', serif",fontSize:16,color:C.textFaint,fontStyle:"italic",marginBottom:10}}>{editing.producer}</p>
 
                 {/* Info compatte: riga orizzontale di pill */}
                 <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
