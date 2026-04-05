@@ -698,7 +698,7 @@ export default function App() {
         .nav-btn { background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; padding: 12px 22px; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 2px; transition: all 0.15s; color: ${C.textFaint}; }
         .nav-btn.active { color: ${C.gold}; border-bottom-color: ${C.gold}; }
         .nav-btn:hover:not(.active) { color: ${C.textMuted}; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: flex-end; justify-content: center; z-index: 200; padding: 0; backdrop-filter: blur(4px); }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: flex-end; justify-content: center; z-index: 200; padding-top: env(safe-area-inset-top, 44px); backdrop-filter: blur(4px); }
         @media (min-width: 600px) { .modal-overlay { align-items: center; padding: 8px; } }
         .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(98vw, 1100px); max-height: 96vh; overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; padding-bottom: env(safe-area-inset-bottom, 16px); }
         @keyframes fadeUp { from { opacity:0; transform: translateY(18px) scale(0.97); } to { opacity:1; transform: none; } }
@@ -709,7 +709,7 @@ export default function App() {
           .wine-card p  { font-size: 14px !important; }
           .tab-btn { padding: 5px 10px !important; font-size: 12px !important; }
           .nav-btn  { padding: 9px 14px !important; font-size: 13px !important; }
-          .modal-box { border-radius: 20px 20px 0 0 !important; max-height: calc(95vh - env(safe-area-inset-top, 0px)) !important; }
+          .modal-box { border-radius: 20px 20px 0 0 !important; max-height: 95vh !important; }
           .mobile-header-title { font-size: 18px !important; }
         }
         @keyframes spin { to { transform: rotate(360deg); } }
