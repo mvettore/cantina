@@ -622,36 +622,43 @@ export default function App() {
                       </div>
                     )}
 
-                    <div style={{ padding: "13px 15px 11px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 9 }}>
-                        <TypeBadge type={wine.type} />
-                        <span style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1 }}>{wine.year}</span>
+                    <div style={{ padding: "11px 14px 10px" }}>
+                      {/* Riga 1: badge tipo + anno + quantità */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <TypeBadge type={wine.type} />
+                          <span style={{ fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1 }}>{wine.year}</span>
+                        </div>
+                        <span style={{ background: wine.quantity===0?"rgba(180,60,60,0.2)":wine.quantity<=2?"rgba(180,150,60,0.2)":"rgba(60,150,60,0.2)", color: wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070", padding: "3px 10px", borderRadius: 20, fontSize: 14, fontFamily: "'Cinzel', serif", fontWeight: 600 }}>{wine.quantity} bt</span>
                       </div>
-                      <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 19, fontWeight: 600, color: C.text, marginBottom: 4, lineHeight: 1.3 }}>{wine.name}</h3>
-                      <p style={{ fontSize: 16, color: C.textMuted, fontStyle: "italic", marginBottom: 8 }}>{wine.producer}</p>
-                      <div style={{ display: "flex", gap: 10, marginBottom: 8, fontSize: 14, color: C.textFaint, flexWrap: "wrap" }}>
+
+                      {/* Riga 2: nome */}
+                      <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, fontWeight: 600, color: C.text, marginBottom: 2, lineHeight: 1.25 }}>{wine.name}</h3>
+
+                      {/* Riga 3: produttore + stelle inline */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", margin: 0 }}>{wine.producer}</p>
+                        <StarRating value={wine.rating} readonly />
+                      </div>
+
+                      {/* Riga 4: regione + vitigno + posizione + prezzo in una riga */}
+                      <div style={{ display: "flex", gap: 8, fontSize: 13, color: C.textFaint, flexWrap: "wrap", alignItems: "center" }}>
                         {wine.region && <span>📍 {wine.region}</span>}
                         {wine.grape  && <span>🍇 {wine.grape}</span>}
-                      </div>
-                      {rack && (wine.positions||[]).length > 0 && (
-                        <div style={{ marginBottom: 9, display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(201,149,58,0.1)", border: `1px solid rgba(201,149,58,0.25)`, borderRadius: 7, padding: "5px 11px" }}>
-                          <span style={{ fontSize: 13, color: C.textFaint }}>🗄</span>
-                          <span style={{ fontSize: 14, color: C.textMuted, fontFamily: "'Cinzel', serif" }}>{rack.name}</span>
-                          <span style={{ fontSize: 17, color: C.gold, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{(wine.positions||[]).join(", ")}</span>
-                        </div>
-                      )}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <StarRating value={wine.rating} readonly />
-                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                          {wine.price && <span style={{ fontSize: 17, color: C.textMuted }}>€{wine.price}</span>}
-                          <span style={{ background: wine.quantity===0?"rgba(180,60,60,0.2)":wine.quantity<=2?"rgba(180,150,60,0.2)":"rgba(60,150,60,0.2)", color: wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070", padding: "5px 14px", borderRadius: 20, fontSize: 16, fontFamily: "'Cinzel', serif", fontWeight: 600 }}>{wine.quantity} bt</span>
-                        </div>
+                        {rack && (wine.positions||[]).length > 0 && (
+                          <span style={{ color: C.gold, fontFamily: "'Cinzel', serif", fontWeight: 700, fontSize: 13 }}>
+                            🗄 {rack.name} · {(wine.positions||[]).join(", ")}
+                          </span>
+                        )}
+                        {wine.price && <span style={{ marginLeft: "auto", color: C.textFaint }}>€{wine.price}</span>}
                       </div>
                     </div>
+
+                    {/* Azioni: compatte */}
                     <div style={{ borderTop: `1px solid ${C.bg}`, display: "flex" }}>
                       {[["✏ MODIFICA", () => { setEditing({...wine}); setScanError(null); setModal("edit"); }, false],
                         ["✕ ELIMINA",  () => setDeleteConfirm(wine), true]].map(([label,fn,danger]) => (
-                        <button key={label} className="action-btn" style={{ color: danger?"#9a5050":C.textFaint, borderRight: !danger?`1px solid ${C.bg}`:"none" }}
+                        <button key={label} className="action-btn" style={{ color: danger?"#9a5050":C.textFaint, borderRight: !danger?`1px solid ${C.bg}`:"none", padding: "7px" }}
                           onClick={e => { e.stopPropagation(); fn(); }}
                           onMouseEnter={e => { e.currentTarget.style.color = danger?"#d07070":C.gold; e.currentTarget.style.background="rgba(0,0,0,0.1)"; }}
                           onMouseLeave={e => { e.currentTarget.style.color = danger?"#9a5050":C.textFaint; e.currentTarget.style.background="none"; }}
@@ -1050,23 +1057,40 @@ export default function App() {
                   );
                 })()}
 
-                <div style={{display:"flex",gap:8,justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-                  {/* Sinistra: elimina */}
-                  <button className="btn-danger" onClick={()=>{setModal(null);setDeleteConfirm(editing);}}>✕ ELIMINA</button>
-                  {/* Destra: azioni principali */}
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                    {editing.quantity > 0 && (
-                      <button onClick={()=>handleDrinkOne(editing)} style={{
-                        background:"linear-gradient(135deg, #3a1a5a, #7a3a9a)",
-                        color:"#f0d0ff", border:"none", borderRadius:8,
-                        padding:"10px 16px", cursor:"pointer",
-                        fontFamily:"'Cinzel', serif", fontSize:14, letterSpacing:1, fontWeight:700,
-                        transition:"opacity 0.15s", whiteSpace:"nowrap",
+                <div style={{display:"flex",gap:6,alignItems:"center",justifyContent:"stretch"}}>
+                  {/* ELIMINA — icona */}
+                  <button onClick={()=>{setModal(null);setDeleteConfirm(editing);}} title="Elimina"
+                    style={{flex:"0 0 auto",background:"transparent",border:`1px solid #804040`,borderRadius:8,
+                      color:"#c07070",cursor:"pointer",padding:"11px 13px",fontSize:18,lineHeight:1,
+                      transition:"background 0.15s",}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(180,60,60,0.15)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                  >🗑</button>
+                  {/* BEVI */}
+                  {editing.quantity > 0 && (
+                    <button onClick={()=>handleDrinkOne(editing)} title="Bevi una bottiglia"
+                      style={{flex:"1 1 0",background:"linear-gradient(135deg, #3a1a5a, #7a3a9a)",
+                        color:"#f0d0ff",border:"none",borderRadius:8,padding:"11px 8px",cursor:"pointer",
+                        fontFamily:"'Cinzel', serif",fontSize:13,letterSpacing:1,fontWeight:700,
+                        whiteSpace:"nowrap",textAlign:"center",
                       }}>🍷 BEVI</button>
-                    )}
-                    <button className="btn-ghost" style={{padding:"10px 16px"}} onClick={()=>{setModal(null);setEnrichData(null);setEnrichError(null);}}>CHIUDI</button>
-                    <button className="btn-gold" style={{padding:"10px 16px"}} onClick={()=>{setScanError(null);setModal("edit");}}>MODIFICA</button>
-                  </div>
+                  )}
+                  {/* CHIUDI */}
+                  <button onClick={()=>{setModal(null);setEnrichData(null);setEnrichError(null);}}
+                    style={{flex:"1 1 0",background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,
+                      color:C.textMuted,cursor:"pointer",padding:"11px 8px",
+                      fontFamily:"'Cinzel', serif",fontSize:13,letterSpacing:1,whiteSpace:"nowrap",textAlign:"center",
+                      transition:"border-color 0.15s,color 0.15s",}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}}
+                  >CHIUDI</button>
+                  {/* MODIFICA */}
+                  <button onClick={()=>{setScanError(null);setModal("edit");}}
+                    style={{flex:"1 1 0",background:`linear-gradient(135deg, #a07828, ${C.gold}, #a07828)`,
+                      color:"#1a0800",border:"none",borderRadius:8,padding:"11px 8px",cursor:"pointer",
+                      fontFamily:"'Cinzel', serif",fontSize:13,letterSpacing:1,fontWeight:700,
+                      whiteSpace:"nowrap",textAlign:"center",
+                    }}>MODIFICA</button>
                 </div>
               </div>
             </div>
