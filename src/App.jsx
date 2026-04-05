@@ -242,13 +242,22 @@ export default function App() {
     .filter(w => filterType === "Tutti" || w.type === filterType)
     .filter(w => {
       const q = search.toLowerCase();
-      return !q || [
+      const fields = [
         w.name, w.producer, w.region, w.grape, w.type,
-        w.notes, String(w.year), String(w.price||""),
-        ...(w.positions||[]),
-        w.enrichment?.grapeProfile, w.enrichment?.tastingNotes,
-        w.enrichment?.territory, w.enrichment?.foodPairing,
-      ].some(f => f?.toLowerCase().includes(q));
+        w.notes, String(w.year || ""), String(w.price || ""),
+        ...(w.positions || []),
+      ];
+      if (w.enrichment) {
+        fields.push(
+          w.enrichment.grapeProfile,
+          w.enrichment.tastingNotes,
+          w.enrichment.territory,
+          w.enrichment.foodPairing,
+          w.enrichment.aging,
+          w.enrichment.curiosity,
+        );
+      }
+      return !q || fields.some(f => typeof f === "string" && f.toLowerCase().includes(q));
     })
     .sort((a, b) => {
       if (sortBy === "name")     return a.name.localeCompare(b.name);
@@ -999,7 +1008,6 @@ export default function App() {
                     ["🍾", `${editing.quantity} bt`],
                     ...(editing.price?[["💰", `€${editing.price}`]]:[]),
                     ...(rack?[["🗄", rack.name]]:[]),
-                    ...((editing.positions||[]).length?[["📌", (editing.positions||[]).join(", ")]]:[]),
                   ].filter(([,v])=>v).map(([icon,val])=>(
                     <span key={icon+val} style={{
                       display:"inline-flex", alignItems:"center", gap:4,
