@@ -276,6 +276,7 @@ export default function App() {
   const [search,  setSearch]  = useState("");
   const [filterType, setFilterType] = useState("Tutti");
   const [filterAging, setFilterAging] = useState("Tutti");
+  const [filterUnracked, setFilterUnracked] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortBy,  setSortBy]  = useState("name");
   const [sortDir, setSortDir] = useState("desc");
@@ -350,6 +351,7 @@ export default function App() {
   const filtered = wines
     .filter(w => filterType === "Tutti" || w.type === filterType)
     .filter(w => filterAging === "Tutti" || getAgingStatus(w)?.s === filterAging)
+    .filter(w => !filterUnracked || !w.rackId)
     .filter(w => {
       const q = search.toLowerCase();
       // Costruisce array di tutti i campi testuali ricercabili
@@ -791,9 +793,9 @@ export default function App() {
               )}
             </div>
             {/* Indicatori filtri attivi */}
-            {(filterType !== "Tutti" || filterAging !== "Tutti") && (
+            {(filterType !== "Tutti" || filterAging !== "Tutti" || filterUnracked) && (
               <span style={{ fontSize: 12, color: C.gold, fontFamily: "'Cinzel', serif", whiteSpace: "nowrap" }}>
-                {[filterType !== "Tutti" ? filterType : null, filterAging !== "Tutti" ? filterAging : null].filter(Boolean).join(" · ")}
+                {[filterType !== "Tutti" ? filterType : null, filterAging !== "Tutti" ? filterAging : null, filterUnracked ? "Senza scaffale" : null].filter(Boolean).join(" · ")}
               </span>
             )}
             {/* Toggle filtri */}
@@ -836,6 +838,14 @@ export default function App() {
                     border: filterAging===key?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent",
                   }}>{icon} {label.toUpperCase()}</button>
                 ))}
+              </div>
+              {/* Senza scaffale */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button className="tab-btn" onClick={() => setFilterUnracked(v => !v)} style={{
+                  color: filterUnracked ? C.gold : C.textFaint,
+                  background: filterUnracked ? "rgba(201,149,58,0.14)" : "none",
+                  border: filterUnracked ? `1px solid rgba(201,149,58,0.4)` : "1px solid transparent",
+                }}>🗄 SENZA SCAFFALE</button>
               </div>
               {/* Ordina */}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
