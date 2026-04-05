@@ -709,7 +709,7 @@ export default function App() {
           .wine-card p  { font-size: 14px !important; }
           .tab-btn { padding: 5px 10px !important; font-size: 12px !important; }
           .nav-btn  { padding: 9px 14px !important; font-size: 13px !important; }
-          .modal-box { border-radius: 20px 20px 0 0 !important; max-height: 95vh !important; }
+          .modal-box { border-radius: 20px 20px 0 0 !important; max-height: calc(95vh - env(safe-area-inset-top, 0px)) !important; }
           .mobile-header-title { font-size: 18px !important; }
         }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -1228,7 +1228,7 @@ export default function App() {
               <div style={{height:4,background:`linear-gradient(90deg, ${tc.bar}, ${C.gold})`,borderRadius:"14px 14px 0 0"}}/>
 
               {/* X close button — sticky, always visible while scrolling */}
-              <div style={{position:"sticky",top:"env(safe-area-inset-top, 0px)",zIndex:10,display:"flex",justifyContent:"flex-end",pointerEvents:"none"}}>
+              <div style={{position:"sticky",top:0,zIndex:10,display:"flex",justifyContent:"flex-end",pointerEvents:"none"}}>
                 <button onClick={()=>{setModal(null);setEnrichData(null);setEnrichError(null);}}
                   style={{
                     pointerEvents:"all",
