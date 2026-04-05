@@ -1995,7 +1995,7 @@ export default function App() {
         </div>
       )}
       {/* ── FAB AGGIUNGI VINO ── */}
-      <button
+      {!modal && <button
         onClick={() => { setEditing(emptyWine()); setScanError(null); setModal("add"); }}
         title="Aggiungi vino"
         style={{
@@ -2007,7 +2007,7 @@ export default function App() {
           boxShadow: "0 4px 18px rgba(0,0,0,0.5)",
           cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
         }}
-      >+</button>
+      >+</button>}
     </div>
   );
 }
