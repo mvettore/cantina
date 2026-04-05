@@ -756,16 +756,6 @@ export default function App() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
-          {[["BOTTIGLIE", totalBottles], ["ETICHETTE", wines.length], ["SCAFFALI", racks.length]].map(([l, v]) => (
-            <div key={l} style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 30, fontWeight: 300, color: C.gold }}>{v}</div>
-              <div style={{ fontSize: 15, color: C.textFaint, letterSpacing: 1.5, fontFamily: "'Cinzel', serif" }}>{l}</div>
-            </div>
-          ))}
-          {totalValue > 0 && <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 26, fontWeight: 300, color: C.gold }}>€{totalValue.toFixed(0)}</div>
-            <div style={{ fontSize: 13, color: C.textFaint, letterSpacing: 1.5, fontFamily: "'Cinzel', serif" }}>VALORE</div>
-          </div>}
           <button className="btn-gold" onClick={() => { setEditing(emptyWine()); setScanError(null); setModal("add"); }}>+ AGGIUNGI VINO</button>
         </div>
       </header>
