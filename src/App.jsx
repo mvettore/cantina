@@ -1634,7 +1634,10 @@ export default function App() {
         <div style={{ padding: "20px 16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
             <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO BOTTIGLIE BEVUTE</h2>
-            <span style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length === 1 ? "bottiglia" : "bottiglie"}</span>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length === 1 ? "bottiglia" : "bottiglie"}</div>
+              <div style={{ fontSize: 12, color: C.textFaint, fontStyle: "italic", marginTop: 2 }}>Tocca una voce per modificarla</div>
+            </div>
           </div>
           {log.length === 0 ? (
             <div style={{ textAlign: "center", padding: "60px 20px", color: C.textFaint }}>
@@ -1645,7 +1648,8 @@ export default function App() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {[...log].sort((a,b) => b.date.localeCompare(a.date)).map(entry => (
-                <div key={entry.id} onClick={() => { setViewingEntry(entry); }}
+                <div key={entry.id}
+                  onClick={() => { setLogEntry(entry); setLogModal("edit"); }}
                   style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", display: "flex", gap: 0 }}
                   className="wine-card">
                   {/* Foto miniatura */}
@@ -1691,12 +1695,12 @@ export default function App() {
       )}
 
       {/* ── LOG MODAL ── */}
-      {logModal === "add" && logEntry && (
+      {(logModal === "add" || logModal === "edit") && logEntry && (
         <div className="modal-overlay" onClick={() => setLogModal(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 16, color: C.gold, letterSpacing: 2 }}>🍷 REGISTRA LA BEVUTA</h2>
+                <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 16, color: C.gold, letterSpacing: 2 }}>{logModal === "add" ? "🍷 REGISTRA LA BEVUTA" : "✏ MODIFICA VOCE"}</h2>
                 <p style={{ fontSize: 14, color: C.textMuted, marginTop: 4, fontStyle: "italic" }}>{logEntry.wineName} · {logEntry.wineYear}</p>
               </div>
               <button onClick={() => setLogModal(null)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 20 }}>✕</button>
@@ -1745,12 +1749,24 @@ export default function App() {
                 <label htmlFor="finished" style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>Bottiglia finita</label>
               </div>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
-                <button className="btn-ghost" onClick={() => setLogModal(null)}>SALTA</button>
+                <button className="btn-ghost" onClick={() => setLogModal(null)}>{logModal === "edit" ? "ANNULLA" : "SALTA"}</button>
+                {logModal === "edit" && (
+                  <button className="btn-danger" onClick={() => {
+                    saveLog(log.filter(l => l.id !== logEntry.id));
+                    setLogModal(null);
+                    showToast("Voce eliminata");
+                  }}>ELIMINA</button>
+                )}
                 <button className="btn-gold" onClick={() => {
-                  saveLog([logEntry, ...log]);
+                  if (logModal === "edit") {
+                    saveLog(log.map(l => l.id === logEntry.id ? logEntry : l));
+                    showToast("✏ Voce aggiornata");
+                  } else {
+                    saveLog([logEntry, ...log]);
+                    showToast("🍷 Bevuta registrata nello storico");
+                  }
                   setLogModal(null);
-                  showToast("🍷 Bevuta registrata nello storico");
-                }}>SALVA NELLO STORICO</button>
+                }}>{logModal === "edit" ? "SALVA" : "SALVA NELLO STORICO"}</button>
               </div>
             </div>
           </div>
