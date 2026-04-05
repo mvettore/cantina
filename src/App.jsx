@@ -82,33 +82,75 @@ function resizeImage(file, maxPx = 900, quality = 0.82) {
   });
 }
 
-// ── Crop image to label given percentage coords from API ──
-function cropImageToCoords(srcDataUrl, crop) {
+// ── Auto-crop label from photo using pixel brightness analysis ──
+// Trova la zona dell'etichetta cercando il rettangolo più "luminoso e uniforme"
+function autoCropLabel(srcDataUrl) {
   return new Promise((resolve) => {
-    if (!crop || typeof crop.x !== "number" || typeof crop.w !== "number") {
-      resolve(null); return;
-    }
     const img = new Image();
     img.onload = () => {
-      const { x, y, w, h } = crop;
-      // Clamp with small margin
-      const x1 = Math.max(0, (x - 2)) / 100;
-      const y1 = Math.max(0, (y - 2)) / 100;
-      const x2 = Math.min(100, (x + w + 2)) / 100;
-      const y2 = Math.min(100, (y + h + 2)) / 100;
+      const W = img.width, H = img.height;
 
-      const sx = Math.floor(img.width  * x1);
-      const sy = Math.floor(img.height * y1);
-      const sw = Math.floor(img.width  * (x2 - x1));
-      const sh = Math.floor(img.height * (y2 - y1));
+      // Lavora su una versione ridotta per velocità
+      const THUMB = 120;
+      const tw = THUMB, th = Math.round(H / W * THUMB);
+      const analysis = document.createElement("canvas");
+      analysis.width = tw; analysis.height = th;
+      const ctx = analysis.getContext("2d");
+      ctx.drawImage(img, 0, 0, tw, th);
+      const px = ctx.getImageData(0, 0, tw, th).data;
 
-      if (sw < 20 || sh < 20) { resolve(null); return; }
+      // Calcola luminosità media per colonna e riga
+      const rowBrightness = new Float32Array(th);
+      const colBrightness = new Float32Array(tw);
+      for (let y = 0; y < th; y++) {
+        for (let x = 0; x < tw; x++) {
+          const i = (y * tw + x) * 4;
+          const lum = 0.299*px[i] + 0.587*px[i+1] + 0.114*px[i+2];
+          rowBrightness[y] += lum / tw;
+          colBrightness[x] += lum / th;
+        }
+      }
 
-      const canvas = document.createElement("canvas");
-      canvas.width  = sw;
-      canvas.height = sh;
-      canvas.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-      resolve(canvas.toDataURL("image/jpeg", 0.92));
+      // Trova le righe/colonne con luminosità sopra la media (etichette sono più chiare della bottiglia)
+      const avgLum = rowBrightness.reduce((a,b)=>a+b,0)/th;
+      const threshold = avgLum * 0.92;
+
+      let top = 0, bottom = th-1, left = 0, right = tw-1;
+
+      // Trova bordi verticali: cerca dove la luminosità sale stabilmente
+      for (let y = Math.floor(th*0.05); y < Math.floor(th*0.5); y++) {
+        if (rowBrightness[y] > threshold) { top = Math.max(0, y-1); break; }
+      }
+      for (let y = th-1; y > Math.floor(th*0.5); y--) {
+        if (rowBrightness[y] > threshold) { bottom = Math.min(th-1, y+1); break; }
+      }
+      // Bordi orizzontali
+      for (let x = Math.floor(tw*0.05); x < Math.floor(tw*0.5); x++) {
+        if (colBrightness[x] > threshold) { left = Math.max(0, x-1); break; }
+      }
+      for (let x = tw-1; x > Math.floor(tw*0.5); x--) {
+        if (colBrightness[x] > threshold) { right = Math.min(tw-1, x+1); break; }
+      }
+
+      // Converti in coordinate originali con un po' di margine
+      const margin = 0.02;
+      const sx = Math.max(0,          Math.floor(W * (left/tw   - margin)));
+      const sy = Math.max(0,          Math.floor(H * (top/th    - margin)));
+      const ex = Math.min(W,          Math.ceil( W * (right/tw  + margin)));
+      const ey = Math.min(H,          Math.ceil( H * (bottom/th + margin)));
+      const sw = ex - sx, sh = ey - sy;
+
+      // Se il ritaglio è troppo simile all'originale o troppo piccolo, restituisce null
+      const cropRatio = (sw * sh) / (W * H);
+      if (cropRatio > 0.92 || cropRatio < 0.05 || sw < 50 || sh < 50) {
+        resolve(null); return;
+      }
+
+      // Esegui il ritaglio sull'immagine originale ad alta qualità
+      const out = document.createElement("canvas");
+      out.width = sw; out.height = sh;
+      out.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      resolve(out.toDataURL("image/jpeg", 0.93));
     };
     img.onerror = () => resolve(null);
     img.src = srcDataUrl;
@@ -334,17 +376,15 @@ export default function App() {
       // Il corpo della richiesta deve stare sotto i 4MB di Netlify
       // Per la scansione API: immagine piccola (velocità)
       const scanDataUrl = await resizeImage(file, 700, 0.82);
-      // Per il thumbnail salvato: immagine ad alta qualità
-      const hiResDataUrl = await resizeImage(file, 1400, 0.92);
+      // Thumbnail ad alta qualità sull'originale
+      const hiResDataUrl = await resizeImage(file, 1800, 0.93);
 
       const info = await scanLabel(scanDataUrl);
 
       // Ritaglia l'etichetta usando le coordinate restituite dall'API
-      console.log("Crop coords from API:", JSON.stringify(info.crop));
-      const croppedThumb = info.crop && typeof info.crop.x === "number"
-        ? await cropImageToCoords(hiResDataUrl, info.crop)
-        : null;
-      console.log("Crop result:", croppedThumb ? "SUCCESS" : "FALLBACK");
+      // Ritaglia automaticamente l'etichetta analizzando i pixel
+      const croppedThumb = await autoCropLabel(hiResDataUrl);
+      console.log("Auto-crop:", croppedThumb ? "ritagliato" : "fallback all'intera foto");
       const thumb = croppedThumb || hiResDataUrl;
 
       setEditing(prev => ({
