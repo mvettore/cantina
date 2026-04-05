@@ -1995,7 +1995,7 @@ export default function App() {
         </div>
       )}
       {/* ── FAB AGGIUNGI VINO ── */}
-      {!modal && view !== "logview" && <button
+      {!modal && view === "catalog" && <button
         onClick={() => { setEditing(emptyWine()); setScanError(null); setModal("add"); }}
         title="Aggiungi vino"
         style={{
