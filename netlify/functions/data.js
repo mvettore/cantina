@@ -1,11 +1,19 @@
+/**
+ * Netlify Function: data
+ * Database: Supabase (Postgres)
+ *
+ * GET  /.netlify/functions/data         → { wines, racks }
+ * POST /.netlify/functions/data         → salva { wines?, racks? }
+ */
+
 const handler = async (event) => {
   const headers = {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
   };
 
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+  const SUPABASE_URL   = process.env.SUPABASE_URL;
+  const SUPABASE_KEY   = process.env.SUPABASE_SERVICE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return { statusCode: 500, headers, body: JSON.stringify({ error: "Supabase non configurato" }) };
@@ -19,36 +27,47 @@ const handler = async (event) => {
     "Prefer": "return=representation",
   };
 
+  // ── GET ──
   if (event.httpMethod === "GET") {
     try {
       const r = await fetch(`${apiBase}?select=key,value`, { headers: sbHeaders });
       const rows = await r.json();
       if (!Array.isArray(rows)) {
-        return { statusCode: 500, headers, body: JSON.stringify({ error: "Errore DB", detail: rows }) };
+        console.error("Supabase GET error:", rows);
+        return { statusCode: 500, headers, body: JSON.stringify({ error: "Errore lettura DB", detail: rows }) };
       }
       const wines = rows.find(r => r.key === "wines")?.value ?? null;
       const racks = rows.find(r => r.key === "racks")?.value ?? null;
-      return { statusCode: 200, headers, body: JSON.stringify({ wines, racks }) };
+      const logData = rows.find(r => r.key === "log")?.value ?? null;
+      return { statusCode: 200, headers, body: JSON.stringify({ wines, racks, log: logData }) };
     } catch (err) {
+      console.error("GET error:", err.message);
       return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
     }
   }
 
+  // ── POST ──
   if (event.httpMethod === "POST") {
     try {
       const body = JSON.parse(event.body || "{}");
       const ops = [];
+
       for (const [key, value] of Object.entries(body)) {
-        if (key !== "wines" && key !== "racks") continue;
-        ops.push(fetch(`${apiBase}`, {
-          method: "POST",
-          headers: { ...sbHeaders, "Prefer": "resolution=merge-duplicates,return=minimal" },
-          body: JSON.stringify({ key, value }),
-        }));
+        if (key !== "wines" && key !== "racks" && key !== "log") continue;
+        // upsert: inserisce o aggiorna la riga con quella key
+        ops.push(
+          fetch(`${apiBase}`, {
+            method: "POST",
+            headers: { ...sbHeaders, "Prefer": "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify({ key, value }),
+          })
+        );
       }
+
       await Promise.all(ops);
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
     } catch (err) {
+      console.error("POST error:", err.message);
       return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
     }
   }

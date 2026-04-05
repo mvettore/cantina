@@ -4,6 +4,7 @@ const WINE_TYPES = ["Rosso", "Bianco", "Rosato", "Spumante", "Dolce", "Passito"]
 const REGIONS = ["Piemonte", "Toscana", "Veneto", "Lombardia", "Sicilia", "Campania", "Sardegna", "Umbria", "Marche", "Puglia", "Altro"];
 const ROW_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const STORAGE_KEY = "cantina-wines-v3";
+const LOG_KEY = "cantina-log-v1";
 const RACKS_KEY  = "cantina-racks-v2";
 
 const INITIAL_RACKS = [
@@ -284,7 +285,12 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState(null);
   const [drinkModal, setDrinkModal] = useState(null);
-  const [lightboxPhoto, setLightboxPhoto] = useState(null); // wine to drink from
+  const [lightboxPhoto, setLightboxPhoto] = useState(null);
+  const [log, setLog] = useState(() => loadLocal(LOG_KEY, []));
+  const [logModal, setLogModal] = useState(null); // wine being logged
+  const [logEntry, setLogEntry] = useState(null); // current entry being edited
+  const [logView, setLogView] = useState("list"); // "list" | "entry"
+  const [viewingEntry, setViewingEntry] = useState(null); // wine to drink from
   const [enriching, setEnriching] = useState(false);
   const [enrichData, setEnrichData] = useState(null);
   const [enrichError, setEnrichError] = useState(null);
@@ -300,6 +306,7 @@ export default function App() {
       if (data) {
         if (data.wines) { loadedWines = migrateWines(data.wines); setWines(loadedWines); saveLocal(STORAGE_KEY, loadedWines); }
         if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
+        if (data.log)   { setLog(data.log);    saveLocal(LOG_KEY, data.log); }
       }
       setSyncing(false);
       // Ri-analizza i vini con analisi scaduta (>6 mesi)
@@ -319,16 +326,9 @@ export default function App() {
     });
   }, []);
 
-  const saveWines = (w) => {
-    setWines(w);
-    saveLocal(STORAGE_KEY, w);
-    cloudSave({ wines: w });
-  };
-  const saveRacks = (r) => {
-    setRacks(r);
-    saveLocal(RACKS_KEY, r);
-    cloudSave({ racks: r });
-  };
+  const saveWines = (w) => { setWines(w); saveLocal(STORAGE_KEY, w); cloudSave({ wines: w }); };
+  const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY,  r); cloudSave({ racks: r }); };
+  const saveLog   = (l) => { setLog(l);   saveLocal(LOG_KEY,   l); cloudSave({ log:   l }); };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
   const filtered = wines
@@ -417,7 +417,7 @@ export default function App() {
     }
   };
 
-  // Conferma la bevuta rimuovendo una posizione specifica (o l'ultima se null)
+  // Conferma la bevuta: aggiorna cantina e apre il form dello storico
   const commitDrink = (wine, posToRemove) => {
     const newQty = wine.quantity - 1;
     const positions = wine.positions || [];
@@ -425,17 +425,38 @@ export default function App() {
       ? positions.filter(p => p !== posToRemove)
       : positions.slice(0, -1);
 
-    if (newQty <= 0) {
-      setDrinkModal(null);
+    // Aggiorna la cantina
+    const shouldDelete = newQty <= 0;
+    if (!shouldDelete) {
+      const updated = { ...wine, quantity: newQty, positions: newPositions };
+      saveWines(wines.map(w => w.id === wine.id ? updated : w));
+      setEditing(updated);
+    } else {
+      saveWines(wines.filter(w => w.id !== wine.id));
+      setEditing(null);
       setModal(null);
-      setDeleteConfirm(wine);
-      return;
     }
-    const updated = { ...wine, quantity: newQty, positions: newPositions };
-    saveWines(wines.map(w => w.id === wine.id ? updated : w));
-    setEditing(updated);
     setDrinkModal(null);
-    showToast(`🍷 "${wine.name}" — ne rimangono ${newQty}`);
+
+    // Apri il form per registrare la bevuta nello storico
+    setLogEntry({
+      id: Date.now(),
+      wineId: wine.id,
+      wineName: wine.name,
+      wineProducer: wine.producer,
+      wineYear: wine.year,
+      wineType: wine.type,
+      wineGrape: wine.grape,
+      wineRegion: wine.region,
+      winePhoto: wine.photo || null,
+      date: new Date().toISOString().split("T")[0],
+      occasion: "",
+      companions: "",
+      rating: 4,
+      notes: "",
+      finished: true,
+    });
+    setLogModal("add");
   };
 
   // Approfondisci: chiama Claude, salva automaticamente il risultato nella bottiglia
@@ -725,7 +746,7 @@ export default function App() {
 
       {/* ── NAV ── */}
       <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 32px", display: "flex" }}>
-        {[["catalog","📋  CATALOGO"],["racks","🗄  SCAFFALI"],["stats","📊  STATISTICHE"]].map(([v,l]) => (
+        {[["catalog","📋  CATALOGO"],["racks","🗄  SCAFFALI"],["stats","📊  STATISTICHE"],["logview","📖  STORICO"]].map(([v,l]) => (
           <button key={v} className={`nav-btn ${view===v?"active":""}`} onClick={() => setView(v)}>{l}</button>
         ))}
       </div>
@@ -1606,6 +1627,134 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* ══════ STORICO VIEW ══════ */}
+      {view === "logview" && (
+        <div style={{ padding: "28px 32px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+            <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO BOTTIGLIE BEVUTE</h2>
+            <span style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length === 1 ? "bottiglia" : "bottiglie"}</span>
+          </div>
+          {log.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "60px 20px", color: C.textFaint }}>
+              <div style={{ fontSize: 44, marginBottom: 12, opacity: 0.4 }}>🍷</div>
+              <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 2, fontSize: 14 }}>NESSUNA BOTTIGLIA REGISTRATA</p>
+              <p style={{ fontSize: 15, color: C.textFaint, marginTop: 8, fontStyle: "italic" }}>Le bottiglie bevute appariranno qui dopo averle registrate.</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {[...log].sort((a,b) => b.date.localeCompare(a.date)).map(entry => (
+                <div key={entry.id} onClick={() => { setViewingEntry(entry); }}
+                  style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", display: "flex", gap: 0 }}
+                  className="wine-card">
+                  {/* Foto miniatura */}
+                  {entry.winePhoto && (
+                    <div style={{ width: 60, flexShrink: 0, overflow: "hidden" }}>
+                      <img src={entry.winePhoto} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt={entry.wineName} />
+                    </div>
+                  )}
+                  <div style={{ flex: 1, padding: "12px 16px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                      <div>
+                        <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 17, color: C.text, marginBottom: 2 }}>{entry.wineName}</h3>
+                        <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic" }}>{entry.wineProducer} · {entry.wineYear}</p>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>
+                          {new Date(entry.date).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" })}
+                        </div>
+                        <div style={{ marginTop: 3 }}>
+                          {[1,2,3,4,5].map(s => <span key={s} style={{ fontSize: 13, color: s <= entry.rating ? C.gold : C.border }}>★</span>)}
+                        </div>
+                      </div>
+                    </div>
+                    {entry.occasion && <p style={{ fontSize: 13, color: C.textFaint, marginBottom: 2 }}>📅 {entry.occasion}</p>}
+                    {entry.companions && <p style={{ fontSize: 13, color: C.textFaint, marginBottom: 2 }}>👥 {entry.companions}</p>}
+                    {entry.notes && <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", marginTop: 4, lineHeight: 1.5 }}>"{entry.notes}"</p>}
+                    <div style={{ marginTop: 6, display: "flex", gap: 8 }}>
+                      {entry.wineType && <span style={{ fontSize: 11, color: C.textFaint, background: C.surface2, borderRadius: 20, padding: "2px 8px", fontFamily: "'Cinzel', serif" }}>{entry.wineType.toUpperCase()}</span>}
+                      {entry.wineGrape && <span style={{ fontSize: 12, color: C.textFaint }}>🍇 {entry.wineGrape}</span>}
+                      {!entry.finished && <span style={{ fontSize: 11, color: "#c0a040", background: "rgba(180,150,60,0.15)", borderRadius: 20, padding: "2px 8px", fontFamily: "'Cinzel', serif" }}>NON FINITA</span>}
+                    </div>
+                  </div>
+                  <button onClick={e => { e.stopPropagation(); saveLog(log.filter(l => l.id !== entry.id)); showToast("Voce eliminata"); }}
+                    style={{ alignSelf: "stretch", background: "none", border: "none", borderLeft: `1px solid ${C.bg}`, padding: "0 12px", cursor: "pointer", color: "#7a4040", fontSize: 16, transition: "color 0.15s" }}
+                    onMouseEnter={e => e.currentTarget.style.color="#d07070"}
+                    onMouseLeave={e => e.currentTarget.style.color="#7a4040"}
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── LOG MODAL ── */}
+      {logModal === "add" && logEntry && (
+        <div className="modal-overlay" onClick={() => setLogModal(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 16, color: C.gold, letterSpacing: 2 }}>🍷 REGISTRA LA BEVUTA</h2>
+                <p style={{ fontSize: 14, color: C.textMuted, marginTop: 4, fontStyle: "italic" }}>{logEntry.wineName} · {logEntry.wineYear}</p>
+              </div>
+              <button onClick={() => setLogModal(null)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 20 }}>✕</button>
+            </div>
+            <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={labelStyle}>Data</label>
+                <input type="date" style={inputStyle} value={logEntry.date}
+                  onChange={e => setLogEntry(v => ({ ...v, date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelStyle}>Occasione</label>
+                <input style={inputStyle} value={logEntry.occasion}
+                  onChange={e => setLogEntry(v => ({ ...v, occasion: e.target.value }))}
+                  placeholder="es. Cena in famiglia, Ristorante, Degustazione…" />
+              </div>
+              <div>
+                <label style={labelStyle}>Con chi</label>
+                <input style={inputStyle} value={logEntry.companions}
+                  onChange={e => setLogEntry(v => ({ ...v, companions: e.target.value }))}
+                  placeholder="es. Famiglia, Amici, Da solo…" />
+              </div>
+              <div>
+                <label style={labelStyle}>Valutazione della serata</label>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[1,2,3,4,5].map(s => (
+                    <span key={s} onClick={() => setLogEntry(v => ({ ...v, rating: s }))} style={{
+                      cursor: "pointer", fontSize: 28,
+                      color: s <= logEntry.rating ? C.gold : C.border,
+                      transition: "color 0.15s", userSelect: "none",
+                    }}>★</span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Note del momento</label>
+                <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical", lineHeight: 1.6 }}
+                  value={logEntry.notes}
+                  onChange={e => setLogEntry(v => ({ ...v, notes: e.target.value }))}
+                  placeholder="Impressioni, abbinamento cibo, stato del vino…" />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input type="checkbox" id="finished" checked={logEntry.finished}
+                  onChange={e => setLogEntry(v => ({ ...v, finished: e.target.checked }))}
+                  style={{ width: 18, height: 18, cursor: "pointer", accentColor: C.gold }} />
+                <label htmlFor="finished" style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>Bottiglia finita</label>
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
+                <button className="btn-ghost" onClick={() => setLogModal(null)}>SALTA</button>
+                <button className="btn-gold" onClick={() => {
+                  saveLog([logEntry, ...log]);
+                  setLogModal(null);
+                  showToast("🍷 Bevuta registrata nello storico");
+                }}>SALVA NELLO STORICO</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── LIGHTBOX ── */}
       {lightboxPhoto && (
