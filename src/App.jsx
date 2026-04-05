@@ -728,7 +728,6 @@ export default function App() {
             </div>
           )}
         </div>
-        </div>
 
         <div style={{ padding: "28px 32px" }}>
           {filtered.length === 0 ? (
