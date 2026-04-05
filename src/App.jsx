@@ -1712,7 +1712,12 @@ export default function App() {
                   onClick={() => { setLogEntry(entry); setLogModal("edit"); }}
                   style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", display: "flex", gap: 0 }}
                   className="wine-card">
-                  <div style={{ flex: 1, padding: "12px 16px" }}>
+                  {entry.winePhoto && (
+                    <div style={{ width: 72, flexShrink: 0, overflow: "hidden", background: "#000" }}>
+                      <img src={entry.winePhoto} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} alt={entry.wineName} />
+                    </div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0, padding: "12px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <div>
                         <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 17, color: C.text, marginBottom: 2 }}>
@@ -1733,7 +1738,6 @@ export default function App() {
                     <div style={{ display: "flex", gap: 12, fontSize: 13, color: C.textFaint, fontFamily: "'EB Garamond', serif", flexWrap: "wrap", marginBottom: 4 }}>
                       {entry.occasion && <span>📅 {entry.occasion}</span>}
                       {entry.companions && <span>👥 {entry.companions}</span>}
-                      {!entry.finished && <span style={{ color: "#c0a040" }}>⚠ Non finita</span>}
                     </div>
                     {/* AIS snippet */}
                     {(entry.olfatto_descrizione || entry.gusto_corpo || entry.gusto_equilibrio) && (
