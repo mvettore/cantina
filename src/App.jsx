@@ -918,13 +918,17 @@ export default function App() {
                         {/* Riga D: posizione · stato — solo se presenti */}
                         {(rack&&(wine.positions||[]).length>0 || getAgingStatus(wine)) && (
                           <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
-                            {rack&&(wine.positions||[]).length>0&&(
-                              <span style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
-                                background:"rgba(201,149,58,0.1)",border:`1px solid rgba(201,149,58,0.2)`,
-                                borderRadius:20,padding:"1px 8px",fontWeight:600}}>
-                                🗄 {rack.name} {(wine.positions||[]).join("·")}
-                              </span>
-                            )}
+                            {rack&&(wine.positions||[]).length>0&&(()=>{
+                              const pos = wine.positions||[];
+                              const label = pos.length>3 ? `${pos.slice(0,3).join("·")} +${pos.length-3}` : pos.join("·");
+                              return(
+                                <span style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
+                                  background:"rgba(201,149,58,0.1)",border:`1px solid rgba(201,149,58,0.2)`,
+                                  borderRadius:20,padding:"1px 8px",fontWeight:600}}>
+                                  🗄 {rack.name} {label}
+                                </span>
+                              );
+                            })()}
                             {(()=>{const ag=getAgingStatus(wine);if(!ag)return null;
                               const age=new Date().getFullYear()-wine.year;
                               return(
