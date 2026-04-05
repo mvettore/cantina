@@ -1717,7 +1717,7 @@ export default function App() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <div>
                         <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 17, color: C.text, marginBottom: 2 }}>
-                          {entry.wineType === "Bianco" ? "🍋" : "🍇"} {entry.wineName}
+                          🍇 {entry.wineName}
                         </h3>
                         <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic" }}>{entry.wineProducer}{entry.wineYear ? ` · ${entry.wineYear}` : ""}</p>
                       </div>
