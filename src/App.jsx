@@ -929,7 +929,7 @@ export default function App() {
                           <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
                             {rack&&(wine.positions||[]).length>0&&(()=>{
                               const pos = wine.positions||[];
-                              const label = pos.length>3 ? `${pos.slice(0,3).join("·")} +${pos.length-3}` : pos.join("·");
+                              const label = pos.length>1 ? `${pos[0]} +${pos.length-1}` : pos[0];
                               return(
                                 <span style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
                                   background:"rgba(201,149,58,0.1)",border:`1px solid rgba(201,149,58,0.2)`,
