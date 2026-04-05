@@ -59,7 +59,7 @@ async function cloudSave(payload) {
 }
 
 const typeColors = {
-  "Rosso":    { bar: "#9b1c2e", badge: "#6a2020", text: "#fcd8d8" }, // rubino
+  "Rosso":    { bar: "#c0102a", badge: "#6a2020", text: "#fcd8d8" }, // rubino
   "Bianco":   { bar: "#c8b84a", badge: "#4a4a20", text: "#faf0c0" }, // paglierino
   "Rosato":   { bar: "#d4607a", badge: "#6a2040", text: "#fcd8e8" }, // rosato
   "Spumante": { bar: "#a0c4a0", badge: "#204a60", text: "#c8eafa" }, // verde acqua/perlage
@@ -870,7 +870,7 @@ export default function App() {
                 return (
                   <div key={wine.id} className="wine-card" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,0.25)" }}
                     onClick={() => { setEditing({...wine}); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
-                    <div style={{ height: 3, background: `linear-gradient(90deg, ${tc.bar}, ${C.gold})` }} />
+                    <div style={{ height: 5, background: `linear-gradient(90deg, ${tc.bar}, ${C.gold})` }} />
 
                     <div style={{display:"flex",minHeight:0}}>
                       {/* Foto verticale */}
