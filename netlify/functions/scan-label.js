@@ -1,66 +1,42 @@
-/**
- * Netlify Function: scan-label
- *
- * Riceve l'immagine in base64 dal frontend,
- * chiama l'API Anthropic sul server (dove la chiave è al sicuro),
- * e restituisce il JSON con i dati del vino.
- *
- * La chiave API non viene mai esposta al browser.
- */
-
-export default async (req) => {
-  // Solo POST
-  if (req.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
+const handler = async (event) => {
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  // Leggi il body
   let body;
   try {
-    body = await req.json();
+    body = JSON.parse(event.body);
   } catch {
-    return new Response(JSON.stringify({ error: "Body non valido" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return { statusCode: 400, body: JSON.stringify({ error: "Body non valido" }) };
   }
 
   const { base64, mediaType } = body;
   if (!base64 || !mediaType) {
-    return new Response(JSON.stringify({ error: "Campi mancanti: base64, mediaType" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return { statusCode: 400, body: JSON.stringify({ error: "Campi mancanti: base64, mediaType" }) };
   }
 
-  // Chiave API dall'environment (impostata su Netlify, mai nel codice)
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: "API key non configurata" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return { statusCode: 500, body: JSON.stringify({ error: "ANTHROPIC_API_KEY non configurata" }) };
   }
 
   const prompt = `Sei un esperto enologo. Analizza questa etichetta di vino.
-Usa la ricerca web per trovare informazioni aggiuntive sul vino se il testo dell'etichetta non è sufficiente.
-
-Restituisci ESCLUSIVAMENTE un oggetto JSON valido (niente testo prima o dopo), con questi campi:
+Usa la ricerca web per trovare informazioni aggiuntive se necessario.
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido (niente testo prima o dopo) con questi campi:
 {
-  "name": "nome commerciale del vino (es. Barolo Riserva, non il produttore)",
+  "name": "nome commerciale del vino",
   "producer": "nome della cantina/produttore",
   "year": 2019,
   "type": "uno tra: Rosso, Bianco, Rosato, Spumante, Dolce, Passito",
-  "region": "regione italiana (es. Piemonte, Toscana) o paese se estero",
-  "grape": "vitigno o uvaggio principale",
-  "notes": "2-3 frasi di descrizione organolettica o storia del vino",
+  "region": "regione italiana o paese",
+  "grape": "vitigno principale",
+  "notes": "2-3 frasi descrittive",
   "price": null
 }
-
-Se un campo non è determinabile, usa null. Per il tipo, deducilo dal vitigno/denominazione se non esplicitato.`;
+Se un campo non è determinabile usa null.`;
 
   try {
-    const anthropicResp = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -81,43 +57,43 @@ Se un campo non è determinabile, usa null. Per il tipo, deducilo dal vitigno/de
       }),
     });
 
-    if (!anthropicResp.ok) {
-      const errText = await anthropicResp.text();
-      return new Response(JSON.stringify({ error: `Anthropic API error: ${errText}` }), {
-        status: anthropicResp.status,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Anthropic API error:", response.status, errText);
+      return {
+        statusCode: response.status,
+        body: JSON.stringify({ error: `Anthropic error ${response.status}: ${errText}` }),
+      };
     }
 
-    const data = await anthropicResp.json();
+    const data = await response.json();
+    console.log("Anthropic response stop_reason:", data.stop_reason);
 
-    // Estrai l'ultimo blocco di testo (dopo eventuali tool call)
     const textBlocks = (data.content || []).filter(b => b.type === "text");
     const raw = textBlocks.map(b => b.text).join("").trim();
+    console.log("Raw text:", raw.slice(0, 200));
+
     const clean = raw
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/```\s*$/i, "")
       .trim();
 
-    // Verifica che sia JSON valido prima di rimandarlo
-    JSON.parse(clean); // lancia eccezione se malformato
+    // Valida il JSON
+    const parsed = JSON.parse(clean);
 
-    return new Response(clean, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
+    return {
+      statusCode: 200,
       headers: { "Content-Type": "application/json" },
-    });
+      body: JSON.stringify(parsed),
+    };
+  } catch (err) {
+    console.error("Errore:", err.message);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: err.message }),
+    };
   }
 };
 
-export const config = {
-  path: "/api/scan-label",
-};
+module.exports = { handler };
