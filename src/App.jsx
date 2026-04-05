@@ -500,8 +500,8 @@ export default function App() {
         .nav-btn { background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; padding: 12px 22px; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 2px; transition: all 0.15s; color: ${C.textFaint}; }
         .nav-btn.active { color: ${C.gold}; border-bottom-color: ${C.gold}; }
         .nav-btn:hover:not(.active) { color: ${C.textMuted}; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 16px; backdrop-filter: blur(4px); }
-        .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(94vw, 860px); max-height: 94vh; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 8px; backdrop-filter: blur(4px); }
+        .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(98vw, 1100px); max-height: 96vh; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; }
         @keyframes fadeUp { from { opacity:0; transform: translateY(18px) scale(0.97); } to { opacity:1; transform: none; } }
         @keyframes spin { to { transform: rotate(360deg); } }
         .rack-card { background: ${C.surface2}; border: 1px solid ${C.border}; border-radius: 12px; overflow: hidden; }
@@ -888,7 +888,7 @@ export default function App() {
                 <h2 style={{fontFamily:"'Cinzel', serif",fontSize:24,color:C.text,marginBottom:5,marginTop:editing.photo?8:0}}>{editing.name}</h2>
                 <p style={{fontSize:17,color:C.textMuted,fontStyle:"italic",marginBottom:18}}>{editing.producer}</p>
 
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))",gap:12,marginBottom:18}}>
                   {[
                     ["📍 Regione", editing.region, false],
                     ["🍇 Vitigno", editing.grape||"—", false],
@@ -973,7 +973,7 @@ export default function App() {
                             ["🍽 Abbinamenti Gastronomici", displayData.foodPairing],
                             ["💡 Lo sapevi?", displayData.curiosity],
                           ].filter(([,v]) => v).map(([label, text]) => (
-                            <div key={label} style={{borderLeft:`2px solid ${C.border}`,paddingLeft:12}}>
+                            <div key={label} style={{paddingLeft:0}}>
                               <div style={{fontSize:15,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:6,fontWeight:700}}>
                                 {label}
                               </div>
@@ -1118,7 +1118,7 @@ export default function App() {
           <div className="modal-overlay" onClick={() => setDrinkModal(null)}>
             <div className="modal-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
               <div style={{ height: 4, background: `linear-gradient(90deg, #7a2a9a, #c9953a)`, borderRadius: "14px 14px 0 0" }} />
-              <div style={{ padding: "22px 26px" }}>
+              <div style={{ padding: "26px 36px" }}>
                 <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2, marginBottom: 6 }}>
                   🍷 QUALE BOTTIGLIA PRELEVI?
                 </h2>
