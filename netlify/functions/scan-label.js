@@ -1,6 +1,6 @@
 /**
  * Netlify Function: scan-label
- * Usa claude-haiku (più veloce) per leggere l'etichetta — risponde in 2-4s.
+ * Legge l'etichetta E restituisce le coordinate di ritaglio in un'unica chiamata.
  */
 
 const handler = async (event) => {
@@ -9,11 +9,8 @@ const handler = async (event) => {
   }
 
   let body;
-  try {
-    body = JSON.parse(event.body);
-  } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: "Body non valido" }) };
-  }
+  try { body = JSON.parse(event.body); }
+  catch { return { statusCode: 400, body: JSON.stringify({ error: "Body non valido" }) }; }
 
   const { base64, mediaType } = body;
   if (!base64 || !mediaType) {
@@ -21,13 +18,13 @@ const handler = async (event) => {
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: "API key non configurata" }) };
-  }
+  if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: "API key non configurata" }) };
 
-  console.log(`Immagine ricevuta: ~${Math.round(base64.length * 0.75 / 1024)}KB`);
+  console.log(`Immagine: ~${Math.round(base64.length * 0.75 / 1024)}KB`);
 
-  const prompt = `Leggi questa etichetta di vino e restituisci SOLO un oggetto JSON valido:
+  const prompt = `Analizza questa fotografia di una bottiglia di vino.
+
+Restituisci SOLO un oggetto JSON valido con questi campi:
 {
   "name": "nome commerciale del vino (non il produttore)",
   "producer": "cantina o produttore",
@@ -36,9 +33,12 @@ const handler = async (event) => {
   "region": "regione italiana o paese",
   "grape": "vitigno principale",
   "notes": "1-2 frasi descrittive",
-  "price": null
+  "price": null,
+  "crop": { "x": 10, "y": 5, "w": 80, "h": 60 }
 }
-Usa null per i campi non leggibili. Niente testo fuori dal JSON.`;
+
+Il campo "crop" deve contenere le coordinate percentuali (0-100) del rettangolo che contiene SOLO l'etichetta nella foto (non la bottiglia intera). x,y = angolo superiore sinistro, w,h = larghezza e altezza.
+Usa null per i campi del vino non leggibili. Niente testo fuori dal JSON.`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 24000);
@@ -54,7 +54,7 @@ Usa null per i campi non leggibili. Niente testo fuori dal JSON.`;
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 500,
+        max_tokens: 600,
         messages: [{
           role: "user",
           content: [
@@ -75,7 +75,7 @@ Usa null per i campi non leggibili. Niente testo fuori dal JSON.`;
 
     const data = await response.json();
     const raw = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
-    console.log("Risposta raw:", raw.slice(0, 200));
+    console.log("Raw:", raw.slice(0, 300));
 
     const clean = raw.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
     const parsed = JSON.parse(clean);
@@ -88,7 +88,6 @@ Usa null per i campi non leggibili. Niente testo fuori dal JSON.`;
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === "AbortError") {
-      console.error("Timeout 24s");
       return { statusCode: 504, body: JSON.stringify({ error: "Timeout — riprova" }) };
     }
     console.error("Errore:", err.message);

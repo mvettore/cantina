@@ -82,46 +82,27 @@ function resizeImage(file, maxPx = 900, quality = 0.82) {
   });
 }
 
-// ── Crop image to label using Claude bbox ──
-async function cropToLabel(base64DataUrl) {
-  try {
-    const base64 = base64DataUrl.split(",")[1];
-    const mediaType = base64DataUrl.split(";")[0].split(":")[1] || "image/jpeg";
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-    // In produzione usa la funzione server, in locale usa la chiave diretta
-    // Per semplicità usiamo sempre la funzione server
-    const resp = await fetch("/.netlify/functions/crop-label", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ base64, mediaType }),
-    });
-    if (!resp.ok) return null;
-    const { x, y, w, h } = await resp.json();
-
-    // Ritaglia con Canvas
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const px = img.width  * x / 100;
-        const py = img.height * y / 100;
-        const pw = img.width  * w / 100;
-        const ph = img.height * h / 100;
-        // Aggiungi un po' di margine
-        const margin = Math.min(pw, ph) * 0.04;
-        canvas.width  = Math.min(pw + margin * 2, img.width);
-        canvas.height = Math.min(ph + margin * 2, img.height);
-        canvas.getContext("2d").drawImage(img,
-          Math.max(0, px - margin), Math.max(0, py - margin),
-          canvas.width, canvas.height,
-          0, 0, canvas.width, canvas.height
-        );
-        resolve(canvas.toDataURL("image/jpeg", 0.85));
-      };
-      img.onerror = () => resolve(null);
-      img.src = base64DataUrl;
-    });
-  } catch { return null; }
+// ── Crop image to label given percentage coords from API ──
+function cropImageToCoords(srcDataUrl, crop) {
+  return new Promise((resolve) => {
+    if (!crop || typeof crop.x !== "number") { resolve(null); return; }
+    const img = new Image();
+    img.onload = () => {
+      const { x, y, w, h } = crop;
+      // Add 3% margin
+      const mx = img.width  * Math.max(0, x - 2) / 100;
+      const my = img.height * Math.max(0, y - 2) / 100;
+      const mw = img.width  * Math.min(100, w + 4) / 100;
+      const mh = img.height * Math.min(100, h + 4) / 100;
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(mw);
+      canvas.height = Math.round(mh);
+      canvas.getContext("2d").drawImage(img, mx, my, mw, mh, 0, 0, mw, mh);
+      resolve(canvas.toDataURL("image/jpeg", 0.88));
+    };
+    img.onerror = () => resolve(null);
+    img.src = srcDataUrl;
+  });
 }
 
 // ── Call backend proxy → structured JSON ──
@@ -341,18 +322,18 @@ export default function App() {
     try {
       // Ridimensiona aggressivamente: max 350px, qualità 55%
       // Il corpo della richiesta deve stare sotto i 4MB di Netlify
-      const dataUrl = await resizeImage(file, 350, 0.55);
-      const sizeKB = Math.round(dataUrl.length * 0.75 / 1024);
-      console.log(`Immagine scan: ~${sizeKB}KB`);
+      // Per la scansione API: immagine piccola (velocità)
+      const scanDataUrl = await resizeImage(file, 400, 0.65);
+      // Per il thumbnail salvato: immagine di qualità (800px, 85%)
+      const hiResDataUrl = await resizeImage(file, 800, 0.85);
 
-      // Scan e crop etichetta in parallelo
-      const [info, croppedDataUrl] = await Promise.all([
-        scanLabel(dataUrl),
-        cropToLabel(dataUrl),
-      ]);
+      const info = await scanLabel(scanDataUrl);
 
-      // Thumb: usa il ritaglio se disponibile, altrimenti l'intera foto ridimensionata
-      const thumb = croppedDataUrl || await resizeImage(file, 400, 0.65);
+      // Ritaglia l'etichetta usando le coordinate restituite dall'API
+      const croppedThumb = info.crop
+        ? await cropImageToCoords(hiResDataUrl, info.crop)
+        : null;
+      const thumb = croppedThumb || hiResDataUrl;
 
       setEditing(prev => ({
         ...prev,
@@ -366,7 +347,7 @@ export default function App() {
         price:    info.price != null ? String(info.price) : prev.price,
         photo:    thumb,
       }));
-      showToast("✨ Etichetta riconosciuta e ritagliata!");
+      showToast(croppedThumb ? "✨ Etichetta riconosciuta e ritagliata!" : "✨ Etichetta riconosciuta!");
     } catch (err) {
       console.error(err);
       setScanError("Non sono riuscito a leggere l'etichetta. Riprova con una foto più nitida.");
