@@ -657,10 +657,11 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'EB Garamond', serif", color: C.text, fontSize: 20 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'EB Garamond', serif", color: C.text, fontSize: 20, overflowX: "hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { overflow-x: hidden; max-width: 100vw; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: ${C.bg}; }
         ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
@@ -722,7 +723,7 @@ export default function App() {
       `}</style>
 
       {/* ── HEADER ── */}
-      <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "22px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 18 }}>
+      <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontSize: 34 }}>🍷</span>
           <div>
@@ -745,7 +746,7 @@ export default function App() {
       </header>
 
       {/* ── NAV ── */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 32px", display: "flex" }}>
+      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 8px", display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         {[["catalog","📋  CATALOGO"],["racks","🗄  SCAFFALI"],["stats","📊  STATISTICHE"],["logview","📖  STORICO"]].map(([v,l]) => (
           <button key={v} className={`nav-btn ${view===v?"active":""}`} onClick={() => setView(v)}>{l}</button>
         ))}
@@ -753,7 +754,7 @@ export default function App() {
 
       {/* ══════ CATALOG VIEW ══════ */}
       {view === "catalog" && <>
-        <div style={{ padding: "12px 24px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ padding: "10px 16px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
           {/* Barra ricerca + toggle filtri */}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <div style={{ flex: 1, position: "relative" }}>
@@ -835,7 +836,7 @@ export default function App() {
           )}
         </div>
 
-        <div style={{ padding: "28px 32px" }}>
+        <div style={{ padding: "20px 16px" }}>
           {filtered.length === 0 ? (
             <div style={{ textAlign: "center", padding: "80px 20px", color: C.textFaint }}>
               <div style={{ fontSize: 48, marginBottom: 14, opacity: 0.4 }}>🍷</div>
@@ -924,7 +925,7 @@ export default function App() {
 
       {/* ══════ RACKS VIEW ══════ */}
       {view === "racks" && (
-        <div style={{ padding: "28px 32px" }}>
+        <div style={{ padding: "20px 16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
             <div>
               <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, color: C.gold, letterSpacing: 2, marginBottom: 8 }}>I MIEI SCAFFALI</h2>
@@ -1630,7 +1631,7 @@ export default function App() {
 
       {/* ══════ STORICO VIEW ══════ */}
       {view === "logview" && (
-        <div style={{ padding: "28px 32px" }}>
+        <div style={{ padding: "20px 16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
             <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO BOTTIGLIE BEVUTE</h2>
             <span style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length === 1 ? "bottiglia" : "bottiglie"}</span>
