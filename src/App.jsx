@@ -981,7 +981,7 @@ export default function App() {
                           <div style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                             <span style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text}}>{wine.name}</span>
                             {wine.denomination && (
-                              <span style={{fontFamily:"'Cinzel',serif",fontSize:14,color:C.textMuted,marginLeft:6}}>· {wine.denomination}</span>
+                              <span style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,marginLeft:6,fontWeight:400}}>· {wine.denomination}</span>
                             )}
                           </div>
                           <span style={{
@@ -993,16 +993,16 @@ export default function App() {
                         </div>
 
                         {/* Riga B: produttore · anno */}
-                        <p style={{fontFamily:"'EB Garamond',serif",fontSize:22,
-                          color:C.text,margin:0,lineHeight:1.2,
+                        <p style={{fontFamily:"'Cinzel',serif",fontSize:16,
+                          color:C.text,margin:0,lineHeight:1.3,
                           overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                           {[wine.producer, wine.year].filter(Boolean).join(" · ")}
                         </p>
 
                         {/* Riga C: vitigno · prezzo */}
                         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                          {wine.grape && <span style={{fontSize:16,color:C.textMuted,fontFamily:"'EB Garamond',serif"}}>🍇 {wine.grape}</span>}
-                          {wine.price && <span style={{fontSize:16,color:C.textMuted,fontFamily:"'EB Garamond',serif",marginLeft:"auto"}}>€{wine.price}</span>}
+                          {wine.grape && <span style={{fontSize:14,color:C.textMuted,fontFamily:"'Cinzel',serif"}}>🍇 {wine.grape}</span>}
+                          {wine.price && <span style={{fontSize:14,color:C.textMuted,fontFamily:"'Cinzel',serif",marginLeft:"auto"}}>€{wine.price}</span>}
                         </div>
 
                         {/* Riga D: primo scaffale (+ altri) · stato invecchiamento */}
