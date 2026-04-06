@@ -979,8 +979,10 @@ export default function App() {
                         {/* Riga A: NOME + bt */}
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
                           <div style={{flex:1,minWidth:0}}>
-                            <span style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2}}>{wine.name}</span>
-                            <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2,minHeight:"1.2em"}}>
+                            <span style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2,
+                              display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{wine.name}</span>
+                            <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2,minHeight:"1.2em",
+                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                               {wine.denomination || ""}
                             </div>
                           </div>
