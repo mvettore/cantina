@@ -976,12 +976,12 @@ export default function App() {
                       )}
                       <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",gap:6}}>
 
-                        {/* Riga A: NOME · denominazione + bt */}
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
-                          <div style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                            <span style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text}}>{wine.name}</span>
+                        {/* Riga A: NOME + bt */}
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <span style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2}}>{wine.name}</span>
                             {wine.denomination && (
-                              <span style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,marginLeft:6,fontWeight:400}}>· {wine.denomination}</span>
+                              <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2}}>{wine.denomination}</div>
                             )}
                           </div>
                           <span style={{
