@@ -22,6 +22,8 @@ const handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Body non valido" }) };
   }
 
+  console.log(`[search-wine-url] Cerco scheda per: ${wine.name} - ${wine.producer} ${wine.year}`);
+
   const prompt = `Cerca online la scheda di questo vino:
 Nome: ${wine.name || "—"}
 Produttore: ${wine.producer || "—"}
@@ -46,7 +48,7 @@ Rispondi ESCLUSIVAMENTE con questo JSON (nessun altro testo):
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 300,
+        max_tokens: 800,
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: [{ role: "user", content: prompt }],
       }),
@@ -56,24 +58,42 @@ Rispondi ESCLUSIVAMENTE con questo JSON (nessun altro testo):
 
     if (!response.ok) {
       const err = await response.text();
+      console.error(`[search-wine-url] API error ${response.status}:`, err);
       return { statusCode: response.status, body: JSON.stringify({ error: err }) };
     }
 
     const data = await response.json();
+    console.log(`[search-wine-url] stop_reason: ${data.stop_reason}, content blocks: ${data.content?.length}`);
+
     const raw = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
-    const clean = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
-    const parsed = JSON.parse(clean);
+    console.log(`[search-wine-url] testo grezzo: ${raw.substring(0, 200)}`);
+
+    // Prova prima il parsing JSON standard
+    let wineCardUrl = null;
+    try {
+      const clean = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+      const parsed = JSON.parse(clean);
+      wineCardUrl = parsed.url || null;
+    } catch {
+      // Fallback: estrai l'URL direttamente dalla stringa
+      const urlMatch = raw.match(/"url"\s*:\s*"(https?:\/\/[^"]+)"/);
+      if (urlMatch) wineCardUrl = urlMatch[1];
+    }
+
+    console.log(`[search-wine-url] URL trovato: ${wineCardUrl}`);
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wineCardUrl: parsed.url || null }),
+      body: JSON.stringify({ wineCardUrl }),
     };
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === "AbortError") {
+      console.error("[search-wine-url] Timeout");
       return { statusCode: 504, body: JSON.stringify({ error: "Timeout" }) };
     }
+    console.error("[search-wine-url] Errore:", err.message);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
