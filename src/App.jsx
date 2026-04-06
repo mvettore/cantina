@@ -993,7 +993,7 @@ export default function App() {
                         </div>
 
                         {/* Riga B: produttore · anno */}
-                        <p style={{fontFamily:"'EB Garamond',serif",fontSize:18,
+                        <p style={{fontFamily:"'EB Garamond',serif",fontSize:22,
                           color:C.text,margin:0,lineHeight:1.2,
                           overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                           {[wine.producer, wine.year].filter(Boolean).join(" · ")}
