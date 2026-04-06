@@ -27,6 +27,7 @@ const INITIAL_WINES = [
 
 // Migrazione dati vecchi
 function migrateWines(wines) {
+  const seen = new Set();
   return wines.map(w => {
     // 1. position (singolo) → positions (array)
     if (w.position !== undefined && w.positions === undefined) {
@@ -37,9 +38,14 @@ function migrateWines(wines) {
     // 2. rackId + positions → rackSlots [{rackId, positions}]
     if (w.rackSlots === undefined) {
       const { rackId, positions, ...rest } = w;
-      return { ...rest, rackSlots: rackId ? [{ rackId, positions: positions || [] }] : [] };
+      w = { ...rest, rackSlots: rackId ? [{ rackId, positions: positions || [] }] : [] };
     }
     return w;
+  }).filter(w => {
+    // 3. deduplica per id — rimuove doppioni causati da bug di salvataggio
+    if (seen.has(w.id)) return false;
+    seen.add(w.id);
+    return true;
   });
 }
 
@@ -248,11 +254,12 @@ const StarRating = ({ value, onChange, readonly }) => (
 
 const TypeBadge = ({ type, small }) => {
   const c = typeColors[type] || { badge: "#555", text: "#eee" };
+  if (!type) return null;
   return (
     <span style={{ background: c.badge, color: c.text,
       padding: small ? "1px 7px" : "4px 13px",
       borderRadius: 20,
-      fontSize: small ? 11 : 14,
+      fontSize: small ? 14 : 17,
       fontFamily: "'Cinzel', serif", letterSpacing: small ? 0.5 : 1, fontWeight: 700 }}>
       {type.toUpperCase()}
     </span>
@@ -967,33 +974,26 @@ export default function App() {
                             style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         </div>
                       )}
-                      <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",gap:5}}>
+                      <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",gap:6}}>
 
-                        {/* Riga A: NOME + denominazione + bt */}
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
-                          <div style={{flex:1,minWidth:0}}>
-                            <h3 style={{fontFamily:"'Cinzel',serif",fontSize:17,fontWeight:700,
-                              color:C.text,margin:0,lineHeight:1.15,
-                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                              {wine.name}
-                            </h3>
+                        {/* Riga A: NOME · denominazione + bt */}
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
+                          <div style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            <span style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text}}>{wine.name}</span>
                             {wine.denomination && (
-                              <p style={{fontFamily:"'EB Garamond',serif",fontSize:13,color:C.textFaint,
-                                margin:0,lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                                {wine.denomination}
-                              </p>
+                              <span style={{fontFamily:"'Cinzel',serif",fontSize:14,color:C.textFaint,marginLeft:6}}>· {wine.denomination}</span>
                             )}
                           </div>
                           <span style={{
                             background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
                             color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
-                            padding:"1px 8px",borderRadius:20,fontSize:13,flexShrink:0,
+                            padding:"1px 8px",borderRadius:20,fontSize:16,flexShrink:0,
                             fontFamily:"'Cinzel',serif",fontWeight:700,
                           }}>{wine.quantity}bt</span>
                         </div>
 
                         {/* Riga B: produttore · anno */}
-                        <p style={{fontFamily:"'EB Garamond',serif",fontSize:15,
+                        <p style={{fontFamily:"'EB Garamond',serif",fontSize:18,
                           color:C.textMuted,margin:0,lineHeight:1.2,
                           overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                           {[wine.producer, wine.year].filter(Boolean).join(" · ")}
@@ -1002,32 +1002,36 @@ export default function App() {
                         {/* Riga C: tipo · vitigno · prezzo */}
                         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                           <TypeBadge type={wine.type} small/>
-                          {wine.grape && <span style={{fontSize:13,color:C.textFaint,fontFamily:"'EB Garamond',serif"}}>🍇 {wine.grape}</span>}
-                          {wine.price && <span style={{fontSize:13,color:C.textFaint,fontFamily:"'EB Garamond',serif",marginLeft:"auto"}}>€{wine.price}</span>}
+                          {wine.grape && <span style={{fontSize:16,color:C.textFaint,fontFamily:"'EB Garamond',serif"}}>🍇 {wine.grape}</span>}
+                          {wine.price && <span style={{fontSize:16,color:C.textFaint,fontFamily:"'EB Garamond',serif",marginLeft:"auto"}}>€{wine.price}</span>}
                         </div>
 
-                        {/* Riga D: posizioni scaffale · stato invecchiamento */}
+                        {/* Riga D: primo scaffale (+ altri) · stato invecchiamento */}
                         {((wine.rackSlots||[]).some(s=>(s.positions||[]).length>0) || getAgingStatus(wine)) && (
                           <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
-                            {(wine.rackSlots||[]).filter(s=>(s.positions||[]).length>0).map(slot=>{
-                              const sr=racks.find(r=>r.id===slot.rackId);
+                            {(()=>{
+                              const slotsWithPos=(wine.rackSlots||[]).filter(s=>(s.positions||[]).length>0);
+                              if(!slotsWithPos.length) return null;
+                              const first=slotsWithPos[0];
+                              const sr=racks.find(r=>r.id===first.rackId);
                               if(!sr) return null;
-                              const pos=slot.positions;
-                              const label=pos.length>1?`${pos[0]} +${pos.length-1}`:pos[0];
+                              const pos=first.positions;
+                              const posLabel=pos.length>1?`${pos[0]} +${pos.length-1}`:pos[0];
+                              const extraSlots=slotsWithPos.length-1;
                               return(
-                                <span key={slot.rackId} style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
+                                <span style={{fontSize:15,color:C.gold,fontFamily:"'Cinzel',serif",
                                   background:"rgba(201,149,58,0.1)",border:`1px solid rgba(201,149,58,0.2)`,
-                                  borderRadius:20,padding:"1px 8px",fontWeight:600}}>
-                                  🗄 {sr.name} {label}
+                                  borderRadius:20,padding:"2px 10px",fontWeight:600}}>
+                                  🗄 {sr.name} {posLabel}{extraSlots>0?` +${extraSlots}`:""}
                                 </span>
                               );
-                            })}
+                            })()}
                             {(()=>{const ag=getAgingStatus(wine);if(!ag)return null;
                               const age=new Date().getFullYear()-wine.year;
                               return(
-                                <span style={{fontSize:12,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700,
+                                <span style={{fontSize:15,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700,
                                   background:`${ag.c}12`,border:`1px solid ${ag.c}35`,
-                                  borderRadius:20,padding:"1px 8px"}}>
+                                  borderRadius:20,padding:"2px 10px"}}>
                                   {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s} {age}a
                                 </span>
                               );
