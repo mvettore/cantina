@@ -999,9 +999,8 @@ export default function App() {
                           {[wine.producer, wine.year].filter(Boolean).join(" · ")}
                         </p>
 
-                        {/* Riga C: tipo · vitigno · prezzo */}
+                        {/* Riga C: vitigno · prezzo */}
                         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                          <TypeBadge type={wine.type} small/>
                           {wine.grape && <span style={{fontSize:16,color:C.textFaint,fontFamily:"'EB Garamond',serif"}}>🍇 {wine.grape}</span>}
                           {wine.price && <span style={{fontSize:16,color:C.textFaint,fontFamily:"'EB Garamond',serif",marginLeft:"auto"}}>€{wine.price}</span>}
                         </div>
@@ -1032,7 +1031,7 @@ export default function App() {
                                 <span style={{fontSize:15,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700,
                                   background:`${ag.c}12`,border:`1px solid ${ag.c}35`,
                                   borderRadius:20,padding:"2px 10px"}}>
-                                  {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s} {age}a
+                                  {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s[0]} {age}a
                                 </span>
                               );
                             })()}
