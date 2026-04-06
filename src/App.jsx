@@ -969,9 +969,9 @@ export default function App() {
                       {wine.photo && (
                         <div onClick={e=>{e.stopPropagation();setLightboxPhoto(wine.photo);}}
                           style={{flexShrink:0,width:56,cursor:"zoom-in",overflow:"hidden",
-                            borderRight:`1px solid ${C.border}`}}>
+                            position:"relative",borderRight:`1px solid ${C.border}`}}>
                           <img src={wine.photo} alt={wine.name}
-                            style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                            style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         </div>
                       )}
                       <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",gap:6}}>
@@ -979,8 +979,8 @@ export default function App() {
                         {/* Riga A: NOME + bt */}
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
                           <div style={{flex:1,minWidth:0}}>
-                            <span style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2,
-                              display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{wine.name}</span>
+                            <div style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2,
+                              height:"2.4em",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{wine.name}</div>
                             <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2,minHeight:"1.2em",
                               overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                               {wine.denomination || ""}
