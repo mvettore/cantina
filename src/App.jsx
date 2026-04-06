@@ -1044,9 +1044,9 @@ export default function App() {
                           const wine = getWineAtPosition(rack.id, pos);
                           const tc = wine?typeColors[wine.type]:null;
                           return (
-                            <div key={c} onClick={()=>wine&&(setEditing({...wine}),setModal("view"))}
+                            <div key={c} onClick={()=>wine?(setEditing({...wine}),setModal("view")):(setEditing({...emptyWine(),rackId:rack.id,positions:[pos]}),setScanError(null),setModal("add"))}
                               title={wine?`${wine.name} (${wine.year})`:`Libera — ${pos}`}
-                              style={{ width:56,height:46,borderRadius:7,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:wine?"pointer":"default",background:wine?`${tc.badge}dd`:C.surface,border:wine?`1px solid ${tc.bar}`:`1px dashed ${C.border}`,color:wine?tc.text:C.textFaint,transition:"all 0.12s",fontSize:10,fontFamily:"'Cinzel', serif",overflow:"hidden" }}
+                              style={{ width:56,height:46,borderRadius:7,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",background:wine?`${tc.badge}dd`:C.surface,border:wine?`1px solid ${tc.bar}`:`1px dashed ${C.border}`,color:wine?tc.text:C.textFaint,transition:"all 0.12s",fontSize:10,fontFamily:"'Cinzel', serif",overflow:"hidden" }}
                               onMouseEnter={e=>{if(wine){e.currentTarget.style.transform="scale(1.06)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.4)";}else{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}}
                               onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";e.currentTarget.style.borderColor=wine?tc.bar:C.border;e.currentTarget.style.color=wine?tc.text:C.textFaint;}}
                             >
