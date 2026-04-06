@@ -1438,7 +1438,7 @@ export default function App() {
                             {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"}
                           </span>
                           <div>
-                            <div style={{fontSize:20, color:ag.c, fontFamily:"'Cinzel', serif", fontWeight:700, letterSpacing:1}}>{ag.s.toUpperCase()}</div>
+                            <div style={{fontSize:20, color:ag.c, fontFamily:"'Cinzel', serif", fontWeight:700, letterSpacing:1}}>{ag.s}</div>
                             <div style={{fontSize:16, color:C.textMuted, fontFamily:"'Cinzel', serif"}}>{age} {age===1?"anno":"anni"} · {editing.type}</div>
                           </div>
                         </div>
@@ -1464,7 +1464,7 @@ export default function App() {
                         })()}
                       </div>
                       {agingNote && (
-                        <p style={{fontSize:18, color:C.textMuted, fontFamily:"'Cinzel', serif", lineHeight:1.6, margin:0, fontWeight:400}}>
+                        <p style={{fontSize:18, color:C.textMuted, fontFamily:"Georgia, 'Times New Roman', serif", lineHeight:1.6, margin:0, fontWeight:400}}>
                           {agingNote}
                         </p>
                       )}
@@ -1486,7 +1486,7 @@ export default function App() {
                 {editing.notes&&(
                   <div style={{background:C.bg,borderRadius:8,padding:"10px 14px",marginBottom:10}}>
                     <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:6}}>NOTE DI DEGUSTAZIONE</div>
-                    <p style={{fontSize:18,color:C.textMuted,lineHeight:1.6,fontFamily:"'Cinzel', serif",fontWeight:400}}>{editing.notes}</p>
+                    <p style={{fontSize:18,color:C.textMuted,lineHeight:1.6,fontFamily:"Georgia, 'Times New Roman', serif",fontWeight:400}}>{editing.notes}</p>
                   </div>
                 )}
                 {/* ── APPROFONDISCI ── */}
@@ -1547,7 +1547,7 @@ export default function App() {
                               <div style={{fontSize:13,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:3,fontWeight:700}}>
                                 {label}
                               </div>
-                              <p style={{fontSize:17,color:C.textMuted,lineHeight:1.7,fontFamily:"'EB Garamond', serif",margin:0}}>
+                              <p style={{fontSize:17,color:C.textMuted,lineHeight:1.7,fontFamily:"Georgia, 'Times New Roman', serif",margin:0}}>
                                 {text}
                               </p>
                             </div>
