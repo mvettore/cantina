@@ -1,7 +1,8 @@
 /**
- * Netlify Function: enrich-wine
- * Riceve i dati base di un vino e restituisce informazioni approfondite
- * su vitigno, territorio, sentori e abbinamenti.
+ * Netlify Function: search-wine-url
+ * Cerca online una scheda autorevole per un vino specifico
+ * e restituisce l'URL trovato. Viene chiamato in background
+ * dopo l'arricchimento principale.
  */
 
 const handler = async (event) => {
@@ -11,7 +12,7 @@ const handler = async (event) => {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: "API key non configurata" }) };
+    return { statusCode: 500, body: JSON.stringify({ error: "API key mancante" }) };
   }
 
   let wine;
@@ -21,25 +22,14 @@ const handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Body non valido" }) };
   }
 
-  const prompt = `Sei un sommelier esperto e storico del vino italiano.
-Fornisci informazioni dettagliate su questo vino:
-
+  const prompt = `Cerca online la scheda di questo vino:
 Nome: ${wine.name || "—"}
 Produttore: ${wine.producer || "—"}
 Annata: ${wine.year || "—"}
-Tipologia: ${wine.type || "—"}
-Regione: ${wine.region || "—"}
-Vitigno: ${wine.grape || "—"}
 
-Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON):
-{
-  "grapeProfile": "2-3 frasi sul carattere del vitigno: origini, caratteristiche genetiche, zone di elezione, stile generale che dona ai vini",
-  "tastingNotes": "3-4 frasi sui sentori tipici: descrivi profumi (primari, secondari, terziari se invecchiato), palato (struttura, tannini, acidità, corpo, finale)",
-  "territory": "2-3 frasi sul territorio e denominazione: suolo, microclima, perché quella zona è vocata per questo vitigno",
-  "aging": "1-2 frasi sul potenziale di invecchiamento e se aprire ora o aspettare",
-  "foodPairing": "3-4 abbinamenti gastronomici ideali, separati da virgola",
-  "curiosity": "1 curiosità storica o aneddoto interessante su questo vino o produttore"
-}`;
+Trova la pagina più autorevole disponibile (nell'ordine: sito ufficiale del produttore, vivino.com, wine-searcher.com, gamberorosso.it, winemag.it, decanter.com).
+Rispondi ESCLUSIVAMENTE con questo JSON (nessun altro testo):
+{"url": "url diretto alla scheda del vino, oppure null se non trovata"}`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 24000);
@@ -52,10 +42,12 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON)
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        "anthropic-beta": "web-search-2025-03-05",
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 1200,
+        max_tokens: 300,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -75,7 +67,7 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON)
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed),
+      body: JSON.stringify({ wineCardUrl: parsed.url || null }),
     };
   } catch (err) {
     clearTimeout(timeoutId);

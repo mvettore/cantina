@@ -504,9 +504,12 @@ export default function App() {
       setEnrichData(enrichment);
       // Salva automaticamente l'analisi nella bottiglia
       const updated = { ...wine, enrichment };
-      saveWines(wines.map(w => w.id === wine.id ? updated : w));
+      const updatedList = wines.map(w => w.id === wine.id ? updated : w);
+      saveWines(updatedList);
       setEditing(updated);
       showToast("Analisi salvata nella scheda");
+      // Cerca la scheda online in background (non blocca)
+      searchWineUrl(updated, updatedList);
     } catch (err) {
       setEnrichError("Non sono riuscito a recuperare le informazioni. Riprova.");
     } finally {
@@ -545,8 +548,29 @@ export default function App() {
       const data = await resp.json();
       const enrichment = { ...data, enrichedAt: new Date().toISOString() };
       const updated = { ...wine, enrichment };
-      saveWines(baseList.map(w => w.id === wine.id ? updated : w));
+      const updatedList = baseList.map(w => w.id === wine.id ? updated : w);
+      saveWines(updatedList);
       showToast(`✨ Analisi di "${wine.name}" completata`);
+      searchWineUrl(updated, updatedList);
+    } catch { /* silenzioso */ }
+  };
+
+  // Cerca in background la scheda online del vino (non blocca l'UI)
+  const searchWineUrl = async (wine, baseList) => {
+    try {
+      const resp = await fetch("/.netlify/functions/search-wine-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: wine.name, producer: wine.producer, year: wine.year }),
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (!data.wineCardUrl) return;
+      const enrichedWithUrl = { ...(wine.enrichment || {}), wineCardUrl: data.wineCardUrl };
+      const updatedWine = { ...wine, enrichment: enrichedWithUrl };
+      saveWines(baseList.map(w => w.id === wine.id ? updatedWine : w));
+      setEditing(prev => prev?.id === wine.id ? updatedWine : prev);
+      setEnrichData(prev => prev ? { ...prev, wineCardUrl: data.wineCardUrl } : prev);
     } catch { /* silenzioso */ }
   };
 
