@@ -30,8 +30,9 @@ Produttore: ${wine.producer || "—"}
 Annata: ${wine.year || "—"}
 
 Trova la pagina più autorevole disponibile (nell'ordine: sito ufficiale del produttore, vivino.com, wine-searcher.com, gamberorosso.it, winemag.it, decanter.com).
+IMPORTANTE: inserisci SOLO un URL che hai trovato realmente tramite la ricerca web e che hai verificato esistere. NON inventare URL, NON costruire URL ipotetici. Se non trovi nessuna scheda reale, restituisci null.
 Rispondi ESCLUSIVAMENTE con questo JSON (nessun altro testo):
-{"url": "url diretto alla scheda del vino, oppure null se non trovata"}`;
+{"url": "url reale trovato tramite ricerca, oppure null se non trovato"}`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 24000);
