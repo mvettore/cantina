@@ -974,17 +974,17 @@ export default function App() {
                             style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         </div>
                       )}
-                      <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",gap:6}}>
+                      <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
 
                         {/* Riga A: NOME + bt */}
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2,
-                              height:"2.4em",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{wine.name}</div>
-                            <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2,minHeight:"1.2em",
-                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                              {wine.denomination || ""}
-                            </div>
+                              overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{wine.name}</div>
+                            {wine.denomination && (
+                              <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2,
+                                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{wine.denomination}</div>
+                            )}
                           </div>
                           <span style={{
                             background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
