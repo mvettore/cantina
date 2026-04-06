@@ -1385,13 +1385,13 @@ export default function App() {
                 </div>
 
                 {/* Nome + denominazione */}
-                <h2 style={{fontFamily:"'Cinzel', serif",fontSize:30,fontWeight:700,color:C.text,margin:"0 0 4px",lineHeight:1.15}}>{editing.name}</h2>
+                <h2 style={{fontFamily:"'Cinzel', serif",fontSize:42,fontWeight:700,color:C.text,margin:"0 0 6px",lineHeight:1.1}}>{editing.name}</h2>
                 {editing.denomination && (
-                  <p style={{fontFamily:"'Cinzel', serif",fontSize:18,color:C.textMuted,margin:"0 0 6px",fontWeight:400}}>{editing.denomination}</p>
+                  <p style={{fontFamily:"'Cinzel', serif",fontSize:22,color:C.textMuted,margin:"0 0 6px",fontWeight:400}}>{editing.denomination}</p>
                 )}
 
                 {/* Produttore */}
-                <p style={{fontFamily:"'Cinzel', serif",fontSize:20,color:C.textMuted,margin:"0 0 16px"}}>{editing.producer}</p>
+                <p style={{fontFamily:"'Cinzel', serif",fontSize:26,color:C.textMuted,margin:"0 0 18px"}}>{editing.producer}</p>
 
                 {/* Info pill */}
                 <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
