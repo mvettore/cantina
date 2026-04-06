@@ -1369,11 +1369,9 @@ export default function App() {
                   style={{height:180,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08",cursor:"zoom-in"}}>
                   <img src={editing.photo} alt={editing.name} style={{maxHeight:"100%",maxWidth:"100%",objectFit:"contain"}}/>
                   <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, transparent 40%, rgba(62,42,22,0.9) 100%)"}}/>
-                  <div style={{position:"absolute",bottom:12,left:22,right:22,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
-                    <TypeBadge type={editing.type}/>
+                  <div style={{position:"absolute",bottom:12,right:22}}>
                     <span style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:"'Cinzel', serif",letterSpacing:1}}>🔍 tocca per ingrandire</span>
                   </div>
-                  <div style={{position:"absolute",top:14,right:18,fontSize:26,fontWeight:300,color:C.gold,fontFamily:"'Cinzel', serif"}}>{editing.year}</div>
                 </div>
               )}
 
