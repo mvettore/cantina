@@ -83,6 +83,22 @@ Rispondi ESCLUSIVAMENTE con questo JSON (nessun altro testo):
 
     console.log(`[search-wine-url] URL trovato: ${wineCardUrl}`);
 
+    // Verifica che l'URL esista realmente (non sia un 404)
+    if (wineCardUrl) {
+      try {
+        const check = await fetch(wineCardUrl, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+        if (!check.ok) {
+          console.warn(`[search-wine-url] URL non raggiungibile (${check.status}), scartato: ${wineCardUrl}`);
+          wineCardUrl = null;
+        } else {
+          console.log(`[search-wine-url] URL verificato OK (${check.status})`);
+        }
+      } catch {
+        console.warn(`[search-wine-url] Verifica URL fallita, scartato: ${wineCardUrl}`);
+        wineCardUrl = null;
+      }
+    }
+
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
