@@ -999,11 +999,10 @@ export default function App() {
                           {[wine.producer, wine.year].filter(Boolean).join(" · ")}
                         </p>
 
-                        {/* Riga C: vitigno · prezzo */}
-                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                          {wine.grape && <span style={{fontSize:14,color:C.textMuted,fontFamily:"'Cinzel',serif"}}>🍇 {wine.grape}</span>}
-                          {wine.price && <span style={{fontSize:14,color:C.textMuted,fontFamily:"'Cinzel',serif",marginLeft:"auto"}}>€{wine.price}</span>}
-                        </div>
+                        {/* Riga C: prezzo */}
+                        {wine.price && (
+                          <p style={{fontFamily:"'Cinzel',serif",fontSize:14,color:C.textMuted,margin:0}}>€{wine.price}</p>
+                        )}
 
                         {/* Riga D: primo scaffale (+ altri) · stato invecchiamento */}
                         {((wine.rackSlots||[]).some(s=>(s.positions||[]).length>0) || getAgingStatus(wine)) && (
@@ -1378,21 +1377,24 @@ export default function App() {
                 </div>
               )}
 
-              <div style={{padding:"16px 20px"}}>
-                {!editing.photo && (
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
-                    <TypeBadge type={editing.type}/>
-                    <span style={{fontSize:30,fontWeight:300,color:C.gold,fontFamily:"'Cinzel', serif"}}>{editing.year}</span>
-                  </div>
-                )}
-                <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap",marginTop:editing.photo?6:0,marginBottom:2}}>
-                  <h2 style={{fontFamily:"'Cinzel', serif",fontSize:22,color:C.text,margin:0}}>{editing.name}</h2>
-                  {editing.denomination && <span style={{fontFamily:"'EB Garamond', serif",fontSize:16,color:C.textFaint,fontStyle:"italic"}}>{editing.denomination}</span>}
+              <div style={{padding:"20px 22px"}}>
+                {/* Anno */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,marginTop:editing.photo?4:0}}>
+                  <TypeBadge type={editing.type}/>
+                  <span style={{fontSize:38,fontWeight:300,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:2}}>{editing.year}</span>
                 </div>
-                <p style={{fontFamily:"'EB Garamond', serif",fontSize:16,color:C.textFaint,fontStyle:"italic",marginBottom:10}}>{editing.producer}</p>
 
-                {/* Info compatte: riga orizzontale di pill */}
-                <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+                {/* Nome + denominazione */}
+                <h2 style={{fontFamily:"'Cinzel', serif",fontSize:30,fontWeight:700,color:C.text,margin:"0 0 4px",lineHeight:1.15}}>{editing.name}</h2>
+                {editing.denomination && (
+                  <p style={{fontFamily:"'Cinzel', serif",fontSize:18,color:C.textMuted,margin:"0 0 6px",fontWeight:400}}>{editing.denomination}</p>
+                )}
+
+                {/* Produttore */}
+                <p style={{fontFamily:"'Cinzel', serif",fontSize:20,color:C.textMuted,margin:"0 0 16px"}}>{editing.producer}</p>
+
+                {/* Info pill */}
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
                   {[
                     ["📍", editing.region],
                     ["🍇", editing.grape||null],
@@ -1400,25 +1402,23 @@ export default function App() {
                     ...(editing.price?[["💰", `€${editing.price}`]]:[]),
                   ].filter(([,v])=>v).map(([icon,val])=>(
                     <span key={icon+val} style={{
-                      display:"inline-flex", alignItems:"center", gap:4,
+                      display:"inline-flex", alignItems:"center", gap:5,
                       background:C.bg, border:`1px solid ${C.border}`,
-                      borderRadius:20, padding:"5px 12px",
-                      fontSize:15, color:C.text,
+                      borderRadius:20, padding:"7px 16px",
+                      fontSize:17, color:C.text, fontFamily:"'Cinzel', serif",
                     }}>
-                      <span>{icon}</span>
-                      <span style={{fontFamily:"'EB Garamond', serif"}}>{val}</span>
+                      <span>{icon}</span><span>{val}</span>
                     </span>
                   ))}
-                  {/* Posizioni per ogni slot */}
                   {(editing.rackSlots||[]).filter(s=>(s.positions||[]).length>0).map(slot=>{
                     const sr=racks.find(r=>r.id===slot.rackId);
                     if(!sr) return null;
                     return(
                       <span key={slot.rackId} style={{
-                        display:"inline-flex", alignItems:"center", gap:4,
+                        display:"inline-flex", alignItems:"center", gap:5,
                         background:"rgba(201,149,58,0.12)", border:`1px solid rgba(201,149,58,0.35)`,
-                        borderRadius:20, padding:"5px 14px",
-                        fontSize:15, color:C.gold, fontFamily:"'Cinzel', serif", fontWeight:700,
+                        borderRadius:20, padding:"7px 16px",
+                        fontSize:17, color:C.gold, fontFamily:"'Cinzel', serif", fontWeight:700,
                       }}>
                         📌 {sr.name}: {(slot.positions||[]).join(" · ")}
                       </span>
@@ -1440,8 +1440,8 @@ export default function App() {
                             {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"}
                           </span>
                           <div>
-                            <div style={{fontSize:16, color:ag.c, fontFamily:"'Cinzel', serif", fontWeight:700, letterSpacing:1}}>{ag.s.toUpperCase()}</div>
-                            <div style={{fontSize:14, color:C.textFaint}}>{age} {age===1?"anno":"anni"} · {editing.type}</div>
+                            <div style={{fontSize:20, color:ag.c, fontFamily:"'Cinzel', serif", fontWeight:700, letterSpacing:1}}>{ag.s.toUpperCase()}</div>
+                            <div style={{fontSize:16, color:C.textMuted, fontFamily:"'Cinzel', serif"}}>{age} {age===1?"anno":"anni"} · {editing.type}</div>
                           </div>
                         </div>
                         {/* Barra visiva invecchiamento */}
@@ -1466,7 +1466,7 @@ export default function App() {
                         })()}
                       </div>
                       {agingNote && (
-                        <p style={{fontSize:17, color:C.textMuted, fontFamily:"'EB Garamond', serif", lineHeight:1.7, margin:0}}>
+                        <p style={{fontSize:18, color:C.textMuted, fontFamily:"'Cinzel', serif", lineHeight:1.6, margin:0, fontWeight:400}}>
                           {agingNote}
                         </p>
                       )}
@@ -1487,8 +1487,8 @@ export default function App() {
 
                 {editing.notes&&(
                   <div style={{background:C.bg,borderRadius:8,padding:"10px 14px",marginBottom:10}}>
-                    <div style={{fontSize:12,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:4}}>NOTE DI DEGUSTAZIONE</div>
-                    <p style={{fontSize:17,color:C.textMuted,lineHeight:1.7,fontFamily:"'EB Garamond', serif"}}>{editing.notes}</p>
+                    <div style={{fontSize:13,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:6}}>NOTE DI DEGUSTAZIONE</div>
+                    <p style={{fontSize:18,color:C.textMuted,lineHeight:1.6,fontFamily:"'Cinzel', serif",fontWeight:400}}>{editing.notes}</p>
                   </div>
                 )}
                 {/* ── APPROFONDISCI ── */}
