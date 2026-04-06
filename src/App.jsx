@@ -336,6 +336,23 @@ export default function App() {
     });
   }, []);
 
+  // Ri-sincronizza dal cloud quando l'app torna in foreground (es. da background su iOS)
+  useEffect(() => {
+    if (!IS_NETLIFY) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        cloudLoad().then(data => {
+          if (!data) return;
+          if (data.wines) { setWines(migrateWines(data.wines)); saveLocal(STORAGE_KEY, data.wines); }
+          if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
+          if (data.log)   { setLog(data.log);     saveLocal(LOG_KEY, data.log); }
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
   const saveWines = (w) => { setWines(w); saveLocal(STORAGE_KEY, w); cloudSave({ wines: w }); };
   const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY,  r); cloudSave({ racks: r }); };
   const saveLog   = (l) => { setLog(l);   saveLocal(LOG_KEY,   l); cloudSave({ log:   l }); };
