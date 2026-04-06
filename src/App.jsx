@@ -561,8 +561,6 @@ export default function App() {
       saveWines(updatedList);
       setEditing(updated);
       showToast("Analisi salvata nella scheda");
-      // Cerca la scheda online in background (non blocca)
-      searchWineUrl(updated, updatedList);
     } catch (err) {
       setEnrichError("Non sono riuscito a recuperare le informazioni. Riprova.");
     } finally {
@@ -604,26 +602,6 @@ export default function App() {
       const updatedList = baseList.map(w => w.id === wine.id ? updated : w);
       saveWines(updatedList);
       showToast(`✨ Analisi di "${wine.name}" completata`);
-      searchWineUrl(updated, updatedList);
-    } catch { /* silenzioso */ }
-  };
-
-  // Cerca in background la scheda online del vino (non blocca l'UI)
-  const searchWineUrl = async (wine, baseList) => {
-    try {
-      const resp = await fetch("/.netlify/functions/search-wine-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: wine.name, producer: wine.producer, year: wine.year }),
-      });
-      if (!resp.ok) return;
-      const data = await resp.json();
-      if (!data.wineCardUrl) return;
-      const enrichedWithUrl = { ...(wine.enrichment || {}), wineCardUrl: data.wineCardUrl };
-      const updatedWine = { ...wine, enrichment: enrichedWithUrl };
-      saveWines(baseList.map(w => w.id === wine.id ? updatedWine : w));
-      setEditing(prev => prev?.id === wine.id ? updatedWine : prev);
-      setEnrichData(prev => prev ? { ...prev, wineCardUrl: data.wineCardUrl } : prev);
     } catch { /* silenzioso */ }
   };
 
@@ -1519,22 +1497,6 @@ export default function App() {
                             </div>
                           ))}
 
-                          {/* Link scheda online */}
-                          {displayData.wineCardUrl && (
-                            <a href={displayData.wineCardUrl} target="_blank" rel="noopener noreferrer"
-                              style={{
-                                alignSelf:"flex-start", display:"inline-block",
-                                border:`1px solid ${C.border}`, borderRadius:6,
-                                color:C.textMuted, padding:"7px 14px",
-                                fontFamily:"'Cinzel', serif", fontSize:12, letterSpacing:1,
-                                textDecoration:"none", transition:"all 0.15s",
-                              }}
-                              onMouseEnter={e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}
-                              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}}
-                            >
-                              🔗 Scheda online
-                            </a>
-                          )}
 
                           {/* Bottone per copiare solo i sentori nelle note */}
                           {displayData.tastingNotes && (
@@ -2032,19 +1994,6 @@ export default function App() {
                           <p style={{ fontSize: 15, color: C.textMuted, lineHeight: 1.6, fontFamily: "'EB Garamond', serif", margin: 0 }}>{text}</p>
                         </div>
                       ))}
-                      {d.wineCardUrl && (
-                        <a href={d.wineCardUrl} target="_blank" rel="noopener noreferrer"
-                          style={{
-                            alignSelf: "flex-start", display: "inline-block",
-                            border: `1px solid ${C.border}`, borderRadius: 6,
-                            color: C.textMuted, padding: "6px 12px",
-                            fontFamily: "'Cinzel', serif", fontSize: 11, letterSpacing: 1,
-                            textDecoration: "none",
-                          }}
-                        >
-                          🔗 Scheda online
-                        </a>
-                      )}
                     </div>
                   </div>
                 );
