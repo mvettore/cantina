@@ -25,14 +25,20 @@ const INITIAL_WINES = [
   { id: 3, name: "Soave Classico", producer: "Pieropan", year: 2022, region: "Veneto", grape: "Garganega", type: "Bianco", rating: 4, notes: "Fresco, minerale, ottimo con pesce.", quantity: 12, price: 18, rackId: 2, positions: ["A1","A2","A3","A4","A5","A6","B1","B2","B3","B4","B5","B6"], photo: null },
 ];
 
-// Migrazione dati vecchi (position -> positions)
+// Migrazione dati vecchi
 function migrateWines(wines) {
   return wines.map(w => {
+    // 1. position (singolo) → positions (array)
     if (w.position !== undefined && w.positions === undefined) {
       const { position, ...rest } = w;
-      return { ...rest, positions: position ? [position] : [] };
+      w = { ...rest, positions: position ? [position] : [] };
     }
-    if (w.positions === undefined) return { ...w, positions: [] };
+    if (w.positions === undefined) w = { ...w, positions: [] };
+    // 2. rackId + positions → rackSlots [{rackId, positions}]
+    if (w.rackSlots === undefined) {
+      const { rackId, positions, ...rest } = w;
+      return { ...rest, rackSlots: rackId ? [{ rackId, positions: positions || [] }] : [] };
+    }
     return w;
   });
 }
@@ -271,8 +277,8 @@ function getAgingStatus(wine) {
 
 const emptyWine = () => ({
   id: null, name: "", producer: "", year: new Date().getFullYear(),
-  region: "Toscana", grape: "", type: "Rosso", denomination: "",
-  rating: 3, notes: "", quantity: 1, price: "", rackId: null, positions: [], photo: null, enrichment: null,
+  region: "", grape: "", type: "", denomination: "",
+  rating: 3, notes: "", quantity: 1, price: "", rackSlots: [], photo: null, enrichment: null,
 });
 const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6 });
 
@@ -302,10 +308,11 @@ export default function App() {
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
   const [cantinaName, setCantinaName] = useState(() => loadLocal('cantina-name', 'CANTINA VETTORELLO'));
   const [editingName, setEditingName] = useState(false);
+  const [viewFromPos, setViewFromPos] = useState(null); // posizione rack che ha aperto il modal view
   const [pullY, setPullY] = useState(0);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const pullStartY = useRef(0);
-  const [pendingDrink, setPendingDrink] = useState(null); // {wine, newQty, newPositions}
+  const [pendingDrink, setPendingDrink] = useState(null); // {wine, newQty, newSlots}
   const [log, setLog] = useState(() => loadLocal(LOG_KEY, []));
   const [logModal, setLogModal] = useState(null); // wine being logged
   const [logEntry, setLogEntry] = useState(null); // current entry being edited
@@ -404,7 +411,7 @@ export default function App() {
   const filtered = wines
     .filter(w => filterType === "Tutti" || w.type === filterType)
     .filter(w => filterAging === "Tutti" || getAgingStatus(w)?.s === filterAging)
-    .filter(w => !filterUnracked || !w.rackId)
+    .filter(w => !filterUnracked || (w.rackSlots||[]).every(s => (s.positions||[]).length === 0))
     .filter(w => {
       const q = search.toLowerCase();
       // Costruisce array di tutti i campi testuali ricercabili
@@ -418,7 +425,7 @@ export default function App() {
         w.notes || "",
         w.year ? String(w.year) : "",
         w.price ? String(w.price) : "",
-        ...(Array.isArray(w.positions) ? w.positions : []),
+        ...(w.rackSlots||[]).flatMap(s => s.positions||[]),
       ];
       if (w.enrichment && typeof w.enrichment === "object") {
         ["grapeProfile","tastingNotes","territory","foodPairing","aging","curiosity"].forEach(k => {
@@ -483,7 +490,8 @@ export default function App() {
 
   // Bevi una bottiglia: apre il selettore di posizione se ne ha, altrimenti decrementa
   const handleDrinkOne = (wine) => {
-    if ((wine.positions || []).length > 0) {
+    const hasPositions = (wine.rackSlots||[]).some(s => (s.positions||[]).length > 0);
+    if (hasPositions) {
       setDrinkModal(wine); // apri selettore posizione
     } else {
       commitDrink(wine, null);
@@ -494,13 +502,20 @@ export default function App() {
   // La cantina viene aggiornata SOLO quando si salva il log (o si salta)
   const commitDrink = (wine, posToRemove) => {
     const newQty = wine.quantity - 1;
-    const positions = wine.positions || [];
-    const newPositions = posToRemove
-      ? positions.filter(p => p !== posToRemove)
-      : positions.slice(0, -1);
+    let newSlots = (wine.rackSlots||[]);
+    if (posToRemove) {
+      newSlots = newSlots.map(s => ({ ...s, positions: (s.positions||[]).filter(p => p !== posToRemove) }));
+    } else {
+      // Rimuovi l'ultima posizione dall'ultimo slot non vuoto
+      const lastNonEmpty = [...newSlots].reverse().findIndex(s => (s.positions||[]).length > 0);
+      if (lastNonEmpty >= 0) {
+        const idx = newSlots.length - 1 - lastNonEmpty;
+        newSlots = newSlots.map((s, i) => i === idx ? { ...s, positions: s.positions.slice(0, -1) } : s);
+      }
+    }
 
     // Salva il pending — verrà applicato al salvataggio o allo skip
-    setPendingDrink({ wine, newQty, newPositions });
+    setPendingDrink({ wine, newQty, newSlots });
     setDrinkModal(null);
 
     // Apri il form per registrare la bevuta nello storico
@@ -570,6 +585,8 @@ export default function App() {
 
   const handleSaveWine = () => {
     if (!editing.name.trim()) return;
+    if (!editing.type) { showToast("Seleziona una tipologia"); return; }
+    if (!editing.region) { showToast("Seleziona una regione"); return; }
     if (modal === "add") {
       const wine = { ...editing, id: nextWineId.current++ };
       const newList = [...wines, wine];
@@ -619,13 +636,17 @@ export default function App() {
   };
 
   const handleDeleteRack = (rack) => {
-    saveRacks(racks.filter(r => r.id !== rack.id));
-    saveWines(wines.map(w => w.rackId === rack.id ? { ...w, rackId: null, positions: [] } : w));
+    const prevRacks = racks;
+    const prevWines = wines;
+    const newRacks = racks.filter(r => r.id !== rack.id);
+    const newWines = wines.map(w => ({ ...w, rackSlots: (w.rackSlots||[]).filter(s => s.rackId !== rack.id) }));
+    saveRacks(newRacks);
+    saveWines(newWines);
     setDeleteRackConfirm(null);
-    showToast(`Scaffale "${rack.name}" eliminato`);
+    showUndoToast(`Scaffale "${rack.name}" eliminato`, () => { saveRacks(prevRacks); saveWines(prevWines); });
   };
 
-  const getWineAtPosition = (rackId, pos) => wines.find(w => w.rackId === rackId && (w.positions||[]).includes(pos));
+  const getWineAtPosition = (rackId, pos) => wines.find(w => (w.rackSlots||[]).some(s => s.rackId === rackId && (s.positions||[]).includes(pos)));
 
   const C = {
     bg: "#2e1f0f", surface: "#3e2a16", surface2: "#4e3520",
@@ -658,7 +679,7 @@ export default function App() {
           {Array.from({ length: rack.cols }, (_, c) => {
             const pos = `${ROW_LABELS[r]}${c + 1}`;
             const isThis = (highlightPositions||[]).includes(pos);
-            const occupant = wines.find(w => w.rackId === rack.id && (w.positions||[]).includes(pos));
+            const occupant = wines.find(w => (w.rackSlots||[]).some(s => s.rackId === rack.id && (s.positions||[]).includes(pos)));
             const isOther = occupant && occupant.id !== editing?.id;
             const otc = isOther ? typeColors[occupant.type] : null;
             return (
@@ -931,10 +952,9 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 18 }}>
               {filtered.map(wine => {
                 const tc = typeColors[wine.type] || { bar: "#888" };
-                const rack = racks.find(r => r.id === wine.rackId);
                 return (
                   <div key={wine.id} className="wine-card" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,0.25)" }}
-                    onClick={() => { setEditing({...wine}); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
+                    onClick={() => { setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
                     <div style={{ height: 5, background: tc.bar }} />
 
                     <div style={{display:"flex",minHeight:0}}>
@@ -949,28 +969,34 @@ export default function App() {
                       )}
                       <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",gap:5}}>
 
-                        {/* Riga A: NOME grande + anno + bt */}
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
-                          <h3 style={{fontFamily:"'Cinzel',serif",fontSize:17,fontWeight:700,
-                            color:C.text,margin:0,lineHeight:1.15,flex:1,minWidth:0,
-                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                            {wine.name}
-                          </h3>
-                          <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                            <span style={{
-                              background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
-                              color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
-                              padding:"1px 8px",borderRadius:20,fontSize:13,
-                              fontFamily:"'Cinzel',serif",fontWeight:700,
-                            }}>{wine.quantity}bt</span>
+                        {/* Riga A: NOME + denominazione + bt */}
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <h3 style={{fontFamily:"'Cinzel',serif",fontSize:17,fontWeight:700,
+                              color:C.text,margin:0,lineHeight:1.15,
+                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {wine.name}
+                            </h3>
+                            {wine.denomination && (
+                              <p style={{fontFamily:"'EB Garamond',serif",fontSize:13,color:C.textFaint,
+                                margin:0,lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                {wine.denomination}
+                              </p>
+                            )}
                           </div>
+                          <span style={{
+                            background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
+                            color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
+                            padding:"1px 8px",borderRadius:20,fontSize:13,flexShrink:0,
+                            fontFamily:"'Cinzel',serif",fontWeight:700,
+                          }}>{wine.quantity}bt</span>
                         </div>
 
-                        {/* Riga B: denominazione · produttore */}
+                        {/* Riga B: produttore · anno */}
                         <p style={{fontFamily:"'EB Garamond',serif",fontSize:15,
                           color:C.textMuted,margin:0,lineHeight:1.2,
                           overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                          {[wine.denomination, wine.producer, wine.year].filter(Boolean).join(" · ")}
+                          {[wine.producer, wine.year].filter(Boolean).join(" · ")}
                         </p>
 
                         {/* Riga C: tipo · vitigno · prezzo */}
@@ -980,20 +1006,22 @@ export default function App() {
                           {wine.price && <span style={{fontSize:13,color:C.textFaint,fontFamily:"'EB Garamond',serif",marginLeft:"auto"}}>€{wine.price}</span>}
                         </div>
 
-                        {/* Riga D: posizione · stato — solo se presenti */}
-                        {(rack&&(wine.positions||[]).length>0 || getAgingStatus(wine)) && (
+                        {/* Riga D: posizioni scaffale · stato invecchiamento */}
+                        {((wine.rackSlots||[]).some(s=>(s.positions||[]).length>0) || getAgingStatus(wine)) && (
                           <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
-                            {rack&&(wine.positions||[]).length>0&&(()=>{
-                              const pos = wine.positions||[];
-                              const label = pos.length>1 ? `${pos[0]} +${pos.length-1}` : pos[0];
+                            {(wine.rackSlots||[]).filter(s=>(s.positions||[]).length>0).map(slot=>{
+                              const sr=racks.find(r=>r.id===slot.rackId);
+                              if(!sr) return null;
+                              const pos=slot.positions;
+                              const label=pos.length>1?`${pos[0]} +${pos.length-1}`:pos[0];
                               return(
-                                <span style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
+                                <span key={slot.rackId} style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
                                   background:"rgba(201,149,58,0.1)",border:`1px solid rgba(201,149,58,0.2)`,
                                   borderRadius:20,padding:"1px 8px",fontWeight:600}}>
-                                  🗄 {rack.name} {label}
+                                  🗄 {sr.name} {label}
                                 </span>
                               );
-                            })()}
+                            })}
                             {(()=>{const ag=getAgingStatus(wine);if(!ag)return null;
                               const age=new Date().getFullYear()-wine.year;
                               return(
@@ -1033,16 +1061,16 @@ export default function App() {
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
             {racks.map(rack => {
-              const occ = wines.filter(w => w.rackId === rack.id);
+              const occPositions = wines.flatMap(w => (w.rackSlots||[]).filter(s => s.rackId === rack.id).flatMap(s => s.positions||[]));
               return (
                 <div key={rack.id} className="rack-card">
                   <div style={{ padding: "17px 22px 14px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                       <h3 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, color: C.text, letterSpacing: 1 }}>{rack.name}</h3>
-                      <p style={{ fontSize: 16, color: C.textFaint, marginTop: 5 }}>{rack.rows} file ({ROW_LABELS[0]}–{ROW_LABELS[rack.rows-1]}) × {rack.cols} colonne · {occ.length}/{rack.rows*rack.cols} occupate</p>
+                      <p style={{ fontSize: 16, color: C.textFaint, marginTop: 5 }}>{rack.rows} file ({ROW_LABELS[0]}–{ROW_LABELS[rack.rows-1]}) × {rack.cols} colonne · {occPositions.length}/{rack.rows*rack.cols} occupate</p>
                     </div>
                     <div style={{ display: "flex", gap: 9 }}>
-                      <button className="btn-sm" onClick={() => { setEditingRack({...rack}); setRackModal("edit"); }}>✏ Modifica</button>
+                      <button className="btn-sm" style={{fontSize:12,padding:"5px 10px"}} onClick={() => { setEditingRack({...rack}); setRackModal("edit"); }}>✏</button>
                       <button className="btn-danger" onClick={() => setDeleteRackConfirm(rack)}>✕</button>
                     </div>
                   </div>
@@ -1060,7 +1088,7 @@ export default function App() {
                           const wine = getWineAtPosition(rack.id, pos);
                           const tc = wine?typeColors[wine.type]:null;
                           return (
-                            <div key={c} onClick={()=>wine?(setEditing({...wine}),setModal("view")):(setEditing({...emptyWine(),rackId:rack.id,positions:[pos]}),setScanError(null),setModal("add"))}
+                            <div key={c} onClick={()=>wine?(setEditing({...wine}),setViewFromPos(pos),setEnrichData(null),setEnrichError(null),setModal("view")):(setEditing({...emptyWine(),rackSlots:[{rackId:rack.id,positions:[pos]}]}),setScanError(null),setModal("add"))}
                               title={wine?`${wine.name} (${wine.year})`:`Libera — ${pos}`}
                               style={{ width:56,height:46,borderRadius:7,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",background:wine?`${tc.badge}dd`:C.surface,border:wine?`1px solid ${tc.bar}`:`1px dashed ${C.border}`,color:wine?tc.text:C.textFaint,transition:"all 0.12s",fontSize:10,fontFamily:"'Cinzel', serif",overflow:"hidden" }}
                               onMouseEnter={e=>{if(wine){e.currentTarget.style.transform="scale(1.06)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.4)";}else{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}}
@@ -1077,17 +1105,17 @@ export default function App() {
                         })}
                       </div>
                     ))}
-                    {occ.length>0&&(
+                    {occPositions.length>0&&(()=>{const occWines=wines.filter(w=>(w.rackSlots||[]).some(s=>s.rackId===rack.id&&(s.positions||[]).length>0));return(
                       <div style={{marginTop:14,display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}}>
                         <span style={{fontSize:15,color:C.textFaint,fontFamily:"'Cinzel', serif",letterSpacing:1}}>LEGENDA:</span>
-                        {[...new Set(occ.map(w=>w.type))].map(type=>{const c=typeColors[type];return(
+                        {[...new Set(occWines.map(w=>w.type))].map(type=>{const c=typeColors[type];return(
                           <div key={type} style={{display:"flex",alignItems:"center",gap:6}}>
                             <div style={{width:14,height:14,background:c.badge,border:`1px solid ${c.bar}`,borderRadius:3}}/>
                             <span style={{fontSize:15,color:C.textFaint,fontFamily:"'Cinzel', serif"}}>{type}</span>
                           </div>
                         );})}
                       </div>
-                    )}
+                    );})()}
                   </div>
                 </div>
               );
@@ -1229,14 +1257,16 @@ export default function App() {
                   <input style={inputStyle} type="number" value={editing.year} onChange={e=>setEditing(v=>({...v,year:parseInt(e.target.value)||v.year}))}/>
                 </div>
                 <div>
-                  <label style={labelStyle}>Tipologia</label>
-                  <select style={inputStyle} value={editing.type} onChange={e=>setEditing(v=>({...v,type:e.target.value}))}>
+                  <label style={labelStyle}>Tipologia *</label>
+                  <select style={{...inputStyle,color:editing.type?C.text:C.textFaint}} value={editing.type} onChange={e=>setEditing(v=>({...v,type:e.target.value}))}>
+                    <option value="">— Seleziona —</option>
                     {WINE_TYPES.map(t=><option key={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle}>Regione</label>
-                  <select style={inputStyle} value={editing.region} onChange={e=>setEditing(v=>({...v,region:e.target.value}))}>
+                  <label style={labelStyle}>Regione *</label>
+                  <select style={{...inputStyle,color:editing.region?C.text:C.textFaint}} value={editing.region} onChange={e=>setEditing(v=>({...v,region:e.target.value}))}>
+                    <option value="">— Seleziona —</option>
                     {REGIONS.map(r=><option key={r}>{r}</option>)}
                   </select>
                 </div>
@@ -1253,24 +1283,41 @@ export default function App() {
                   <input style={inputStyle} type="number" min="0" value={editing.price} onChange={e=>setEditing(v=>({...v,price:e.target.value}))} placeholder="es. 45"/>
                 </div>
 
-                {/* Shelf picker */}
+                {/* Shelf picker — multi-rack */}
                 <div style={{gridColumn:"1/-1",background:C.bg,borderRadius:9,padding:"16px 18px",border:`1px solid ${C.border}`}}>
-                  <p style={{...labelStyle,marginBottom:12}}>🗄 Posizione nello Scaffale</p>
-                  <div style={{marginBottom:10}}>
-                    <label style={labelStyle}>Scaffale</label>
-                    <select style={inputStyle} value={editing.rackId||""} onChange={e=>setEditing(v=>({...v,rackId:e.target.value?parseInt(e.target.value):null,positions:[]}))}>
-                      <option value="">— Nessuno —</option>
-                      {racks.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
-                    </select>
-                  </div>
-                  {editing.rackId&&(()=>{
-                    const rack=racks.find(r=>r.id===editing.rackId);
-                    if(!rack) return null;
+                  <p style={{...labelStyle,marginBottom:12}}>🗄 Posizione negli Scaffali</p>
+                  {(editing.rackSlots||[]).map((slot,idx)=>{
+                    const slotRack=racks.find(r=>r.id===slot.rackId);
+                    const isLast=idx===(editing.rackSlots||[]).length-1;
                     return(
-                      <PositionGrid rack={rack} values={editing.positions||[]} maxSelections={editing.quantity||1}
-                        onChange={ps=>setEditing(v=>({...v,positions:ps}))}/>
+                      <div key={idx} style={{marginBottom:isLast?0:14,paddingBottom:isLast?0:14,borderBottom:isLast?"none":`1px solid ${C.border}`}}>
+                        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+                          <select style={{...inputStyle,flex:1}} value={slot.rackId||""} onChange={e=>{
+                            const ns=[...(editing.rackSlots||[])];
+                            ns[idx]={rackId:e.target.value?parseInt(e.target.value):null,positions:[]};
+                            setEditing(v=>({...v,rackSlots:ns}));
+                          }}>
+                            <option value="">— Scaffale —</option>
+                            {racks.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+                          </select>
+                          <button onClick={()=>{const ns=(editing.rackSlots||[]).filter((_,i)=>i!==idx);setEditing(v=>({...v,rackSlots:ns}));}}
+                            style={{flexShrink:0,background:"none",border:`1px solid #804040`,borderRadius:6,color:"#c07070",cursor:"pointer",padding:"8px 11px",fontSize:15,lineHeight:1}}>✕</button>
+                        </div>
+                        {slotRack&&(
+                          <PositionGrid rack={slotRack} values={slot.positions||[]} maxSelections={editing.quantity||1}
+                            onChange={ps=>{const ns=[...(editing.rackSlots||[])];ns[idx]={...ns[idx],positions:ps};setEditing(v=>({...v,rackSlots:ns}));}}/>
+                        )}
+                      </div>
                     );
-                  })()}
+                  })}
+                  {racks.length>0&&(
+                    <button onClick={()=>setEditing(v=>({...v,rackSlots:[...(v.rackSlots||[]),{rackId:null,positions:[]}]}))}
+                      style={{marginTop:(editing.rackSlots||[]).length>0?12:0,background:"none",border:`1px dashed ${C.border}`,borderRadius:7,color:C.textFaint,cursor:"pointer",padding:"8px 14px",fontFamily:"'Cinzel',serif",fontSize:13,letterSpacing:1,width:"100%",transition:"all 0.15s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textFaint;}}>
+                      + Aggiungi scaffale
+                    </button>
+                  )}
                 </div>
 
                 <div style={{gridColumn:"1/-1"}}>
@@ -1292,7 +1339,6 @@ export default function App() {
       {/* ══════ MODAL VIEW WINE ══════ */}
       {modal==="view" && editing && (()=>{
         const tc=typeColors[editing.type]||{bar:"#888"};
-        const rack=racks.find(r=>r.id===editing.rackId);
         return(
           <div className="modal-overlay" onClick={()=>setModal(null)}>
             <div className="modal-box" onClick={e=>e.stopPropagation()}>
@@ -1336,8 +1382,10 @@ export default function App() {
                     <span style={{fontSize:30,fontWeight:300,color:C.gold,fontFamily:"'Cinzel', serif"}}>{editing.year}</span>
                   </div>
                 )}
-                <h2 style={{fontFamily:"'Cinzel', serif",fontSize:22,color:C.text,marginBottom:2,marginTop:editing.photo?6:0}}>{editing.name}</h2>
-                {editing.denomination && <p style={{fontFamily:"'EB Garamond', serif",fontSize:17,color:C.textMuted,marginBottom:2}}>{editing.denomination}</p>}
+                <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap",marginTop:editing.photo?6:0,marginBottom:2}}>
+                  <h2 style={{fontFamily:"'Cinzel', serif",fontSize:22,color:C.text,margin:0}}>{editing.name}</h2>
+                  {editing.denomination && <span style={{fontFamily:"'EB Garamond', serif",fontSize:16,color:C.textFaint,fontStyle:"italic"}}>{editing.denomination}</span>}
+                </div>
                 <p style={{fontFamily:"'EB Garamond', serif",fontSize:16,color:C.textFaint,fontStyle:"italic",marginBottom:10}}>{editing.producer}</p>
 
                 {/* Info compatte: riga orizzontale di pill */}
@@ -1347,7 +1395,6 @@ export default function App() {
                     ["🍇", editing.grape||null],
                     ["🍾", `${editing.quantity} bt`],
                     ...(editing.price?[["💰", `€${editing.price}`]]:[]),
-                    ...(rack?[["🗄", rack.name]]:[]),
                   ].filter(([,v])=>v).map(([icon,val])=>(
                     <span key={icon+val} style={{
                       display:"inline-flex", alignItems:"center", gap:4,
@@ -1359,17 +1406,21 @@ export default function App() {
                       <span style={{fontFamily:"'EB Garamond', serif"}}>{val}</span>
                     </span>
                   ))}
-                  {/* Posizioni evidenziate */}
-                  {(editing.positions||[]).length > 0 && rack && (
-                    <span style={{
-                      display:"inline-flex", alignItems:"center", gap:4,
-                      background:"rgba(201,149,58,0.12)", border:`1px solid rgba(201,149,58,0.35)`,
-                      borderRadius:20, padding:"5px 14px",
-                      fontSize:15, color:C.gold, fontFamily:"'Cinzel', serif", fontWeight:700,
-                    }}>
-                      📌 {(editing.positions||[]).join(" · ")}
-                    </span>
-                  )}
+                  {/* Posizioni per ogni slot */}
+                  {(editing.rackSlots||[]).filter(s=>(s.positions||[]).length>0).map(slot=>{
+                    const sr=racks.find(r=>r.id===slot.rackId);
+                    if(!sr) return null;
+                    return(
+                      <span key={slot.rackId} style={{
+                        display:"inline-flex", alignItems:"center", gap:4,
+                        background:"rgba(201,149,58,0.12)", border:`1px solid rgba(201,149,58,0.35)`,
+                        borderRadius:20, padding:"5px 14px",
+                        fontSize:15, color:C.gold, fontFamily:"'Cinzel', serif", fontWeight:700,
+                      }}>
+                        📌 {sr.name}: {(slot.positions||[]).join(" · ")}
+                      </span>
+                    );
+                  })}
                 </div>
 
                 {/* ── Stato del Vino ── */}
@@ -1420,12 +1471,16 @@ export default function App() {
                   );
                 })()}
 
-                {rack&&(editing.positions||[]).length>0&&(
-                  <div style={{background:C.bg,borderRadius:9,padding:"10px 12px",marginBottom:10,border:`1px solid ${C.border}`}}>
-                    <div style={{fontSize:12,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:8}}>POSIZIONE — {rack.name}</div>
-                    <MiniRackMap rack={rack} highlightPositions={editing.positions||[]}/>
-                  </div>
-                )}
+                {(editing.rackSlots||[]).filter(s=>(s.positions||[]).length>0).map(slot=>{
+                  const sr=racks.find(r=>r.id===slot.rackId);
+                  if(!sr) return null;
+                  return(
+                    <div key={slot.rackId} style={{background:C.bg,borderRadius:9,padding:"10px 12px",marginBottom:10,border:`1px solid ${C.border}`}}>
+                      <div style={{fontSize:12,color:C.textFaint,letterSpacing:1.2,fontFamily:"'Cinzel', serif",marginBottom:8}}>POSIZIONE — {sr.name}</div>
+                      <MiniRackMap rack={sr} highlightPositions={slot.positions||[]}/>
+                    </div>
+                  );
+                })}
 
                 {editing.notes&&(
                   <div style={{background:C.bg,borderRadius:8,padding:"10px 14px",marginBottom:10}}>
@@ -1532,7 +1587,7 @@ export default function App() {
 
                 <div style={{display:"flex",gap:6,alignItems:"center",justifyContent:"stretch"}}>
                   {/* ELIMINA — icona */}
-                  <button onClick={()=>{setModal(null);setDeleteConfirm(editing);}} title="Elimina"
+                  <button onClick={()=>{setModal(null);setDeleteConfirm({wine:editing,fromPos:viewFromPos});setViewFromPos(null);}} title="Elimina"
                     style={{flex:"0 0 auto",background:"transparent",border:`1px solid #804040`,borderRadius:8,
                       color:"#c07070",cursor:"pointer",padding:"11px 13px",fontSize:18,lineHeight:1,
                       transition:"background 0.15s",}}
@@ -1610,22 +1665,53 @@ export default function App() {
       )}
 
       {/* Delete wine */}
-      {deleteConfirm&&(
-        <div className="modal-overlay" onClick={()=>setDeleteConfirm(null)}>
-          <div className="modal-box" style={{maxWidth:370}} onClick={e=>e.stopPropagation()}>
-            <div style={{padding:"30px",textAlign:"center"}}>
-              <div style={{fontSize:36,marginBottom:14}}>🗑</div>
-              <h3 style={{fontFamily:"'Cinzel', serif",color:C.text,marginBottom:12,fontSize:18,letterSpacing:1}}>RIMUOVI VINO</h3>
-              <p style={{color:C.textMuted,marginBottom:24,fontSize:18}}>Eliminare <strong style={{color:C.gold}}>{deleteConfirm.name}</strong>?</p>
-              <div style={{display:"flex",gap:12,justifyContent:"center"}}>
-                <button className="btn-ghost" onClick={()=>setDeleteConfirm(null)}>ANNULLA</button>
-                <button className="btn-gold" style={{background:"linear-gradient(135deg, #7a2020, #c04040)"}}
-                  onClick={()=>{ const removed=deleteConfirm; saveWines(wines.filter(w=>w.id!==removed.id)); setDeleteConfirm(null); showUndoToast(`"${removed.name}" rimosso`, ()=>saveWines([...wines.filter(w=>w.id!==removed.id), removed])); }}>ELIMINA</button>
+      {deleteConfirm&&(()=>{
+        const {wine:dw, fromPos} = deleteConfirm;
+        const multiBottle = dw.quantity > 1;
+        const removeOne = () => {
+          const newSlots = fromPos
+            ? (dw.rackSlots||[]).map(s=>({...s,positions:(s.positions||[]).filter(p=>p!==fromPos)}))
+            : (dw.rackSlots||[]).map((s,i,arr)=>{
+                const last=[...arr].reverse().findIndex(x=>(x.positions||[]).length>0);
+                const idx=arr.length-1-last;
+                return i===idx?{...s,positions:s.positions.slice(0,-1)}:s;
+              });
+          const updated={...dw,quantity:dw.quantity-1,rackSlots:newSlots};
+          saveWines(wines.map(w=>w.id===dw.id?updated:w));
+          setDeleteConfirm(null);
+          showUndoToast(`Una bottiglia rimossa`, ()=>saveWines(wines.map(w=>w.id===dw.id?dw:w)));
+        };
+        const removeAll = () => {
+          const prev=wines;
+          saveWines(wines.filter(w=>w.id!==dw.id));
+          setDeleteConfirm(null);
+          showUndoToast(`"${dw.name}" rimosso`, ()=>saveWines(prev));
+        };
+        return(
+          <div className="modal-overlay" onClick={()=>setDeleteConfirm(null)}>
+            <div className="modal-box" style={{maxWidth:380}} onClick={e=>e.stopPropagation()}>
+              <div style={{padding:"30px",textAlign:"center"}}>
+                <div style={{fontSize:36,marginBottom:14}}>🗑</div>
+                <h3 style={{fontFamily:"'Cinzel', serif",color:C.text,marginBottom:12,fontSize:18,letterSpacing:1}}>RIMUOVI VINO</h3>
+                <p style={{color:C.textMuted,marginBottom:6,fontSize:18}}><strong style={{color:C.gold}}>{dw.name}</strong></p>
+                {multiBottle && <p style={{color:C.textFaint,marginBottom:20,fontSize:14}}>Hai {dw.quantity} bottiglie. Vuoi rimuoverne una sola o eliminare tutta l'etichetta?</p>}
+                {!multiBottle && <p style={{color:C.textFaint,marginBottom:20,fontSize:14}}>Questa è l'ultima bottiglia. Vuoi eliminare l'etichetta?</p>}
+                <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+                  <button className="btn-ghost" onClick={()=>setDeleteConfirm(null)}>ANNULLA</button>
+                  {multiBottle && (
+                    <button className="btn-gold" style={{background:"linear-gradient(135deg,#5a3000,#a05020)"}} onClick={removeOne}>
+                      RIMUOVI 1 BOTTIGLIA
+                    </button>
+                  )}
+                  <button className="btn-gold" style={{background:"linear-gradient(135deg,#7a2020,#c04040)"}} onClick={removeAll}>
+                    ELIMINA ETICHETTA
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Delete rack */}
       {deleteRackConfirm&&(
@@ -1648,8 +1734,8 @@ export default function App() {
       {/* ── DRINK POSITION MODAL ── */}
       {drinkModal && (() => {
         const wine = drinkModal;
-        const rack = racks.find(r => r.id === wine.rackId);
-        const positions = wine.positions || [];
+        const slotsWithPos = (wine.rackSlots||[]).filter(s => (s.positions||[]).length > 0);
+        const hasPositions = slotsWithPos.length > 0;
         return (
           <div className="modal-overlay" onClick={() => setDrinkModal(null)}>
             <div className="modal-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
@@ -1662,62 +1748,63 @@ export default function App() {
                   {wine.name} · {wine.year}
                 </p>
 
-                {rack && positions.length > 0 ? (
-                  <>
-                    <p style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginBottom: 14 }}>
-                      SELEZIONA LA CELLA DA SVUOTARE — {rack.name}
-                    </p>
-                    {/* Col headers */}
-                    <div style={{ display: "flex", gap: 4, marginBottom: 4, marginLeft: 30 }}>
-                      {Array.from({ length: rack.cols }, (_, c) => (
-                        <div key={c} style={{ width: 46, textAlign: "center", fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{c + 1}</div>
+                {hasPositions ? slotsWithPos.map(slot => {
+                  const rack = racks.find(r => r.id === slot.rackId);
+                  if (!rack) return null;
+                  const positions = slot.positions || [];
+                  return (
+                    <div key={slot.rackId} style={{marginBottom:16}}>
+                      <p style={{ fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginBottom: 10 }}>
+                        SELEZIONA LA CELLA DA SVUOTARE — {rack.name}
+                      </p>
+                      <div style={{ display: "flex", gap: 4, marginBottom: 4, marginLeft: 30 }}>
+                        {Array.from({ length: rack.cols }, (_, c) => (
+                          <div key={c} style={{ width: 46, textAlign: "center", fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{c + 1}</div>
+                        ))}
+                      </div>
+                      {Array.from({ length: rack.rows }, (_, r) => (
+                        <div key={r} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                          <div style={{ width: 26, textAlign: "center", fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{ROW_LABELS[r]}</div>
+                          {Array.from({ length: rack.cols }, (_, c) => {
+                            const pos = `${ROW_LABELS[r]}${c + 1}`;
+                            const isThis = positions.includes(pos);
+                            const otherWine = !isThis && wines.find(w => (w.rackSlots||[]).some(s => s.rackId === rack.id && (s.positions||[]).includes(pos)));
+                            const otc = otherWine ? typeColors[otherWine.type] : null;
+                            return (
+                              <div key={c}
+                                onClick={() => isThis && commitDrink(wine, pos)}
+                                title={isThis ? `Preleva da ${pos}` : otherWine ? otherWine.name : "Libera"}
+                                style={{
+                                  width: 46, height: 38, borderRadius: 6,
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  cursor: isThis ? "pointer" : "default",
+                                  background: isThis ? "rgba(122,42,154,0.3)" : otherWine ? `${otc.badge}99` : C.surface,
+                                  border: isThis ? `2px solid #9a4aba` : otherWine ? `1px solid ${otc.bar}` : `1px dashed ${C.border}`,
+                                  color: isThis ? "#e0b0ff" : otherWine ? otc.text : C.textFaint,
+                                  fontSize: 12, fontFamily: "'Cinzel', serif", fontWeight: isThis ? 700 : 400,
+                                  transition: "all 0.12s",
+                                }}
+                                onMouseEnter={e => { if (isThis) { e.currentTarget.style.background = "rgba(154,74,186,0.5)"; e.currentTarget.style.transform = "scale(1.1)"; }}}
+                                onMouseLeave={e => { if (isThis) { e.currentTarget.style.background = "rgba(122,42,154,0.3)"; e.currentTarget.style.transform = ""; }}}
+                              >
+                                {isThis ? pos : otherWine ? "●" : ""}
+                              </div>
+                            );
+                          })}
+                        </div>
                       ))}
                     </div>
-                    {Array.from({ length: rack.rows }, (_, r) => (
-                      <div key={r} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
-                        <div style={{ width: 26, textAlign: "center", fontSize: 15, color: C.textFaint, fontFamily: "'Cinzel', serif", fontWeight: 700 }}>{ROW_LABELS[r]}</div>
-                        {Array.from({ length: rack.cols }, (_, c) => {
-                          const pos = `${ROW_LABELS[r]}${c + 1}`;
-                          const isThis = positions.includes(pos);
-                          const otherWine = !isThis && wines.find(w => w.rackId === rack.id && (w.positions||[]).includes(pos));
-                          const otc = otherWine ? typeColors[otherWine.type] : null;
-                          return (
-                            <div key={c}
-                              onClick={() => isThis && commitDrink(wine, pos)}
-                              title={isThis ? `Preleva da ${pos}` : otherWine ? otherWine.name : "Libera"}
-                              style={{
-                                width: 46, height: 38, borderRadius: 6,
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                cursor: isThis ? "pointer" : "default",
-                                background: isThis ? "rgba(122,42,154,0.3)" : otherWine ? `${otc.badge}99` : C.surface,
-                                border: isThis ? `2px solid #9a4aba` : otherWine ? `1px solid ${otc.bar}` : `1px dashed ${C.border}`,
-                                color: isThis ? "#e0b0ff" : otherWine ? otc.text : C.textFaint,
-                                fontSize: 12, fontFamily: "'Cinzel', serif", fontWeight: isThis ? 700 : 400,
-                                transition: "all 0.12s",
-                              }}
-                              onMouseEnter={e => { if (isThis) { e.currentTarget.style.background = "rgba(154,74,186,0.5)"; e.currentTarget.style.transform = "scale(1.1)"; }}}
-                              onMouseLeave={e => { if (isThis) { e.currentTarget.style.background = "rgba(122,42,154,0.3)"; e.currentTarget.style.transform = ""; }}}
-                            >
-                              {isThis ? pos : otherWine ? "●" : ""}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                    <p style={{ fontSize: 14, color: C.textFaint, fontStyle: "italic", marginTop: 12 }}>
-                      Le celle viola sono le tue bottiglie di questo vino. Clicca su quella che stai prelevando.
-                    </p>
-                  </>
-                ) : (
-                  // Nessuna posizione assegnata — mostra solo conferma
+                  );
+                }) : (
                   <p style={{ fontSize: 17, color: C.textMuted, fontFamily: "'EB Garamond', serif", marginBottom: 20 }}>
                     Nessuna posizione assegnata. Verrà decrementata la quantità.
                   </p>
                 )}
+                {hasPositions && <p style={{ fontSize: 14, color: C.textFaint, fontStyle: "italic", marginTop: 4 }}>Le celle viola sono le tue bottiglie. Clicca su quella che stai prelevando.</p>}
 
                 <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
                   <button className="btn-ghost" onClick={() => setDrinkModal(null)}>ANNULLA</button>
-                  {positions.length === 0 && (
+                  {!hasPositions && (
                     <button className="btn-gold" onClick={() => commitDrink(wine, null)}>CONFERMA</button>
                   )}
                 </div>
@@ -2006,12 +2093,12 @@ export default function App() {
                 <button className="btn-ghost" onClick={() => {
                   // Se si salta, aggiorna comunque la cantina
                   if (logModal !== "edit" && pendingDrink) {
-                    const { wine, newQty, newPositions } = pendingDrink;
+                    const { wine, newQty, newSlots } = pendingDrink;
                     if (newQty <= 0) {
                       saveWines(wines.filter(w => w.id !== wine.id));
                       setEditing(null); setModal(null);
                     } else {
-                      const updated = { ...wine, quantity: newQty, positions: newPositions };
+                      const updated = { ...wine, quantity: newQty, rackSlots: newSlots };
                       saveWines(wines.map(w => w.id === wine.id ? updated : w));
                       setEditing(updated);
                     }
@@ -2035,12 +2122,12 @@ export default function App() {
                     saveLog([logEntry, ...log]);
                     // Applica la modifica alla cantina ora che è confermato
                     if (pendingDrink) {
-                      const { wine, newQty, newPositions } = pendingDrink;
+                      const { wine, newQty, newSlots } = pendingDrink;
                       if (newQty <= 0) {
                         saveWines(wines.filter(w => w.id !== wine.id));
                         setEditing(null); setModal(null);
                       } else {
-                        const updated = { ...wine, quantity: newQty, positions: newPositions };
+                        const updated = { ...wine, quantity: newQty, rackSlots: newSlots };
                         saveWines(wines.map(w => w.id === wine.id ? updated : w));
                         setEditing(updated);
                       }
