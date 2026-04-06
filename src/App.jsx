@@ -974,39 +974,39 @@ export default function App() {
                             style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         </div>
                       )}
-                      <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",gap:4}}>
+                      <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
 
-                        {/* Riga A: NOME + bt */}
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
-                          <div style={{flex:1,minWidth:0}}>
+                        {/* Blocco top: NOME + denominazione + bt */}
+                        <div>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
                             <div style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2,
-                              overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{wine.name}</div>
-                            <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2,
-                              minHeight:"1.3em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                              {wine.denomination||""}
-                            </div>
+                              overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",flex:1,minWidth:0}}>{wine.name}</div>
+                            <span style={{
+                              background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
+                              color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
+                              padding:"1px 8px",borderRadius:20,fontSize:16,flexShrink:0,
+                              fontFamily:"'Cinzel',serif",fontWeight:700,
+                            }}>{wine.quantity}bt</span>
                           </div>
-                          <span style={{
-                            background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
-                            color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
-                            padding:"1px 8px",borderRadius:20,fontSize:16,flexShrink:0,
-                            fontFamily:"'Cinzel',serif",fontWeight:700,
-                          }}>{wine.quantity}bt</span>
+                          <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2,
+                            minHeight:"1.3em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            {wine.denomination||""}
+                          </div>
                         </div>
 
-                        {/* Riga B: produttore · anno */}
-                        <p style={{fontFamily:"'Cinzel',serif",fontSize:16,
-                          color:C.text,margin:0,lineHeight:1.3,
-                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                          {[wine.producer, wine.year].filter(Boolean).join(" · ")}
-                        </p>
+                        {/* Blocco mid: produttore · anno (+ prezzo) */}
+                        <div>
+                          <p style={{fontFamily:"'Cinzel',serif",fontSize:16,
+                            color:C.text,margin:0,lineHeight:1.3,
+                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            {[wine.producer, wine.year].filter(Boolean).join(" · ")}
+                          </p>
+                          {wine.price && (
+                            <p style={{fontFamily:"'Cinzel',serif",fontSize:14,color:C.textMuted,margin:"2px 0 0"}}>€{wine.price}</p>
+                          )}
+                        </div>
 
-                        {/* Riga C: prezzo */}
-                        {wine.price && (
-                          <p style={{fontFamily:"'Cinzel',serif",fontSize:14,color:C.textMuted,margin:0}}>€{wine.price}</p>
-                        )}
-
-                        {/* Riga D: primo scaffale (+ altri) · stato invecchiamento */}
+                        {/* Blocco bottom: scaffale + stato invecchiamento */}
                         {((wine.rackSlots||[]).some(s=>(s.positions||[]).length>0) || getAgingStatus(wine)) && (
                           <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
                             {(()=>{
