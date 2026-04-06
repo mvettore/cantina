@@ -1799,6 +1799,9 @@ export default function App() {
               ))}
             </div>
           )}
+          <div style={{ marginTop: 24, textAlign: "center" }}>
+            <span style={{ fontSize: 11, color: C.textFaint, fontFamily: "monospace", letterSpacing: 1 }}>{__APP_VERSION__}</span>
+          </div>
         </div>
       )}
 
