@@ -980,9 +980,9 @@ export default function App() {
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
                           <div style={{flex:1,minWidth:0}}>
                             <span style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2}}>{wine.name}</span>
-                            {wine.denomination && (
-                              <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2}}>{wine.denomination}</div>
-                            )}
+                            <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2,minHeight:"1.2em"}}>
+                              {wine.denomination || ""}
+                            </div>
                           </div>
                           <span style={{
                             background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
