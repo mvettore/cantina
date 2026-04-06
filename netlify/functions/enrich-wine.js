@@ -22,7 +22,7 @@ const handler = async (event) => {
   }
 
   const prompt = `Sei un sommelier esperto e storico del vino italiano.
-Fornisci informazioni dettagliate su questo vino:
+Fornisci informazioni dettagliate su questo vino basandoti ESCLUSIVAMENTE su conoscenze reali e verificate. NON inventare dati, NON allucinare caratteristiche, produttori o denominazioni. Se non hai informazioni certe su un campo, descrivilo in modo generico basandoti sul vitigno e sulla regione senza inventare specifiche del produttore.
 
 Nome: ${wine.name || "—"}
 Produttore: ${wine.producer || "—"}
