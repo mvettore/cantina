@@ -31,14 +31,16 @@ Tipologia: ${wine.type || "—"}
 Regione: ${wine.region || "—"}
 Vitigno: ${wine.grape || "—"}
 
+IMPORTANTE: tutte le informazioni devono essere specifiche per la regione/denominazione indicata sopra, NON per la zona più famosa del vitigno. Ad esempio, se il vitigno è Nebbiolo ma la regione è Valli Ossolane, parla delle Valli Ossolane — non delle Langhe.
+
 Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON):
 {
-  "grapeProfile": "2-3 frasi sul carattere del vitigno: origini, caratteristiche genetiche, zone di elezione, stile generale che dona ai vini",
-  "tastingNotes": "3-4 frasi sui sentori tipici: descrivi profumi (primari, secondari, terziari se invecchiato), palato (struttura, tannini, acidità, corpo, finale)",
-  "territory": "2-3 frasi sul territorio e denominazione: suolo, microclima, perché quella zona è vocata per questo vitigno",
+  "grapeProfile": "2-3 frasi sul carattere del vitigno: origini, caratteristiche genetiche, come si esprime specificamente in questa regione/denominazione",
+  "tastingNotes": "3-4 frasi sui sentori tipici di questo vino in questa zona: profumi (primari, secondari, terziari se invecchiato), palato (struttura, tannini, acidità, corpo, finale)",
+  "territory": "2-3 frasi sul territorio specifico indicato: suolo, microclima, altitudine, caratteristiche che lo distinguono da altre zone dello stesso vitigno",
   "aging": "1-2 frasi sul potenziale di invecchiamento e se aprire ora o aspettare",
   "foodPairing": "3-4 abbinamenti gastronomici ideali, separati da virgola",
-  "curiosity": "1 curiosità storica o aneddoto interessante su questo vino o produttore"
+  "curiosity": "1 curiosità storica o aneddoto interessante su questo vino, produttore o sulla storia vinicola di questa specifica zona"
 }`;
 
   const controller = new AbortController();
