@@ -903,7 +903,7 @@ export default function App() {
                 return (
                   <div key={wine.id} className="wine-card" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,0.25)" }}
                     onClick={() => { setEditing({...wine}); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
-                    <div style={{ height: 5, background: `linear-gradient(90deg, ${tc.bar}, ${C.gold})` }} />
+                    <div style={{ height: 5, background: tc.bar }} />
 
                     <div style={{display:"flex",minHeight:0}}>
                       {/* Foto verticale */}
