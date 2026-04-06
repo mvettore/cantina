@@ -1,7 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 
 const WINE_TYPES = ["Rosso", "Bianco", "Rosato", "Spumante", "Dolce", "Passito"];
-const REGIONS = ["Piemonte", "Toscana", "Veneto", "Lombardia", "Sicilia", "Campania", "Sardegna", "Umbria", "Marche", "Puglia", "Altro"];
+const REGIONS = [
+  // Italia
+  "Piemonte", "Valle d'Aosta", "Liguria", "Lombardia", "Trentino-Alto Adige", "Friuli-Venezia Giulia", "Veneto",
+  "Emilia-Romagna", "Toscana", "Umbria", "Marche", "Lazio", "Abruzzo", "Molise",
+  "Campania", "Puglia", "Basilicata", "Calabria", "Sicilia", "Sardegna",
+  // Estero
+  "Francia", "Germania", "Spagna", "Portogallo", "California", "Sud Africa", "Cile", "Argentina",
+  "Altro",
+];
 const ROW_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const STORAGE_KEY = "cantina-wines-v3";
 const LOG_KEY = "cantina-log-v1";
