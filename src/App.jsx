@@ -40,6 +40,11 @@ function migrateWines(wines) {
       const { rackId, positions, ...rest } = w;
       w = { ...rest, rackSlots: rackId ? [{ rackId, positions: positions || [] }] : [] };
     }
+    // 3. photo (singola) → photos (array)
+    if (w.photos === undefined) {
+      const { photo, ...rest } = w;
+      w = { ...rest, photos: photo ? [photo] : [] };
+    }
     return w;
   }).filter(w => {
     // 3. deduplica per id — rimuove doppioni causati da bug di salvataggio
@@ -100,23 +105,6 @@ function resizeImage(file, maxPx = 900, quality = 0.82) {
       resolve(canvas.toDataURL("image/jpeg", quality));
     };
     img.src = URL.createObjectURL(file);
-  });
-}
-
-// ── Utility: resize a data URL (base64) to JPEG base64 ──
-function resizeDataUrl(dataUrl, maxPx = 900, quality = 0.82) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width  = Math.round(img.width  * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
   });
 }
 
@@ -302,7 +290,7 @@ function getAgingStatus(wine) {
 const emptyWine = () => ({
   id: null, name: "", producer: "", year: new Date().getFullYear(),
   region: "", grape: "", type: "", denomination: "",
-  rating: 3, notes: "", quantity: 1, price: "", rackSlots: [], photo: null, enrichment: null,
+  rating: 3, notes: "", quantity: 1, price: "", rackSlots: [], photos: [], enrichment: null,
 });
 const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6 });
 
@@ -346,8 +334,8 @@ export default function App() {
   const [enriching, setEnriching] = useState(false);
   const [enrichData, setEnrichData] = useState(null);
   const [enrichError, setEnrichError] = useState(null);
-  const [fetchingPhoto, setFetchingPhoto] = useState(false);
   const scanInputRef = useRef(null);
+  const addPhotoRef  = useRef(null);
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
 
@@ -502,7 +490,8 @@ export default function App() {
         grape:    info.grape    || prev.grape,
         notes:    info.notes    || prev.notes,
         price:    info.price != null ? String(info.price) : prev.price,
-        photo:    thumb,
+        // La foto scansionata diventa sempre la prima (etichetta principale)
+        photos: [thumb, ...(prev.photos||[]).slice(1)],
       }));
       showToast(croppedThumb ? "✨ Etichetta riconosciuta e ritagliata!" : "✨ Etichetta riconosciuta!");
     } catch (err) {
@@ -510,6 +499,17 @@ export default function App() {
       setScanError("Non sono riuscito a leggere l'etichetta. Riprova con una foto più nitida.");
     } finally {
       setScanning(false);
+    }
+  };
+
+  // Aggiunge una foto extra (retro, dettaglio) senza riconoscimento OCR
+  const handleAddPhoto = async (file) => {
+    if (!file) return;
+    try {
+      const hiRes = await resizeImage(file, 1800, 0.93);
+      setEditing(prev => ({ ...prev, photos: [...(prev.photos||[]), hiRes] }));
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -553,7 +553,7 @@ export default function App() {
       wineType: wine.type,
       wineGrape: wine.grape,
       wineRegion: wine.region,
-      winePhoto: wine.photo || null,
+      winePhoto: (wine.photos||[])[0] || null,
       date: new Date().toISOString().split("T")[0],
       occasion: "",
       companions: "",
@@ -605,35 +605,6 @@ export default function App() {
       setEnrichError("Non sono riuscito a recuperare le informazioni. Riprova.");
     } finally {
       setEnriching(false);
-    }
-  };
-
-  // Scarica foto etichetta da internet usando Claude + web_search
-  const handleFetchPhoto = async (wine) => {
-    setFetchingPhoto(true);
-    try {
-      const resp = await fetch("/.netlify/functions/fetch-label-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: wine.name, producer: wine.producer, year: wine.year }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: `Errore ${resp.status}` }));
-        throw new Error(err.error || `Errore ${resp.status}`);
-      }
-      const { dataUrl } = await resp.json();
-      const resized = await resizeDataUrl(dataUrl, 1800, 0.93);
-      const cropped = await autoCropLabel(resized);
-      const photo = cropped || resized;
-      const updated = { ...wine, photo };
-      saveWines(wines.map(w => w.id === wine.id ? updated : w));
-      setEditing(updated);
-      showToast(cropped ? "✨ Foto scaricata e ritagliata!" : "✨ Foto etichetta scaricata!");
-    } catch (err) {
-      console.error("fetchPhoto:", err);
-      showToast("Non ho trovato un'immagine per questo vino");
-    } finally {
-      setFetchingPhoto(false);
     }
   };
 
@@ -993,11 +964,11 @@ export default function App() {
 
                     <div style={{display:"flex",minHeight:0}}>
                       {/* Foto verticale */}
-                      {wine.photo && (
-                        <div onClick={e=>{e.stopPropagation();setLightboxPhoto(wine.photo);}}
+                      {(wine.photos||[])[0] && (
+                        <div onClick={e=>{e.stopPropagation();setLightboxPhoto((wine.photos||[])[0]);}}
                           style={{flexShrink:0,width:56,cursor:"zoom-in",overflow:"hidden",
                             position:"relative",borderRight:`1px solid ${C.border}`}}>
-                          <img src={wine.photo} alt={wine.name}
+                          <img src={(wine.photos||[])[0]} alt={wine.name}
                             style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         </div>
                       )}
@@ -1232,27 +1203,43 @@ export default function App() {
 
               {/* ── SCAN SECTION ── */}
               <div style={{background:C.bg,borderRadius:10,padding:"18px",border:`1px solid ${C.border}`}}>
-                <p style={{...labelStyle, marginBottom:12}}>📷 Riconosci dall'Etichetta</p>
+                <p style={{...labelStyle, marginBottom:12}}>📷 Foto</p>
 
-                {/* Preview foto */}
-                {editing.photo && (
-                  <div style={{marginBottom:14,position:"relative",borderRadius:8,overflow:"hidden",maxHeight:200,display:"flex",alignItems:"center",justifyContent:"center",background:"#000"}}>
-                    <img src={editing.photo} alt="etichetta" style={{maxHeight:200,maxWidth:"100%",objectFit:"contain"}}/>
-                    <button onClick={()=>setEditing(v=>({...v,photo:null}))}
-                      style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,0.6)",border:"none",color:"#fff",borderRadius:"50%",width:28,height:28,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                {/* Galleria foto esistenti */}
+                {(editing.photos||[]).length > 0 && (
+                  <div style={{display:"flex",gap:8,marginBottom:14,overflowX:"auto",paddingBottom:4}}>
+                    {(editing.photos||[]).map((ph,i) => (
+                      <div key={i} style={{flexShrink:0,position:"relative",width:80,height:80,borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`,background:"#000"}}>
+                        <img src={ph} alt={`foto ${i+1}`} onClick={()=>setLightboxPhoto(ph)}
+                          style={{width:"100%",height:"100%",objectFit:"cover",cursor:"zoom-in"}}/>
+                        {i===0 && (
+                          <span style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,0.55)",color:"rgba(255,255,255,0.8)",fontSize:9,textAlign:"center",fontFamily:"'Cinzel',serif",padding:"2px 0"}}>principale</span>
+                        )}
+                        <button onClick={()=>setEditing(v=>({...v,photos:(v.photos||[]).filter((_,j)=>j!==i)}))}
+                          style={{position:"absolute",top:3,right:3,background:"rgba(0,0,0,0.65)",border:"none",color:"#fff",borderRadius:"50%",width:22,height:22,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                      </div>
+                    ))}
                   </div>
                 )}
 
-                <input ref={scanInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
-                  onChange={e => { const f=e.target.files?.[0]; if(f) handleScanFile(f); e.target.value=""; }} />
+                <div style={{display:"flex",gap:8}}>
+                  {/* Scansiona etichetta principale (OCR) */}
+                  <input ref={scanInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
+                    onChange={e => { const f=e.target.files?.[0]; if(f) handleScanFile(f); e.target.value=""; }} />
+                  <button className="btn-scan" disabled={scanning} onClick={()=>scanInputRef.current?.click()} style={{flex:1}}>
+                    {scanning ? (
+                      <><div className="spinner"/><span>Analisi in corso…</span></>
+                    ) : (
+                      <><span style={{fontSize:18}}>📷</span><span>{(editing.photos||[]).length>0?"Scansiona di nuovo":"Fotografa etichetta"}</span></>
+                    )}
+                  </button>
 
-                <button className="btn-scan" disabled={scanning} onClick={()=>scanInputRef.current?.click()}>
-                  {scanning ? (
-                    <><div className="spinner"/><span>Analisi in corso…</span></>
-                  ) : (
-                    <><span style={{fontSize:20}}>📷</span><span>{editing.photo?"Scansiona di nuovo":"Fotografa l'etichetta"}</span></>
-                  )}
-                </button>
+                  {/* Aggiungi foto extra (nessun OCR) */}
+                  <input ref={addPhotoRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
+                    onChange={e => { const f=e.target.files?.[0]; if(f) handleAddPhoto(f); e.target.value=""; }} />
+                  <button className="btn-scan" onClick={()=>addPhotoRef.current?.click()} title="Aggiungi altra foto"
+                    style={{flex:"0 0 auto",padding:"0 14px",fontSize:18}}>＋</button>
+                </div>
 
                 {scanning && (
                   <p style={{fontSize:13,color:C.textMuted,marginTop:10,textAlign:"center",fontStyle:"italic"}}>
@@ -1264,7 +1251,7 @@ export default function App() {
                 )}
                 {!scanning && !scanError && (
                   <p style={{fontSize:12,color:C.textFaint,marginTop:8,textAlign:"center"}}>
-                    Fotografa l'etichetta — i campi verranno compilati automaticamente
+                    Fotografa l'etichetta per compilare automaticamente · usa ＋ per aggiungere altre foto
                   </p>
                 )}
               </div>
@@ -1392,32 +1379,46 @@ export default function App() {
                 >✕</button>
               </div>
 
-              {/* Photo hero — tappabile per lightbox */}
-              {editing.photo && (
-                <div style={{height:180,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08"}}>
-                  <img src={editing.photo} alt={editing.name} onClick={() => setLightboxPhoto(editing.photo)}
-                    style={{maxHeight:"100%",maxWidth:"100%",objectFit:"contain",cursor:"zoom-in"}}/>
-                  <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, transparent 40%, rgba(62,42,22,0.9) 100%)",pointerEvents:"none"}}/>
-                  <div style={{position:"absolute",bottom:10,left:0,right:0,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 12px"}}>
-                    <button onClick={()=>{
-                      const updated={...editing,photo:null};
-                      saveWines(wines.map(w=>w.id===editing.id?updated:w));
-                      setEditing(updated);
-                      showToast("Foto rimossa");
-                    }} style={{
-                      background:"rgba(0,0,0,0.55)",border:"1px solid rgba(255,255,255,0.2)",
-                      borderRadius:6,color:"rgba(255,255,255,0.7)",cursor:"pointer",
-                      padding:"4px 10px",fontSize:12,fontFamily:"'Cinzel',serif",letterSpacing:0.5,
-                      backdropFilter:"blur(4px)",
-                    }}>✕ rimuovi</button>
-                    <span style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:"'Cinzel', serif",letterSpacing:1}}>🔍 tocca per ingrandire</span>
+              {/* Galleria foto — hero se una sola, strip se multiple */}
+              {(editing.photos||[]).length > 0 && (
+                (editing.photos||[]).length === 1 ? (
+                  /* Hero singola */
+                  <div style={{height:180,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08"}}>
+                    <img src={editing.photos[0]} alt={editing.name} onClick={()=>setLightboxPhoto(editing.photos[0])}
+                      style={{maxHeight:"100%",maxWidth:"100%",objectFit:"contain",cursor:"zoom-in"}}/>
+                    <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, transparent 40%, rgba(62,42,22,0.9) 100%)",pointerEvents:"none"}}/>
+                    <div style={{position:"absolute",bottom:10,left:0,right:0,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 12px"}}>
+                      <button onClick={()=>{
+                        const updated={...editing,photos:[]};
+                        saveWines(wines.map(w=>w.id===editing.id?updated:w));
+                        setEditing(updated);showToast("Foto rimossa");
+                      }} style={{background:"rgba(0,0,0,0.55)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:6,color:"rgba(255,255,255,0.7)",cursor:"pointer",padding:"4px 10px",fontSize:12,fontFamily:"'Cinzel',serif",backdropFilter:"blur(4px)"}}>✕ rimuovi</button>
+                      <span style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:"'Cinzel',serif",letterSpacing:1}}>🔍 tocca per ingrandire</span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* Strip orizzontale per più foto */
+                  <div style={{display:"flex",gap:0,overflowX:"auto",background:"#1a0f08",borderBottom:`1px solid ${C.border}`}}>
+                    {(editing.photos||[]).map((ph,i) => (
+                      <div key={i} style={{flexShrink:0,position:"relative",height:160,width:120}}>
+                        <img src={ph} alt={`foto ${i+1}`} onClick={()=>setLightboxPhoto(ph)}
+                          style={{width:"100%",height:"100%",objectFit:"cover",cursor:"zoom-in",display:"block"}}/>
+                        <button onClick={()=>{
+                          const newPhotos=(editing.photos||[]).filter((_,j)=>j!==i);
+                          const updated={...editing,photos:newPhotos};
+                          saveWines(wines.map(w=>w.id===editing.id?updated:w));
+                          setEditing(updated);
+                        }} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.65)",border:"none",color:"#fff",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                        {i===0&&<span style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,0.55)",color:"rgba(255,255,255,0.7)",fontSize:10,textAlign:"center",fontFamily:"'Cinzel',serif",padding:"3px 0"}}>principale</span>}
+                      </div>
+                    ))}
+                  </div>
+                )
               )}
 
               <div style={{padding:"20px 22px"}}>
                 {/* Anno */}
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,marginTop:editing.photo?4:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,marginTop:(editing.photos||[]).length>0?4:0}}>
                   <TypeBadge type={editing.type}/>
                   <span style={{fontSize:38,fontWeight:300,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:2}}>{editing.year}</span>
                 </div>
@@ -1635,19 +1636,6 @@ export default function App() {
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(180,60,60,0.15)"}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                   >🗑</button>
-                  {/* CERCA FOTO */}
-                  <button onClick={()=>handleFetchPhoto(editing)} disabled={fetchingPhoto} title="Cerca foto etichetta online"
-                    style={{flex:"0 0 auto",background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,
-                      color:fetchingPhoto?C.gold:C.textMuted,cursor:fetchingPhoto?"not-allowed":"pointer",
-                      padding:"11px 13px",fontSize:18,lineHeight:1,
-                      transition:"background 0.15s, color 0.15s",}}
-                    onMouseEnter={e=>{if(!fetchingPhoto){e.currentTarget.style.background="rgba(201,149,58,0.1)";e.currentTarget.style.color=C.gold;}}}
-                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=fetchingPhoto?C.gold:C.textMuted;}}
-                  >
-                    {fetchingPhoto
-                      ? <div style={{width:18,height:18,border:"2px solid rgba(201,149,58,0.3)",borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
-                      : "🖼"}
-                  </button>
                   {/* BEVI */}
                   {editing.quantity > 0 && (
                     <button onClick={()=>handleDrinkOne(editing)} title="Bevi una bottiglia"
