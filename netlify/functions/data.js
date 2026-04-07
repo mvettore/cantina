@@ -19,10 +19,10 @@ const handler = async (event) => {
     return { statusCode: 500, headers, body: JSON.stringify({ error: "Supabase non configurato" }) };
   }
 
-  // Separa i dati per ambiente: production usa chiavi semplici, gli altri branch le prefissano
-  const context = process.env.CONTEXT || "production";
-  const branch  = process.env.BRANCH  || "main";
-  const keyPrefix = context === "production" ? "" : `${branch}:`;
+  // Separa i dati per ambiente: production usa chiavi semplici, staging le prefissa
+  // Usa l'header host (runtime) invece di CONTEXT (solo build-time)
+  const host = event.headers?.host || event.headers?.Host || "";
+  const keyPrefix = host.includes("staging--") ? "staging:" : "";
 
   const apiBase = `${SUPABASE_URL}/rest/v1/cantina_data`;
   const sbHeaders = {
