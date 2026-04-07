@@ -19,6 +19,11 @@ const handler = async (event) => {
     return { statusCode: 500, headers, body: JSON.stringify({ error: "Supabase non configurato" }) };
   }
 
+  // Separa i dati per ambiente: production usa chiavi semplici, gli altri branch le prefissano
+  const context = process.env.CONTEXT || "production";
+  const branch  = process.env.BRANCH  || "main";
+  const keyPrefix = context === "production" ? "" : `${branch}:`;
+
   const apiBase = `${SUPABASE_URL}/rest/v1/cantina_data`;
   const sbHeaders = {
     "Content-Type": "application/json",
@@ -36,9 +41,9 @@ const handler = async (event) => {
         console.error("Supabase GET error:", rows);
         return { statusCode: 500, headers, body: JSON.stringify({ error: "Errore lettura DB", detail: rows }) };
       }
-      const wines = rows.find(r => r.key === "wines")?.value ?? null;
-      const racks = rows.find(r => r.key === "racks")?.value ?? null;
-      const logData = rows.find(r => r.key === "log")?.value ?? null;
+      const wines = rows.find(r => r.key === `${keyPrefix}wines`)?.value ?? null;
+      const racks = rows.find(r => r.key === `${keyPrefix}racks`)?.value ?? null;
+      const logData = rows.find(r => r.key === `${keyPrefix}log`)?.value ?? null;
       return { statusCode: 200, headers, body: JSON.stringify({ wines, racks, log: logData }) };
     } catch (err) {
       console.error("GET error:", err.message);
@@ -54,12 +59,12 @@ const handler = async (event) => {
 
       for (const [key, value] of Object.entries(body)) {
         if (key !== "wines" && key !== "racks" && key !== "log") continue;
-        // upsert: inserisce o aggiorna la riga con quella key
+        // upsert: inserisce o aggiorna la riga con quella key (prefissata per ambiente)
         ops.push(
           fetch(`${apiBase}`, {
             method: "POST",
             headers: { ...sbHeaders, "Prefer": "resolution=merge-duplicates,return=minimal" },
-            body: JSON.stringify({ key, value }),
+            body: JSON.stringify({ key: `${keyPrefix}${key}`, value }),
           })
         );
       }
