@@ -1,46 +1,81 @@
 /**
  * Netlify Function: fetch-label-image
- * Strategia a due passi:
- * 1. Claude + web_search trova l'URL della pagina del produttore o di Vivino/Tannico
- * 2. Fetch server-side della pagina → estrae og:image o prima immagine prodotto
+ * Strategia:
+ * 1. Claude + web_search trova l'URL della PAGINA PRODOTTO diretta del vino
+ * 2. Fetch della pagina → estrae immagine da JSON-LD schema o og:image filtrata
  * 3. Scarica l'immagine e restituisce base64
  */
 
-/** Estrae l'URL di un'immagine rilevante dall'HTML di una pagina prodotto */
-function extractImageFromHtml(html, baseUrl) {
-  // 1. og:image (priorità alta, spesso è la foto del prodotto)
+/** Estrae URL immagine da JSON-LD Product schema */
+function extractFromJsonLd(html) {
+  const scriptTags = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+  for (const tag of scriptTags) {
+    const json = tag.replace(/<script[^>]*>/, "").replace(/<\/script>/, "").trim();
+    try {
+      const data = JSON.parse(json);
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        // Product schema con immagine
+        if (item["@type"] === "Product" || item["@type"] === "Wine") {
+          const img = item.image;
+          if (typeof img === "string" && img.startsWith("http")) return img;
+          if (Array.isArray(img) && img[0]) return typeof img[0] === "string" ? img[0] : img[0].url;
+          if (img && img.url) return img.url;
+        }
+        // ImageObject diretta
+        if (item["@type"] === "ImageObject" && item.url) return item.url;
+      }
+    } catch { /* JSON non valido, ignora */ }
+  }
+  return null;
+}
+
+/** Estrae og:image solo se sembra un'immagine prodotto (non promo/logo/screenshot) */
+function extractOgImage(html, baseUrl) {
   const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
     || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-  if (ogMatch) return resolveUrl(ogMatch[1], baseUrl);
+  if (!ogMatch) return null;
 
-  // 2. twitter:image
-  const twMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
-    || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
-  if (twMatch) return resolveUrl(twMatch[1], baseUrl);
+  const url = resolveUrl(ogMatch[1], baseUrl);
+  if (!url) return null;
 
-  // 3. Prima immagine con parole chiave "bottle", "label", "wine", "vino", "bottiglia", "etichetta"
-  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  // Scarta immagini che sembrano loghi, promo, screenshot di app o placeholder generici
+  const blocklist = /logo|banner|promo|social|default|placeholder|og-default|og_default|app[-_]store|google[-_]play|screenshot|hero|cover|background|favicon|icon/i;
+  if (blocklist.test(url)) return null;
+
+  // Deve sembrare un'immagine reale (estensione o CDN immagini)
+  const looksLikeImage = /\.(jpg|jpeg|png|webp)(\?|$)/i.test(url)
+    || /\/(images?|img|photos?|media|prodotti|products?|catalog)\//i.test(url)
+    || /cdn|assets|static/i.test(url);
+  if (!looksLikeImage) return null;
+
+  return url;
+}
+
+/** Prima <img> con keyword bottiglia/etichetta nell'src o nell'alt */
+function extractProductImg(html, baseUrl) {
+  const imgRegex = /<img[^>]+>/gi;
   const keywords = /bottle|label|wine|vino|bottiglia|etichetta|prodotto|product/i;
   let match;
   while ((match = imgRegex.exec(html)) !== null) {
-    const src = match[1];
-    const context = match[0];
-    if (keywords.test(src) || keywords.test(context)) {
+    const tag = match[0];
+    const srcMatch = tag.match(/src=["']([^"']+)["']/i);
+    if (!srcMatch) continue;
+    const src = srcMatch[1];
+    if (src.startsWith("data:") || src.includes("logo") || src.includes("icon")) continue;
+    const altMatch = tag.match(/alt=["']([^"']*?)["']/i);
+    const alt = altMatch ? altMatch[1] : "";
+    if (keywords.test(src) || keywords.test(alt) || keywords.test(tag)) {
       const url = resolveUrl(src, baseUrl);
       if (url && /\.(jpg|jpeg|png|webp)/i.test(url)) return url;
     }
   }
-
   return null;
 }
 
 function resolveUrl(src, baseUrl) {
   if (!src || src.startsWith("data:")) return null;
-  try {
-    return new URL(src, baseUrl).href;
-  } catch {
-    return src.startsWith("http") ? src : null;
-  }
+  try { return new URL(src, baseUrl).href; } catch { return src.startsWith("http") ? src : null; }
 }
 
 const handler = async (event) => {
@@ -63,7 +98,7 @@ const handler = async (event) => {
   const timeoutId = setTimeout(() => controller.abort(), 24000);
 
   try {
-    // Step 1: Claude + web_search trova la pagina del produttore o di Vivino
+    // Step 1: Claude + web_search trova la pagina prodotto diretta
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       signal: controller.signal,
@@ -78,18 +113,18 @@ const handler = async (event) => {
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: [{
           role: "user",
-          content: `Cerca su internet la pagina ufficiale di questo vino: "${wineDesc}".
+          content: `Cerca la pagina PRODOTTO SPECIFICA del vino "${name}"${producer ? ` prodotto da "${producer}"` : ""}.
 
-PRIORITÀ DI RICERCA (in ordine):
-1. Prima cerca il sito web ufficiale del produttore "${producer || name}" (es. www.cantina-${(producer||name).toLowerCase().replace(/\s+/g,"-")}.it) e trova la pagina specifica di questo vino o della gamma.
-2. Solo se non trovi il sito del produttore, cerca su Vivino, Tannico, Callmewine, Winebow o altri rivenditori.
+REGOLE IMPORTANTI:
+- Cerca PRIMA il sito web ufficiale del produttore "${producer || name}" e la pagina dedicata a questo vino specifico.
+- Solo se non esiste sito del produttore, cerca su Vivino (vivino.com/wines/...), Tannico, Callmewine o simili.
+- Devi trovare la pagina SPECIFICA del vino (es. /vini/nome-vino), NON una pagina di ricerca o lista (es. /search?q=...).
+- Non importa l'annata, basta che sia lo stesso vino dello stesso produttore.
+- Se trovi più opzioni, preferisci quella del sito del produttore.
 
-Non è necessario che sia della stessa annata, basta che sia lo stesso vino dello stesso produttore.
-
-Restituisci SOLO questo JSON (nient'altro):
+Restituisci SOLO questo JSON:
 {
-  "pageUrl": "URL della pagina del vino (preferibilmente sito produttore)",
-  "imageUrl": "URL diretto immagine se visibile nei risultati (jpg/png/webp), altrimenti null",
+  "pageUrl": "URL pagina prodotto del vino (non pagine di ricerca o listing)",
   "source": "producer" oppure "retailer"
 }`,
         }],
@@ -107,52 +142,55 @@ Restituisci SOLO questo JSON (nient'altro):
     const rawText = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
     console.log("Claude risponde:", rawText.slice(0, 400));
 
-    // Estrai il JSON dalla risposta
     const jsonMatch = rawText.match(/\{[\s\S]*?"pageUrl"[\s\S]*?\}/);
     if (!jsonMatch) {
-      return { statusCode: 404, body: JSON.stringify({ error: "Nessuna pagina trovata per questo vino" }) };
+      return { statusCode: 404, body: JSON.stringify({ error: "Pagina prodotto non trovata" }) };
     }
 
     let parsed;
     try { parsed = JSON.parse(jsonMatch[0]); }
     catch { return { statusCode: 404, body: JSON.stringify({ error: "Risposta non valida" }) }; }
 
-    let imageUrl = parsed.imageUrl || null;
     const pageUrl = parsed.pageUrl || null;
+    console.log("pageUrl:", pageUrl, "source:", parsed.source);
 
-    console.log("pageUrl:", pageUrl, "imageUrl:", imageUrl);
+    if (!pageUrl) {
+      return { statusCode: 404, body: JSON.stringify({ error: "Nessuna pagina trovata per questo vino" }) };
+    }
 
-    // Step 2: se non abbiamo un'immagine diretta, fetch della pagina e estrai og:image
-    if (!imageUrl && pageUrl) {
-      try {
-        const pageController = new AbortController();
-        const pageTimeout = setTimeout(() => pageController.abort(), 8000);
+    // Step 2: fetch della pagina prodotto ed estrai immagine
+    let imageUrl = null;
+    try {
+      const pageController = new AbortController();
+      const pageTimeout = setTimeout(() => pageController.abort(), 8000);
 
-        const pageResp = await fetch(pageUrl, {
-          signal: pageController.signal,
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
-            "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
-          },
-        });
-        clearTimeout(pageTimeout);
+      const pageResp = await fetch(pageUrl, {
+        signal: pageController.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+          "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
+        },
+      });
+      clearTimeout(pageTimeout);
 
-        if (pageResp.ok) {
-          const html = await pageResp.text();
-          imageUrl = extractImageFromHtml(html, pageUrl);
-          console.log("og:image estratto:", imageUrl);
-        }
-      } catch (pageErr) {
-        console.log("Fetch pagina fallito:", pageErr.message);
+      if (pageResp.ok) {
+        const html = await pageResp.text();
+        // Priorità: JSON-LD schema → og:image filtrata → prima img prodotto
+        imageUrl = extractFromJsonLd(html)
+          || extractOgImage(html, pageUrl)
+          || extractProductImg(html, pageUrl);
+        console.log("Immagine estratta:", imageUrl);
       }
+    } catch (pageErr) {
+      console.log("Fetch pagina fallito:", pageErr.message);
     }
 
     if (!imageUrl) {
-      return { statusCode: 404, body: JSON.stringify({ error: "Nessuna immagine trovata per questo vino" }) };
+      return { statusCode: 404, body: JSON.stringify({ error: "Nessuna immagine trovata nella pagina del vino" }) };
     }
 
-    // Step 3: scarica l'immagine e restituisci come base64
+    // Step 3: scarica l'immagine
     const imgController = new AbortController();
     const imgTimeout = setTimeout(() => imgController.abort(), 8000);
 
@@ -161,13 +199,13 @@ Restituisci SOLO questo JSON (nient'altro):
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
-        "Referer": pageUrl || new URL(imageUrl).origin,
+        "Referer": pageUrl,
       },
     });
     clearTimeout(imgTimeout);
 
     if (!imgResp.ok) {
-      return { statusCode: 502, body: JSON.stringify({ error: "Impossibile scaricare l'immagine trovata" }) };
+      return { statusCode: 502, body: JSON.stringify({ error: "Impossibile scaricare l'immagine" }) };
     }
 
     const contentType = imgResp.headers.get("content-type") || "image/jpeg";
@@ -176,7 +214,6 @@ Restituisci SOLO questo JSON (nient'altro):
     }
 
     const arrayBuffer = await imgResp.arrayBuffer();
-    // Limite sicuro: restituisci solo se < 3MB
     if (arrayBuffer.byteLength > 3 * 1024 * 1024) {
       return { statusCode: 413, body: JSON.stringify({ error: "Immagine troppo grande" }) };
     }
@@ -184,13 +221,12 @@ Restituisci SOLO questo JSON (nient'altro):
     const base64 = Buffer.from(arrayBuffer).toString("base64");
     const mimeType = contentType.split(";")[0].trim();
     const dataUrl = `data:${mimeType};base64,${base64}`;
-
     console.log(`Immagine scaricata: ~${Math.round(arrayBuffer.byteLength / 1024)}KB`);
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataUrl }),
+      body: JSON.stringify({ dataUrl, source: parsed.source || "unknown" }),
     };
 
   } catch (err) {
