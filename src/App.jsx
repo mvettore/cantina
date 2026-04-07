@@ -1414,11 +1414,22 @@ export default function App() {
 
               {/* Photo hero — tappabile per lightbox */}
               {editing.photo && (
-                <div onClick={() => setLightboxPhoto(editing.photo)}
-                  style={{height:180,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08",cursor:"zoom-in"}}>
-                  <img src={editing.photo} alt={editing.name} style={{maxHeight:"100%",maxWidth:"100%",objectFit:"contain"}}/>
-                  <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, transparent 40%, rgba(62,42,22,0.9) 100%)"}}/>
-                  <div style={{position:"absolute",bottom:12,right:22}}>
+                <div style={{height:180,overflow:"hidden",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#1a0f08"}}>
+                  <img src={editing.photo} alt={editing.name} onClick={() => setLightboxPhoto(editing.photo)}
+                    style={{maxHeight:"100%",maxWidth:"100%",objectFit:"contain",cursor:"zoom-in"}}/>
+                  <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom, transparent 40%, rgba(62,42,22,0.9) 100%)",pointerEvents:"none"}}/>
+                  <div style={{position:"absolute",bottom:10,left:0,right:0,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 12px"}}>
+                    <button onClick={()=>{
+                      const updated={...editing,photo:null};
+                      saveWines(wines.map(w=>w.id===editing.id?updated:w));
+                      setEditing(updated);
+                      showToast("Foto rimossa");
+                    }} style={{
+                      background:"rgba(0,0,0,0.55)",border:"1px solid rgba(255,255,255,0.2)",
+                      borderRadius:6,color:"rgba(255,255,255,0.7)",cursor:"pointer",
+                      padding:"4px 10px",fontSize:12,fontFamily:"'Cinzel',serif",letterSpacing:0.5,
+                      backdropFilter:"blur(4px)",
+                    }}>✕ rimuovi</button>
                     <span style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:"'Cinzel', serif",letterSpacing:1}}>🔍 tocca per ingrandire</span>
                   </div>
                 </div>

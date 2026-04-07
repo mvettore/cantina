@@ -78,15 +78,19 @@ const handler = async (event) => {
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: [{
           role: "user",
-          content: `Cerca su internet la pagina ufficiale del vino: "${wineDesc}".
-Cerca prima il sito web del produttore "${producer || name}" e la pagina specifica di questo vino.
-In alternativa cerca su Vivino, Tannico, Callmewine, o altre enoteche online.
+          content: `Cerca su internet la pagina ufficiale di questo vino: "${wineDesc}".
+
+PRIORITÀ DI RICERCA (in ordine):
+1. Prima cerca il sito web ufficiale del produttore "${producer || name}" (es. www.cantina-${(producer||name).toLowerCase().replace(/\s+/g,"-")}.it) e trova la pagina specifica di questo vino o della gamma.
+2. Solo se non trovi il sito del produttore, cerca su Vivino, Tannico, Callmewine, Winebow o altri rivenditori.
+
 Non è necessario che sia della stessa annata, basta che sia lo stesso vino dello stesso produttore.
 
 Restituisci SOLO questo JSON (nient'altro):
 {
-  "pageUrl": "URL della pagina del vino sul sito del produttore o dell'enoteca",
-  "imageUrl": "URL diretto immagine se visibile nei risultati (jpg/png/webp), altrimenti null"
+  "pageUrl": "URL della pagina del vino (preferibilmente sito produttore)",
+  "imageUrl": "URL diretto immagine se visibile nei risultati (jpg/png/webp), altrimenti null",
+  "source": "producer" oppure "retailer"
 }`,
         }],
       }),
