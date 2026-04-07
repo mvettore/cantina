@@ -872,28 +872,8 @@ export default function App() {
 
       {/* ── HEADER ── */}
       <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "16px 20px", paddingTop: "calc(16px + env(safe-area-inset-top, 0px))", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, overflow: "hidden", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span style={{ fontSize: 34 }}>🍷</span>
-          <div>
-            {editingName ? (
-              <input autoFocus value={cantinaName}
-                onChange={e => setCantinaName(e.target.value)}
-                onBlur={() => { saveName(cantinaName); setEditingName(false); }}
-                onKeyDown={e => { if (e.key==="Enter"){saveName(cantinaName);setEditingName(false);} if(e.key==="Escape")setEditingName(false); }}
-                style={{ fontFamily:"'Cinzel',serif", fontSize:20, fontWeight:700, color:C.gold,
-                  letterSpacing:2, background:"transparent", border:"none",
-                  borderBottom:`2px solid ${C.gold}`, outline:"none", padding:"2px 0", width:260 }}
-              />
-            ) : (
-              <h1 className="mobile-header-title"
-                onClick={() => setEditingName(true)}
-                style={{ fontFamily:"'Cinzel',serif", fontSize:20, fontWeight:700, color:C.gold,
-                  letterSpacing:3, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
-                {cantinaName}
-                <span style={{fontSize:13,color:C.textFaint,fontWeight:400}}>✎</span>
-              </h1>
-            )}
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <img src="/vinario-logo.png" alt="Vinario" style={{ height: 42, width: "auto", display: "block" }} />
         </div>
       </header>
 

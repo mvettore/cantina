@@ -106,6 +106,7 @@ const handler = async (event) => {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        "anthropic-beta": "web-search-2025-03-05",
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
@@ -140,7 +141,8 @@ Restituisci SOLO questo JSON:
 
     const data = await response.json();
     const rawText = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
-    console.log("Claude risponde:", rawText.slice(0, 400));
+    console.log("stop_reason:", data.stop_reason, "content types:", (data.content||[]).map(b=>b.type).join(","));
+    console.log("Claude risponde:", rawText.slice(0, 500));
 
     const jsonMatch = rawText.match(/\{[\s\S]*?"pageUrl"[\s\S]*?\}/);
     if (!jsonMatch) {
