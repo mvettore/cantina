@@ -1078,15 +1078,15 @@ export default function App() {
                       <button className="btn-danger" onClick={() => setDeleteRackConfirm(rack)}>✕</button>
                     </div>
                   </div>
-                  <div style={{ padding: "20px 22px", overflowX: "auto" }}>
-                    <div style={{ display: "flex", gap: 4, marginBottom: 4, marginLeft: 32 }}>
+                  <div style={{ padding: "20px 22px" }}>
+                    <div style={{ display: "flex", gap: 4, marginBottom: 4, marginLeft: 36 }}>
                       {Array.from({length:rack.cols},(_,c)=>(
-                        <div key={c} style={{ width:56, textAlign:"center", fontSize:15, color:C.textFaint, fontFamily:"'Cinzel', serif", fontWeight:600 }}>{c+1}</div>
+                        <div key={c} style={{ flex:1, textAlign:"center", fontSize:15, color:C.textFaint, fontFamily:"'Cinzel', serif", fontWeight:600 }}>{c+1}</div>
                       ))}
                     </div>
                     {Array.from({length:rack.rows},(_,r)=>(
-                      <div key={r} style={{ display:"flex", alignItems:"center", gap:4, marginBottom:4 }}>
-                        <div style={{ width:28, textAlign:"center", fontSize:16, color:C.textFaint, fontFamily:"'Cinzel', serif", fontWeight:700 }}>{ROW_LABELS[r]}</div>
+                      <div key={r} style={{ display:"flex", alignItems:"stretch", gap:4, marginBottom:4 }}>
+                        <div style={{ width:32, flexShrink:0, textAlign:"center", fontSize:16, color:C.textFaint, fontFamily:"'Cinzel', serif", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center" }}>{ROW_LABELS[r]}</div>
                         {Array.from({length:rack.cols},(_,c)=>{
                           const pos = `${ROW_LABELS[r]}${c+1}`;
                           const wine = getWineAtPosition(rack.id, pos);
@@ -1094,16 +1094,16 @@ export default function App() {
                           return (
                             <div key={c} onClick={()=>wine?(setEditing({...wine}),setViewFromPos(pos),setEnrichData(null),setEnrichError(null),setModal("view")):(setEditing({...emptyWine(),rackSlots:[{rackId:rack.id,positions:[pos]}]}),setScanError(null),setModal("add"))}
                               title={wine?`${wine.name} (${wine.year})`:`Libera — ${pos}`}
-                              style={{ width:56,height:46,borderRadius:7,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",background:wine?`${tc.badge}dd`:C.surface,border:wine?`1px solid ${tc.bar}`:`1px dashed ${C.border}`,color:wine?tc.text:C.textFaint,transition:"all 0.12s",fontSize:10,fontFamily:"'Cinzel', serif",overflow:"hidden" }}
-                              onMouseEnter={e=>{if(wine){e.currentTarget.style.transform="scale(1.06)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.4)";}else{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}}
+                              style={{ flex:1,minWidth:40,height:56,borderRadius:7,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",background:wine?`${tc.badge}dd`:C.surface,border:wine?`1px solid ${tc.bar}`:`1px dashed ${C.border}`,color:wine?tc.text:C.textFaint,transition:"all 0.12s",fontSize:10,fontFamily:"'Cinzel', serif",overflow:"hidden",padding:"2px 3px" }}
+                              onMouseEnter={e=>{if(wine){e.currentTarget.style.transform="scale(1.04)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.4)";}else{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}}
                               onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";e.currentTarget.style.borderColor=wine?tc.bar:C.border;e.currentTarget.style.color=wine?tc.text:C.textFaint;}}
                             >
                               {wine?(
                                 <>
-                                  <span style={{fontWeight:700,lineHeight:1.1,textAlign:"center",padding:"0 2px",maxWidth:"100%",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",fontSize:10,fontFamily:"'Cinzel',serif"}}>{wine.name.length>7?wine.name.slice(0,6)+"…":wine.name}</span>
-                                  <span style={{fontSize:10,marginTop:1,fontFamily:"'Cinzel',serif",opacity:0.9}}>{wine.year}</span>
+                                  <span style={{fontWeight:700,lineHeight:1.2,textAlign:"center",width:"100%",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",fontSize:12,fontFamily:"'Cinzel',serif"}}>{wine.name}</span>
+                                  <span style={{fontSize:11,marginTop:2,fontFamily:"'Cinzel',serif",opacity:0.85}}>{wine.year}</span>
                                 </>
-                              ):<span style={{opacity:0.4,fontSize:11,fontFamily:"'Cinzel',serif"}}>{pos}</span>}
+                              ):<span style={{opacity:0.4,fontSize:12,fontFamily:"'Cinzel',serif"}}>{pos}</span>}
                             </div>
                           );
                         })}
