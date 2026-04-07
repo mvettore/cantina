@@ -103,6 +103,23 @@ function resizeImage(file, maxPx = 900, quality = 0.82) {
   });
 }
 
+// ── Utility: resize a data URL (base64) to JPEG base64 ──
+function resizeDataUrl(dataUrl, maxPx = 900, quality = 0.82) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 // ── Auto-crop label from photo using pixel brightness analysis ──
 // Trova la zona dell'etichetta cercando il rettangolo più "luminoso e uniforme"
 function autoCropLabel(srcDataUrl) {
@@ -329,6 +346,7 @@ export default function App() {
   const [enriching, setEnriching] = useState(false);
   const [enrichData, setEnrichData] = useState(null);
   const [enrichError, setEnrichError] = useState(null);
+  const [fetchingPhoto, setFetchingPhoto] = useState(false);
   const scanInputRef = useRef(null);
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
@@ -587,6 +605,35 @@ export default function App() {
       setEnrichError("Non sono riuscito a recuperare le informazioni. Riprova.");
     } finally {
       setEnriching(false);
+    }
+  };
+
+  // Scarica foto etichetta da internet usando Claude + web_search
+  const handleFetchPhoto = async (wine) => {
+    setFetchingPhoto(true);
+    try {
+      const resp = await fetch("/.netlify/functions/fetch-label-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: wine.name, producer: wine.producer, year: wine.year }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: `Errore ${resp.status}` }));
+        throw new Error(err.error || `Errore ${resp.status}`);
+      }
+      const { dataUrl } = await resp.json();
+      const resized = await resizeDataUrl(dataUrl, 1800, 0.93);
+      const cropped = await autoCropLabel(resized);
+      const photo = cropped || resized;
+      const updated = { ...wine, photo };
+      saveWines(wines.map(w => w.id === wine.id ? updated : w));
+      setEditing(updated);
+      showToast(cropped ? "✨ Foto scaricata e ritagliata!" : "✨ Foto etichetta scaricata!");
+    } catch (err) {
+      console.error("fetchPhoto:", err);
+      showToast("Non ho trovato un'immagine per questo vino");
+    } finally {
+      setFetchingPhoto(false);
     }
   };
 
@@ -1597,6 +1644,19 @@ export default function App() {
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(180,60,60,0.15)"}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                   >🗑</button>
+                  {/* CERCA FOTO */}
+                  <button onClick={()=>handleFetchPhoto(editing)} disabled={fetchingPhoto} title="Cerca foto etichetta online"
+                    style={{flex:"0 0 auto",background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,
+                      color:fetchingPhoto?C.gold:C.textMuted,cursor:fetchingPhoto?"not-allowed":"pointer",
+                      padding:"11px 13px",fontSize:18,lineHeight:1,
+                      transition:"background 0.15s, color 0.15s",}}
+                    onMouseEnter={e=>{if(!fetchingPhoto){e.currentTarget.style.background="rgba(201,149,58,0.1)";e.currentTarget.style.color=C.gold;}}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=fetchingPhoto?C.gold:C.textMuted;}}
+                  >
+                    {fetchingPhoto
+                      ? <div style={{width:18,height:18,border:"2px solid rgba(201,149,58,0.3)",borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+                      : "🖼"}
+                  </button>
                   {/* BEVI */}
                   {editing.quantity > 0 && (
                     <button onClick={()=>handleDrinkOne(editing)} title="Bevi una bottiglia"
