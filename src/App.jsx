@@ -1486,7 +1486,13 @@ export default function App() {
                 </div>
                 <div>
                   <label style={labelStyle}>Quantità (bt)</label>
-                  <input style={inputStyle} type="number" min="0" value={editing.quantity} onChange={e=>setEditing(v=>({...v,quantity:parseInt(e.target.value)||0}))}/>
+                  <div style={{display:"flex",alignItems:"center",gap:0,background:C.bg,border:`1px solid ${C.border}`,borderRadius:7,overflow:"hidden"}}>
+                    <button type="button" onClick={()=>setEditing(v=>({...v,quantity:Math.max(0,v.quantity-1)}))}
+                      style={{padding:"11px 18px",background:"none",border:"none",color:C.gold,fontSize:22,cursor:"pointer",lineHeight:1,fontFamily:"monospace"}}>−</button>
+                    <span style={{flex:1,textAlign:"center",color:C.text,fontFamily:"'Cinzel',serif",fontSize:18,fontWeight:700}}>{editing.quantity}</span>
+                    <button type="button" onClick={()=>setEditing(v=>({...v,quantity:v.quantity+1}))}
+                      style={{padding:"11px 18px",background:"none",border:"none",color:C.gold,fontSize:22,cursor:"pointer",lineHeight:1,fontFamily:"monospace"}}>+</button>
+                  </div>
                 </div>
                 <div>
                   <label style={labelStyle}>Prezzo (€)</label>
