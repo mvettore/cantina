@@ -353,9 +353,16 @@ export default function App() {
       let loadedWines = null;
       if (data) {
         if (data.wines) {
-          loadedWines = migrateWines(data.wines);
+          const cloudWines = migrateWines(data.wines);
+          // Merge: preserva i vini presenti solo in locale (mai arrivati al cloud)
+          const localWines = loadLocal(STORAGE_KEY, []);
+          const cloudIds = new Set(cloudWines.map(w => w.id));
+          const localOnly = localWines.filter(w => !cloudIds.has(w.id));
+          loadedWines = localOnly.length > 0 ? [...cloudWines, ...localOnly] : cloudWines;
           setWines(loadedWines);
           saveLocal(STORAGE_KEY, loadedWines);
+          // Se ci sono vini local-only, ripushali al cloud subito
+          if (localOnly.length > 0) cloudSave({ wines: loadedWines });
           // Aggiorna nextWineId in base agli id cloud (evita collisioni)
           const maxId = Math.max(...loadedWines.map(w => w.id), 99);
           if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
