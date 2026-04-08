@@ -60,6 +60,18 @@ function loadLocal(key, fallback) {
 }
 function saveLocal(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 
+// ── Backup automatico degli ultimi 5 snapshot vini ──
+const BACKUP_KEY = "cantina-wines-backup-v1";
+const BACKUP_MAX = 5;
+function saveWinesBackup(wines) {
+  try {
+    const snapshots = loadLocal(BACKUP_KEY, []);
+    snapshots.push({ ts: new Date().toISOString(), count: wines.length, wines });
+    if (snapshots.length > BACKUP_MAX) snapshots.splice(0, snapshots.length - BACKUP_MAX);
+    localStorage.setItem(BACKUP_KEY, JSON.stringify(snapshots));
+  } catch {}
+}
+
 // ── Cloud sync via Netlify Function ──
 const IS_NETLIFY = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
 
@@ -412,6 +424,7 @@ export default function App() {
       seen.add(wine.id);
       return true;
     }).reverse();
+    saveWinesBackup(deduped);
     setWines(deduped);
     saveLocal(STORAGE_KEY, deduped);
     cloudSave({ wines: deduped });
