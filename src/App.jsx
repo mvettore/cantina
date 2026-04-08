@@ -355,7 +355,7 @@ export default function App() {
         if (stale.length > 0) {
           showToast(`🔄 Aggiornamento analisi per ${stale.length} vino/i…`);
           stale.forEach((wine, i) => {
-            setTimeout(() => autoEnrich(wine, loadedWines), i * 3000); // 3s di gap tra una e l'altra
+            setTimeout(() => autoEnrich(wine), i * 3000); // 3s di gap tra una e l'altra
           });
         }
       }
@@ -404,7 +404,18 @@ export default function App() {
     </div>
   ) : null;
 
-  const saveWines = (w) => { setWines(w); saveLocal(STORAGE_KEY, w); cloudSave({ wines: w }); };
+  const saveWines = (w) => {
+    // Deduplicazione difensiva: in caso di id doppi, tieni l'ultimo inserito
+    const seen = new Set();
+    const deduped = [...w].reverse().filter(wine => {
+      if (seen.has(wine.id)) return false;
+      seen.add(wine.id);
+      return true;
+    }).reverse();
+    setWines(deduped);
+    saveLocal(STORAGE_KEY, deduped);
+    cloudSave({ wines: deduped });
+  };
   const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY,  r); cloudSave({ racks: r }); };
   const saveLog   = (l) => { setLog(l);   saveLocal(LOG_KEY,   l); cloudSave({ log:   l }); };
   const saveName  = (n) => { setCantinaName(n); saveLocal('cantina-name', n); };
@@ -643,11 +654,11 @@ export default function App() {
     if (!editing.region) { showToast("Seleziona una regione"); return; }
     if (modal === "add") {
       const wine = { ...editing, id: nextWineId.current++ };
-      const newList = [...wines, wine];
+      const newList = [...wines.filter(w => w.id !== wine.id), wine];
       saveWines(newList);
       setModal(null);
       showToast(`"${wine.name}" aggiunto — analisi in corso…`);
-      setTimeout(() => autoEnrich(wine, newList), 500);
+      setTimeout(() => autoEnrich(wine), 500);
     } else {
       saveWines(wines.map(w => w.id === editing.id ? editing : w));
       showToast(`"${editing.name}" aggiornato`);
@@ -656,7 +667,7 @@ export default function App() {
   };
 
   // Analisi automatica in background senza bloccare la UI
-  const autoEnrich = async (wine, baseList) => {
+  const autoEnrich = async (wine) => {
     try {
       const resp = await fetch("/.netlify/functions/enrich-wine", {
         method: "POST",
@@ -670,8 +681,12 @@ export default function App() {
       const data = await resp.json();
       const enrichment = { ...data, enrichedAt: new Date().toISOString() };
       const updated = { ...wine, enrichment };
-      const updatedList = baseList.map(w => w.id === wine.id ? updated : w);
-      saveWines(updatedList);
+      setWines(current => {
+        const newList = current.map(w => w.id === wine.id ? updated : w);
+        saveLocal(STORAGE_KEY, newList);
+        cloudSave({ wines: newList });
+        return newList;
+      });
       showToast(`✨ Analisi di "${wine.name}" completata`);
     } catch { /* silenzioso */ }
   };
