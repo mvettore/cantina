@@ -517,11 +517,12 @@ export default function App() {
 
   // Bevi una bottiglia: apre il selettore di posizione se ne ha, altrimenti decrementa
   const handleDrinkOne = (wine) => {
-    const hasPositions = (wine.rackSlots||[]).some(s => (s.positions||[]).length > 0);
-    if (hasPositions) {
-      setDrinkModal(wine); // apri selettore posizione
+    const allPositions = (wine.rackSlots||[]).flatMap(s => s.positions||[]);
+    // Se c'è una sola posizione (o nessuna), non serve chiedere quale svuotare
+    if (allPositions.length > 1) {
+      setDrinkModal(wine);
     } else {
-      commitDrink(wine, null);
+      commitDrink(wine, allPositions[0] || null);
     }
   };
 
