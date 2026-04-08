@@ -1647,14 +1647,14 @@ export default function App() {
                     onMouseEnter={e=>e.currentTarget.style.background="rgba(180,60,60,0.15)"}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                   >🗑</button>
-                  {/* BEVI */}
+                  {/* DEGUSTA */}
                   {editing.quantity > 0 && (
-                    <button onClick={()=>handleDrinkOne(editing)} title="Bevi una bottiglia"
+                    <button onClick={()=>handleDrinkOne(editing)} title="Degusta una bottiglia"
                       style={{flex:"1 1 0",background:"linear-gradient(135deg, #3a1a5a, #7a3a9a)",
                         color:"#f0d0ff",border:"none",borderRadius:8,padding:"11px 8px",cursor:"pointer",
                         fontFamily:"'Cinzel', serif",fontSize:13,letterSpacing:1,fontWeight:700,
                         whiteSpace:"nowrap",textAlign:"center",
-                      }}>🍷 BEVI</button>
+                      }}>🍷 DEGUSTA</button>
                   )}
                   {/* CHIUDI */}
                   <button onClick={()=>{setModal(null);setEnrichData(null);setEnrichError(null);}}
@@ -1983,12 +1983,6 @@ export default function App() {
                   <label style={labelStyle}>Data</label>
                   <input type="date" style={inputStyle} value={logEntry.date}
                     onChange={e => setLogEntry(v => ({ ...v, date: e.target.value }))} />
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 26 }}>
-                  <input type="checkbox" id="finished" checked={logEntry.finished}
-                    onChange={e => setLogEntry(v => ({ ...v, finished: e.target.checked }))}
-                    style={{ width: 18, height: 18, cursor: "pointer", accentColor: C.gold }} />
-                  <label htmlFor="finished" style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>Bottiglia finita</label>
                 </div>
                 <div>
                   <label style={labelStyle}>Occasione</label>
