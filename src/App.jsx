@@ -832,7 +832,7 @@ export default function App() {
         /* scan button */
         .btn-scan {
           display: flex; align-items: center; justify-content: center; gap: 8px;
-          width: 100%; padding: 10px 12px; border-radius: 8px; cursor: pointer;
+          min-width: 0; padding: 10px 12px; border-radius: 8px; cursor: pointer;
           font-family: 'Cinzel', serif; font-size: 13px; font-weight: 600; letter-spacing: 1px;
           border: 2px dashed ${C.gold};
           background: rgba(201,149,58,0.07);
