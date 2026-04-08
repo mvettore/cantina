@@ -427,10 +427,7 @@ export default function App() {
           loadedWines = mergeWines(localWines, cloudWines);
           setWines(loadedWines);
           saveLocal(STORAGE_KEY, loadedWines);
-          // Se il merge differisce dal cloud, ripusha (vini locali più recenti o local-only)
-          if (loadedWines.length !== cloudWines.length ||
-              loadedWines.some((w, i) => w !== cloudWines[i]))
-            cloudSave({ wines: loadedWines });
+          cloudSave({ wines: loadedWines }); // allinea cloud al merged
           const maxId = Math.max(...loadedWines.map(w => w.id), 99);
           if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
         }
@@ -461,17 +458,14 @@ export default function App() {
       if (!data) return;
       if (data.wines) {
         const cloudWines = migrateWines(data.wines);
-        setWines(current => {
-          const merged = mergeWines(current, cloudWines);
-          const maxId = Math.max(...merged.map(w => w.id), 99);
-          if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
-          saveLocal(STORAGE_KEY, merged);
-          // Se il merge differisce dal cloud, ripusha
-          if (merged.length !== cloudWines.length ||
-              merged.some((w, i) => w !== cloudWines[i]))
-            cloudSave({ wines: merged });
-          return merged;
-        });
+        // Legge localStorage (sempre aggiornato da saveWines) come base locale
+        const localWines = loadLocal(STORAGE_KEY, []);
+        const merged = mergeWines(localWines, cloudWines);
+        const maxId = Math.max(...merged.map(w => w.id), 99);
+        if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
+        setWines(merged);
+        saveLocal(STORAGE_KEY, merged);
+        cloudSave({ wines: merged }); // debounced — il cloud converge al merged
       }
       if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
       if (data.log)   { setLog(data.log);     saveLocal(LOG_KEY, data.log); }
