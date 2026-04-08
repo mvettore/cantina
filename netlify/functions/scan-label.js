@@ -5,7 +5,7 @@ const handler = async (event) => {
   try { body = JSON.parse(event.body); }
   catch { return { statusCode: 400, body: JSON.stringify({ error: "Body non valido" }) }; }
 
-  const { base64, mediaType } = body;
+  const { base64, mediaType, base64_2, mediaType_2 } = body;
   if (!base64 || !mediaType) return { statusCode: 400, body: JSON.stringify({ error: "Campi mancanti" }) };
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -13,7 +13,8 @@ const handler = async (event) => {
 
   console.log(`Immagine: ~${Math.round(base64.length * 0.75 / 1024)}KB`);
 
-  const prompt = `Sei un esperto di vini. Leggi questa etichetta di vino e restituisci SOLO questo JSON (niente altro testo):
+  const hasSecond = !!(base64_2 && mediaType_2);
+  const prompt = `Sei un esperto di vini. Leggi quest${hasSecond ? "e etichette" : "a etichetta"} di vino (${hasSecond ? "fronte e retro" : "fronte"}) e restituisci SOLO questo JSON (niente altro testo):
 {
   "name": "nome commerciale del vino",
   "producer": "nome cantina o produttore",
@@ -45,6 +46,7 @@ Usa null per i campi non leggibili.`;
           role: "user",
           content: [
             { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+            ...(hasSecond ? [{ type: "image", source: { type: "base64", media_type: mediaType_2, data: base64_2 } }] : []),
             { type: "text", text: prompt },
           ],
         }],

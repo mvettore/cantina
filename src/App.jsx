@@ -186,19 +186,20 @@ function autoCropLabel(srcDataUrl) {
 // ── Call backend proxy → structured JSON ──
 // In locale (npm run dev) chiama l'API Anthropic direttamente.
 // In produzione (Netlify) chiama /api/scan-label che fa da proxy sicuro.
-async function scanLabel(base64DataUrl) {
+async function scanLabel(base64DataUrl, base64DataUrl2 = null) {
   const base64    = base64DataUrl.split(",")[1];
   const mediaType = base64DataUrl.split(";")[0].split(":")[1] || "image/jpeg";
+  const base64_2    = base64DataUrl2 ? base64DataUrl2.split(",")[1] : null;
+  const mediaType_2 = base64DataUrl2 ? (base64DataUrl2.split(";")[0].split(":")[1] || "image/jpeg") : null;
 
   const isNetlify = window.location.hostname !== "localhost" &&
                     window.location.hostname !== "127.0.0.1";
 
   if (isNetlify) {
-    // ── Produzione: chiama la Netlify Function (chiave API sicura sul server) ──
     const resp = await fetch("/.netlify/functions/scan-label", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ base64, mediaType }),
+      body: JSON.stringify({ base64, mediaType, base64_2, mediaType_2 }),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -206,35 +207,24 @@ async function scanLabel(base64DataUrl) {
     }
     return await resp.json();
   } else {
-    // ── Sviluppo locale: chiama Anthropic direttamente (vedi .env.local) ──
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("Imposta VITE_ANTHROPIC_API_KEY in .env.local");
 
-    const prompt = `Sei un esperto enologo. Analizza questa etichetta di vino.
-Usa la ricerca web per trovare informazioni aggiuntive se necessario.
+    const prompt = `Sei un esperto enologo. Analizza quest${base64_2 ? "e etichette" : "a etichetta"} di vino.
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questi campi:
 { "name": "...", "producer": "...", "year": 2019, "type": "Rosso|Bianco|Rosato|Spumante|Dolce|Passito", "region": "...", "grape": "...", "notes": "...", "price": null }
 Se un campo non è determinabile usa null.`;
 
+    const images = [
+      { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+      ...(base64_2 ? [{ type: "image", source: { type: "base64", media_type: mediaType_2, data: base64_2 } }] : []),
+      { type: "text", text: prompt },
+    ];
+
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-            { type: "text", text: prompt },
-          ],
-        }],
-      }),
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: images }] }),
     });
     if (!resp.ok) throw new Error(`API error ${resp.status}`);
     const data = await resp.json();
@@ -335,8 +325,10 @@ export default function App() {
   const [enrichData, setEnrichData] = useState(null);
   const [enrichError, setEnrichError] = useState(null);
   const scanInputRef    = useRef(null);
+  const secondPhotoRef  = useRef(null);
   const addPhotoRef     = useRef(null);
   const tastingPhotoRef = useRef(null);
+  const [firstPhotoData, setFirstPhotoData] = useState(null); // {scanDataUrl, hiResDataUrl}
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
   const [searchBarVisible, setSearchBarVisible] = useState(true);
@@ -461,47 +453,80 @@ export default function App() {
   const totalBottles = wines.reduce((s, w) => s + w.quantity, 0);
   const totalValue   = wines.reduce((s, w) => s + w.quantity * (parseFloat(w.price) || 0), 0);
 
-  // ── Handle label scan ──
+  // ── Esegue OCR su 1 o 2 foto e aggiorna il form ──
+  const doScanAndFill = async (photo1, photo2 = null) => {
+    const info = await scanLabel(photo1.scanDataUrl, photo2?.scanDataUrl || null);
+    const cropped1 = await autoCropLabel(photo1.hiResDataUrl);
+    const thumb1 = cropped1 || photo1.hiResDataUrl;
+    const photos = [thumb1];
+    if (photo2) {
+      const cropped2 = await autoCropLabel(photo2.hiResDataUrl);
+      photos.push(cropped2 || photo2.hiResDataUrl);
+    }
+    setEditing(prev => ({
+      ...prev,
+      name:         info.name         || prev.name,
+      denomination: info.denomination || prev.denomination || "",
+      producer:     info.producer     || prev.producer,
+      year:         info.year         || prev.year,
+      type:         WINE_TYPES.includes(info.type) ? info.type : prev.type,
+      region:       info.region       || prev.region,
+      grape:        info.grape        || prev.grape,
+      notes:        info.notes        || prev.notes,
+      price:        info.price != null ? String(info.price) : prev.price,
+      photos:       [...photos, ...(prev.photos||[]).slice(photos.length)],
+    }));
+    showToast(photo2 ? "✨ Etichette riconosciute!" : (cropped1 ? "✨ Etichetta riconosciuta e ritagliata!" : "✨ Etichetta riconosciuta!"));
+  };
+
+  // ── Prima foto: ridimensiona e mostra il prompt per la seconda ──
   const handleScanFile = async (file) => {
     if (!file) return;
     setScanError(null);
     setScanning(true);
     try {
-      // Ridimensiona aggressivamente: max 350px, qualità 55%
-      // Il corpo della richiesta deve stare sotto i 4MB di Netlify
-      // Per la scansione API: immagine piccola (velocità)
-      const scanDataUrl = await resizeImage(file, 700, 0.82);
-      // Thumbnail ad alta qualità sull'originale
+      const scanDataUrl  = await resizeImage(file, 700, 0.82);
       const hiResDataUrl = await resizeImage(file, 1800, 0.93);
+      setFirstPhotoData({ scanDataUrl, hiResDataUrl });
+    } catch (err) {
+      console.error(err);
+      setScanError("Non sono riuscito a elaborare la foto. Riprova.");
+    } finally {
+      setScanning(false);
+    }
+  };
 
-      const info = await scanLabel(scanDataUrl);
+  // ── Seconda foto scattata: scansiona entrambe ──
+  const handleSecondPhoto = async (file) => {
+    if (!file || !firstPhotoData) return;
+    setScanError(null);
+    setScanning(true);
+    try {
+      const scanDataUrl2  = await resizeImage(file, 700, 0.82);
+      const hiResDataUrl2 = await resizeImage(file, 1800, 0.93);
+      await doScanAndFill(firstPhotoData, { scanDataUrl: scanDataUrl2, hiResDataUrl: hiResDataUrl2 });
+    } catch (err) {
+      console.error(err);
+      setScanError("Non sono riuscito a leggere le etichette. Riprova.");
+    } finally {
+      setScanning(false);
+      setFirstPhotoData(null);
+    }
+  };
 
-      // Ritaglia l'etichetta usando le coordinate restituite dall'API
-      // Ritaglia automaticamente l'etichetta analizzando i pixel
-      const croppedThumb = await autoCropLabel(hiResDataUrl);
-      console.log("Auto-crop:", croppedThumb ? "ritagliato" : "fallback all'intera foto");
-      const thumb = croppedThumb || hiResDataUrl;
-
-      setEditing(prev => ({
-        ...prev,
-        name:        info.name        || prev.name,
-        denomination: info.denomination || prev.denomination || "",
-        producer:    info.producer    || prev.producer,
-        year:     info.year     || prev.year,
-        type:     WINE_TYPES.includes(info.type) ? info.type : prev.type,
-        region:   info.region   || prev.region,
-        grape:    info.grape    || prev.grape,
-        notes:    info.notes    || prev.notes,
-        price:    info.price != null ? String(info.price) : prev.price,
-        // La foto scansionata diventa sempre la prima (etichetta principale)
-        photos: [thumb, ...(prev.photos||[]).slice(1)],
-      }));
-      showToast(croppedThumb ? "✨ Etichetta riconosciuta e ritagliata!" : "✨ Etichetta riconosciuta!");
+  // ── Salta la seconda foto: scansiona solo la prima ──
+  const handleSkipSecondPhoto = async () => {
+    if (!firstPhotoData) return;
+    setScanError(null);
+    setScanning(true);
+    try {
+      await doScanAndFill(firstPhotoData, null);
     } catch (err) {
       console.error(err);
       setScanError("Non sono riuscito a leggere l'etichetta. Riprova con una foto più nitida.");
     } finally {
       setScanning(false);
+      setFirstPhotoData(null);
     }
   };
 
@@ -1235,34 +1260,57 @@ export default function App() {
                   </div>
                 )}
 
-                <div style={{display:"flex",gap:8}}>
-                  {/* Scansiona etichetta principale (OCR) */}
-                  <input ref={scanInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
-                    onChange={e => { const f=e.target.files?.[0]; if(f) handleScanFile(f); e.target.value=""; }} />
-                  <button className="btn-scan" disabled={scanning} onClick={()=>scanInputRef.current?.click()} style={{flex:1}}>
-                    {scanning ? (
-                      <><div className="spinner"/><span>Analisi in corso…</span></>
-                    ) : (
-                      <><span style={{fontSize:18}}>📷</span><span>{(editing.photos||[]).length>0?"Scansiona di nuovo":"Fotografa etichetta"}</span></>
-                    )}
-                  </button>
+                {/* Input nascosti */}
+                <input ref={scanInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
+                  onChange={e => { const f=e.target.files?.[0]; if(f) handleScanFile(f); e.target.value=""; }} />
+                <input ref={secondPhotoRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
+                  onChange={e => { const f=e.target.files?.[0]; if(f) handleSecondPhoto(f); e.target.value=""; }} />
+                <input ref={addPhotoRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
+                  onChange={e => { const f=e.target.files?.[0]; if(f) handleAddPhoto(f); e.target.value=""; }} />
 
-                  {/* Aggiungi foto extra (nessun OCR) */}
-                  <input ref={addPhotoRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
-                    onChange={e => { const f=e.target.files?.[0]; if(f) handleAddPhoto(f); e.target.value=""; }} />
-                  <button className="btn-scan" onClick={()=>addPhotoRef.current?.click()} title="Aggiungi altra foto"
-                    style={{flex:"0 0 auto",padding:"0 14px",fontSize:18}}>＋</button>
-                </div>
+                {/* Prompt seconda foto */}
+                {firstPhotoData && !scanning ? (
+                  <div style={{background:C.surface2,borderRadius:8,padding:"14px 12px",border:`1px solid ${C.border}`}}>
+                    <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}>
+                      <img src={firstPhotoData.hiResDataUrl} alt="fronte"
+                        style={{width:56,height:72,objectFit:"cover",borderRadius:6,border:`1px solid ${C.border}`,flexShrink:0}}/>
+                      <div>
+                        <p style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.text,marginBottom:4}}>Foto fronte acquisita.</p>
+                        <p style={{fontSize:12,color:C.textMuted}}>Vuoi fotografare anche il retro per un riconoscimento più preciso?</p>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button className="btn-scan" onClick={()=>secondPhotoRef.current?.click()} style={{flex:1}}>
+                        <span style={{fontSize:16}}>📷</span><span>Fotografa retro</span>
+                      </button>
+                      <button className="btn-scan" onClick={handleSkipSecondPhoto} style={{flex:"0 0 auto",padding:"0 14px",fontSize:13}}>
+                        Salta →
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{display:"flex",gap:8}}>
+                    <button className="btn-scan" disabled={scanning} onClick={()=>scanInputRef.current?.click()} style={{flex:1}}>
+                      {scanning ? (
+                        <><div className="spinner"/><span>Analisi in corso…</span></>
+                      ) : (
+                        <><span style={{fontSize:18}}>📷</span><span>{(editing.photos||[]).length>0?"Scansiona di nuovo":"Fotografa etichetta"}</span></>
+                      )}
+                    </button>
+                    <button className="btn-scan" onClick={()=>addPhotoRef.current?.click()} title="Aggiungi altra foto"
+                      style={{flex:"0 0 auto",padding:"0 14px",fontSize:18}}>＋</button>
+                  </div>
+                )}
 
                 {scanning && (
-                  <p style={{fontSize:13,color:C.textMuted,marginTop:10,textAlign:"center",fontStyle:"italic"}}>
-                    Sto leggendo l'etichetta e cercando informazioni sul vino…
+                  <p style={{fontSize:13,color:C.textMuted,marginTop:8,textAlign:"center",fontStyle:"italic"}}>
+                    {firstPhotoData ? "Analisi di entrambe le foto…" : "Sto leggendo l'etichetta…"}
                   </p>
                 )}
                 {scanError && (
-                  <p style={{fontSize:13,color:"#c07070",marginTop:10,textAlign:"center"}}>{scanError}</p>
+                  <p style={{fontSize:13,color:"#c07070",marginTop:8,textAlign:"center"}}>{scanError}</p>
                 )}
-                {!scanning && !scanError && (
+                {!scanning && !scanError && !firstPhotoData && (
                   <p style={{fontSize:12,color:C.textFaint,marginTop:8,textAlign:"center"}}>
                     Fotografa l'etichetta per compilare automaticamente · usa ＋ per aggiungere altre foto
                   </p>
