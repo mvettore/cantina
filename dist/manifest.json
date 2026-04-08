@@ -1,6 +1,6 @@
 {
-  "name": "Cantina Vettorello",
-  "short_name": "Cantina",
+  "name": "Vinario",
+  "short_name": "Vinario",
   "description": "Il mio catalogo vini personale",
   "start_url": "/",
   "display": "standalone",

@@ -352,7 +352,14 @@ export default function App() {
     cloudLoad().then(data => {
       let loadedWines = null;
       if (data) {
-        if (data.wines) { loadedWines = migrateWines(data.wines); setWines(loadedWines); saveLocal(STORAGE_KEY, loadedWines); }
+        if (data.wines) {
+          loadedWines = migrateWines(data.wines);
+          setWines(loadedWines);
+          saveLocal(STORAGE_KEY, loadedWines);
+          // Aggiorna nextWineId in base agli id cloud (evita collisioni)
+          const maxId = Math.max(...loadedWines.map(w => w.id), 99);
+          if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
+        }
         if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
         if (data.log)   { setLog(data.log);    saveLocal(LOG_KEY, data.log); }
       }
@@ -378,7 +385,21 @@ export default function App() {
     if (!IS_NETLIFY) return Promise.resolve();
     return cloudLoad().then(data => {
       if (!data) return;
-      if (data.wines) { setWines(migrateWines(data.wines)); saveLocal(STORAGE_KEY, data.wines); }
+      if (data.wines) {
+        const cloudWines = migrateWines(data.wines);
+        setWines(current => {
+          // Merge: usa il cloud come base, ma preserva i vini locali il cui
+          // cloudSave potrebbe non essere ancora arrivato al server
+          const cloudIds = new Set(cloudWines.map(w => w.id));
+          const localOnly = current.filter(w => !cloudIds.has(w.id));
+          const merged = localOnly.length > 0 ? [...cloudWines, ...localOnly] : cloudWines;
+          // Aggiorna nextWineId in base al massimo id noto
+          const maxId = Math.max(...merged.map(w => w.id), 99);
+          if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
+          saveLocal(STORAGE_KEY, merged);
+          return merged;
+        });
+      }
       if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
       if (data.log)   { setLog(data.log);     saveLocal(LOG_KEY, data.log); }
     });
@@ -650,8 +671,12 @@ export default function App() {
       setEnrichData(enrichment);
       // Salva automaticamente l'analisi nella bottiglia
       const updated = { ...wine, enrichment };
-      const updatedList = wines.map(w => w.id === wine.id ? updated : w);
-      saveWines(updatedList);
+      setWines(current => {
+        const newList = current.map(w => w.id === wine.id ? updated : w);
+        saveLocal(STORAGE_KEY, newList);
+        cloudSave({ wines: newList });
+        return newList;
+      });
       setEditing(updated);
       showToast("Analisi salvata nella scheda");
     } catch (err) {
