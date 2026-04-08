@@ -98,6 +98,21 @@ function saveWinesBackup(wines) {
   } catch {}
 }
 
+// ── Merge vini: last-write-wins su lastModified, cloud aggiunge nuovi vini ──
+function mergeWines(localWines, cloudWines) {
+  const cloudMap = new Map(cloudWines.map(w => [w.id, w]));
+  // Per vini presenti in entrambi, vince chi ha lastModified più recente
+  const merged = localWines.map(lw => {
+    const cw = cloudMap.get(lw.id);
+    if (!cw) return lw; // solo locale → tieni locale
+    return (cw.lastModified || 0) > (lw.lastModified || 0) ? cw : lw;
+  });
+  // Aggiungi vini presenti solo nel cloud (da un altro dispositivo)
+  const localIds = new Set(localWines.map(w => w.id));
+  cloudWines.forEach(cw => { if (!localIds.has(cw.id)) merged.push(cw); });
+  return merged;
+}
+
 // ── Cloud sync via Netlify Function ──
 const IS_NETLIFY = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
 
@@ -408,16 +423,14 @@ export default function App() {
       if (data) {
         if (data.wines) {
           const cloudWines = migrateWines(data.wines);
-          // Merge: preserva i vini presenti solo in locale (mai arrivati al cloud)
           const localWines = loadLocal(STORAGE_KEY, []);
-          const cloudIds = new Set(cloudWines.map(w => w.id));
-          const localOnly = localWines.filter(w => !cloudIds.has(w.id));
-          loadedWines = localOnly.length > 0 ? [...cloudWines, ...localOnly] : cloudWines;
+          loadedWines = mergeWines(localWines, cloudWines);
           setWines(loadedWines);
           saveLocal(STORAGE_KEY, loadedWines);
-          // Se ci sono vini local-only, ripushali al cloud subito
-          if (localOnly.length > 0) cloudSave({ wines: loadedWines });
-          // Aggiorna nextWineId in base agli id cloud (evita collisioni)
+          // Se il merge differisce dal cloud, ripusha (vini locali più recenti o local-only)
+          if (loadedWines.length !== cloudWines.length ||
+              loadedWines.some((w, i) => w !== cloudWines[i]))
+            cloudSave({ wines: loadedWines });
           const maxId = Math.max(...loadedWines.map(w => w.id), 99);
           if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
         }
@@ -449,17 +462,14 @@ export default function App() {
       if (data.wines) {
         const cloudWines = migrateWines(data.wines);
         setWines(current => {
-          // Merge: usa il cloud come base, ma preserva i vini locali il cui
-          // cloudSave potrebbe non essere ancora arrivato al server
-          const cloudIds = new Set(cloudWines.map(w => w.id));
-          const localOnly = current.filter(w => !cloudIds.has(w.id));
-          const merged = localOnly.length > 0 ? [...cloudWines, ...localOnly] : cloudWines;
-          // Aggiorna nextWineId in base al massimo id noto
+          const merged = mergeWines(current, cloudWines);
           const maxId = Math.max(...merged.map(w => w.id), 99);
           if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
           saveLocal(STORAGE_KEY, merged);
-          // Se ci sono vini local-only, ripushali al cloud subito
-          if (localOnly.length > 0) cloudSave({ wines: merged });
+          // Se il merge differisce dal cloud, ripusha
+          if (merged.length !== cloudWines.length ||
+              merged.some((w, i) => w !== cloudWines[i]))
+            cloudSave({ wines: merged });
           return merged;
         });
       }
@@ -755,14 +765,15 @@ export default function App() {
     if (!editing.type) { showToast("Seleziona una tipologia"); return; }
     if (!editing.region) { showToast("Seleziona una regione"); return; }
     if (modal === "add") {
-      const wine = { ...editing, id: nextWineId.current++ };
+      const wine = { ...editing, id: nextWineId.current++, lastModified: Date.now() };
       const newList = [...wines.filter(w => w.id !== wine.id), wine];
       saveWines(newList);
       setModal(null);
       showToast(`"${wine.name}" aggiunto — analisi in corso…`);
       setTimeout(() => autoEnrich(wine), 500);
     } else {
-      saveWines(wines.map(w => w.id === editing.id ? editing : w));
+      const updated = { ...editing, lastModified: Date.now() };
+      saveWines(wines.map(w => w.id === editing.id ? updated : w));
       showToast(`"${editing.name}" aggiornato`);
       setModal(null);
     }
