@@ -99,15 +99,19 @@ function saveWinesBackup(wines) {
 }
 
 // ── Merge vini: last-write-wins su lastModified, cloud aggiunge nuovi vini ──
+// Le foto vengono sempre preservate dal dispositivo che le ha, indipendentemente
+// da chi "vince" sugli altri campi (es. Mac aggiorna quantità ma non ha foto).
 function mergeWines(localWines, cloudWines) {
   const cloudMap = new Map(cloudWines.map(w => [w.id, w]));
-  // Per vini presenti in entrambi, vince chi ha lastModified più recente
   const merged = localWines.map(lw => {
     const cw = cloudMap.get(lw.id);
-    if (!cw) return lw; // solo locale → tieni locale
-    return (cw.lastModified || 0) > (lw.lastModified || 0) ? cw : lw;
+    if (!cw) return lw;
+    const winner = (cw.lastModified || 0) > (lw.lastModified || 0) ? cw : lw;
+    const loser  = winner === cw ? lw : cw;
+    // Foto: usa quelle del winner se ne ha, altrimenti quelle del loser
+    const photos = (winner.photos?.length > 0) ? winner.photos : (loser.photos || []);
+    return { ...winner, photos };
   });
-  // Aggiungi vini presenti solo nel cloud (da un altro dispositivo)
   const localIds = new Set(localWines.map(w => w.id));
   cloudWines.forEach(cw => { if (!localIds.has(cw.id)) merged.push(cw); });
   return merged;
