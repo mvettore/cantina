@@ -6,7 +6,8 @@ function getVersion() {
   try {
     const count = execSync('git rev-list --count HEAD').toString().trim()
     const sha = execSync('git rev-parse --short HEAD').toString().trim()
-    return `v${count} · ${sha}`
+    const date = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    return `v${count} · ${sha} · ${date}`
   } catch {
     return 'dev'
   }
