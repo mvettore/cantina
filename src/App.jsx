@@ -110,15 +110,43 @@ async function cloudLoad() {
   } catch { return null; }
 }
 
-async function cloudSave(payload) {
+// Debounced cloudSave: raggruppa salvataggi rapidi, vince sempre l'ultimo payload per chiave
+let _cloudSaveTimer = null;
+let _cloudSavePending = {};
+let _onCloudSaveError = null; // callback registrata dal componente
+
+function cloudSave(payload) {
   if (!IS_NETLIFY) return;
-  try {
-    await fetch("/.netlify/functions/data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch (e) { console.warn("Cloud save failed:", e.message); }
+  _cloudSavePending = { ..._cloudSavePending, ...payload };
+  clearTimeout(_cloudSaveTimer);
+  _cloudSaveTimer = setTimeout(async () => {
+    const toSave = _cloudSavePending;
+    _cloudSavePending = {};
+    const body = JSON.stringify(toSave);
+    try {
+      const r = await fetch("/.netlify/functions/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    } catch {
+      // Se fallisce (es. payload troppo grande), riprova senza foto
+      try {
+        const fallback = { ...toSave };
+        if (fallback.wines) fallback.wines = fallback.wines.map(w => ({ ...w, photos: [] }));
+        const r2 = await fetch("/.netlify/functions/data", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(fallback),
+        });
+        if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
+        _onCloudSaveError?.("⚠️ Foto non sincronizzate (payload troppo grande) — dati salvati");
+      } catch {
+        _onCloudSaveError?.("❌ Salvataggio cloud fallito — i dati sono al sicuro in locale");
+      }
+    }
+  }, 500);
 }
 
 const typeColors = {
@@ -489,6 +517,7 @@ export default function App() {
   const saveLog   = (l) => { setLog(l);   saveLocal(LOG_KEY,   l); cloudSave({ log:   l }); };
   const saveName  = (n) => { setCantinaName(n); saveLocal('cantina-name', n); };
   const showToast = (msg) => { setToast(msg); setUndoState(null); setTimeout(() => setToast(null), 3000); };
+  useEffect(() => { _onCloudSaveError = showToast; return () => { _onCloudSaveError = null; }; }, []);
   const showUndoToast = (msg, restore) => {
     setToast(msg);
     setUndoState({ restore });
@@ -753,8 +782,11 @@ export default function App() {
       if (!resp.ok) return;
       const data = await resp.json();
       const enrichment = { ...data, enrichedAt: new Date().toISOString() };
-      const updated = { ...wine, enrichment };
       setWines(current => {
+        // Usa il vino aggiornato da current, non l'oggetto stale passato ad autoEnrich
+        const currentWine = current.find(w => w.id === wine.id);
+        if (!currentWine) return current;
+        const updated = { ...currentWine, enrichment };
         const newList = current.map(w => w.id === wine.id ? updated : w);
         saveLocal(STORAGE_KEY, newList);
         cloudSave({ wines: newList });
