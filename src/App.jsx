@@ -944,8 +944,8 @@ export default function App() {
         {/* Barra ricerca — si nasconde scorrendo giù, riappare scorrendo su */}
         <div style={{
           overflow: "hidden", flexShrink: 0,
-          maxHeight: searchBarVisible ? "160px" : "0px",
-          transition: "max-height 0.22s ease",
+          maxHeight: searchBarVisible ? (filtersOpen ? "500px" : "60px") : "0px",
+          transition: "max-height 0.3s ease",
         }}>
         <div style={{ padding: "7px 12px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
           {/* Barra ricerca + toggle filtri */}
