@@ -338,6 +338,8 @@ export default function App() {
   const addPhotoRef  = useRef(null);
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
+  const [searchBarVisible, setSearchBarVisible] = useState(true);
+  const lastScrollY = useRef(0);
 
   // Carica dal cloud al primo avvio, poi ri-analizza i vini con analisi scaduta (>6 mesi)
   useEffect(() => {
@@ -829,9 +831,9 @@ export default function App() {
 
         /* scan button */
         .btn-scan {
-          display: flex; align-items: center; justify-content: center; gap: 10px;
-          width: 100%; padding: 16px; border-radius: 10px; cursor: pointer;
-          font-family: 'Cinzel', serif; font-size: 15px; font-weight: 600; letter-spacing: 1.5px;
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          width: 100%; padding: 10px 12px; border-radius: 8px; cursor: pointer;
+          font-family: 'Cinzel', serif; font-size: 13px; font-weight: 600; letter-spacing: 1px;
           border: 2px dashed ${C.gold};
           background: rgba(201,149,58,0.07);
           color: ${C.gold}; transition: all 0.2s;
@@ -841,15 +843,8 @@ export default function App() {
         .spinner { width: 18px; height: 18px; border: 2px solid rgba(201,149,58,0.3); border-top-color: ${C.gold}; border-radius: 50%; animation: spin 0.8s linear infinite; }
       `}</style>
 
-      {/* ── HEADER ── */}
-      <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "16px 20px", paddingTop: "calc(16px + env(safe-area-inset-top, 0px))", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, overflow: "hidden", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/vinario-logo.png" alt="Vinario" style={{ height: 42, width: "auto", display: "block" }} />
-        </div>
-      </header>
-
       {/* ── NAV ── */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 8px", display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch", flexShrink: 0 }}>
+      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 8px", paddingTop: "env(safe-area-inset-top, 0px)", display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch", flexShrink: 0 }}>
         {[["catalog","📋  CATALOGO"],["racks","🗄  SCAFFALI"],["stats","📊  STATISTICHE"],["logview","📖  STORICO"]].map(([v,l]) => (
           <button key={v} className={`nav-btn ${view===v?"active":""}`} onClick={() => setView(v)}>{l}</button>
         ))}
@@ -857,13 +852,19 @@ export default function App() {
 
       {/* ══════ CATALOG VIEW ══════ */}
       {view === "catalog" && <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-        <div style={{ padding: "10px 16px", background: C.surface, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        {/* Barra ricerca — si nasconde scorrendo giù, riappare scorrendo su */}
+        <div style={{
+          overflow: "hidden", flexShrink: 0,
+          maxHeight: searchBarVisible ? "160px" : "0px",
+          transition: "max-height 0.22s ease",
+        }}>
+        <div style={{ padding: "7px 12px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
           {/* Barra ricerca + toggle filtri */}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <div style={{ flex: 1, position: "relative" }}>
-              <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 16 }}>🔍</span>
+              <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 14 }}>🔍</span>
               <input placeholder="Cerca in tutti i campi…" value={search} onChange={e => setSearch(e.target.value)}
-                style={{ ...inputStyle, paddingLeft: 40, paddingRight: search ? 38 : 14 }} />
+                style={{ ...inputStyle, paddingLeft: 34, paddingRight: search ? 34 : 12, padding: "7px 12px", paddingLeft: 34, fontSize: 16 }} />
               {search && (
                 <button onClick={() => setSearch("")} style={{
                   position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
@@ -945,8 +946,17 @@ export default function App() {
             </div>
           )}
         </div>
+        </div>{/* fine wrapper search collassabile */}
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px", paddingBottom: 100 }} {...pullHandlers}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px", paddingBottom: 100 }}
+          {...pullHandlers}
+          onScroll={e => {
+            const y = e.currentTarget.scrollTop;
+            if (y > lastScrollY.current + 8) setSearchBarVisible(false);
+            else if (y < lastScrollY.current - 8) setSearchBarVisible(true);
+            lastScrollY.current = y;
+          }}
+        >
           <PullIndicator />
           {filtered.length === 0 ? (
             <div style={{ textAlign: "center", padding: "80px 20px", color: C.textFaint }}>
@@ -1195,7 +1205,7 @@ export default function App() {
       {(modal==="add"||modal==="edit") && editing && (
         <div className="modal-overlay" onClick={()=>setModal(null)}>
           <div className="modal-box" onClick={e=>e.stopPropagation()}>
-            <div style={{padding:"22px 26px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{padding:"18px 22px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:2,background:C.surface,borderRadius:"14px 14px 0 0"}}>
               <h2 style={{fontFamily:"'Cinzel', serif",fontSize:17,color:C.gold,letterSpacing:2}}>{modal==="add"?"AGGIUNGI VINO":"MODIFICA VINO"}</h2>
               <button onClick={()=>setModal(null)} style={{background:"none",border:"none",color:C.textFaint,cursor:"pointer",fontSize:20,lineHeight:1}}>✕</button>
             </div>
