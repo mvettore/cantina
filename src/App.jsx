@@ -1040,7 +1040,7 @@ export default function App() {
                                 <span style={{fontSize:15,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700,
                                   background:`${ag.c}12`,border:`1px solid ${ag.c}35`,
                                   borderRadius:20,padding:"2px 10px"}}>
-                                  {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s[0]} {age}a
+                                  {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {age}a
                                 </span>
                               );
                             })()}
