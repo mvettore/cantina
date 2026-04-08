@@ -84,7 +84,15 @@ function migrateWines(wines) {
 function loadLocal(key, fallback) {
   try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; } catch { return fallback; }
 }
-function saveLocal(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+function saveLocal(key, val) {
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+  } catch {
+    // Quota superata: libera i backup e riprova
+    try { localStorage.removeItem("cantina-wines-backup-v1"); } catch {}
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+  }
+}
 
 // ── Backup automatico degli ultimi 5 snapshot vini ──
 const BACKUP_KEY = "cantina-wines-backup-v1";
@@ -92,7 +100,9 @@ const BACKUP_MAX = 5;
 function saveWinesBackup(wines) {
   try {
     const snapshots = loadLocal(BACKUP_KEY, []);
-    snapshots.push({ ts: new Date().toISOString(), count: wines.length, wines });
+    // Escludi le foto dal backup: occupano troppo spazio (base64) e riempiono il localStorage
+    const winesNoPhotos = wines.map(({ photos: _, ...w }) => w);
+    snapshots.push({ ts: new Date().toISOString(), count: wines.length, wines: winesNoPhotos });
     if (snapshots.length > BACKUP_MAX) snapshots.splice(0, snapshots.length - BACKUP_MAX);
     localStorage.setItem(BACKUP_KEY, JSON.stringify(snapshots));
   } catch {}
@@ -418,6 +428,14 @@ export default function App() {
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
   const [searchBarVisible, setSearchBarVisible] = useState(true);
   const lastScrollY = useRef(0);
+
+  // Pulizia una-tantum: rimuovi i backup con foto che riempivano il localStorage
+  useEffect(() => {
+    try {
+      const old = localStorage.getItem("cantina-wines-backup-v1");
+      if (old && old.length > 500000) localStorage.removeItem("cantina-wines-backup-v1");
+    } catch {}
+  }, []);
 
   // Carica dal cloud al primo avvio, poi ri-analizza i vini con analisi scaduta (>6 mesi)
   useEffect(() => {
