@@ -1026,20 +1026,21 @@ export default function App() {
                               const pos=first.positions;
                               const posLabel=pos.length>1?`${pos[0]} +${pos.length-1}`:pos[0];
                               const extraSlots=slotsWithPos.length-1;
+                              const abbr=sr.name.split(/\s+/).map(w=>w.length<=2?w.toUpperCase():w[0].toUpperCase()).join("");
                               return(
-                                <span style={{fontSize:15,color:C.gold,fontFamily:"'Cinzel',serif",
+                                <span style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
                                   background:"rgba(201,149,58,0.1)",border:`1px solid rgba(201,149,58,0.2)`,
-                                  borderRadius:20,padding:"2px 10px",fontWeight:600}}>
-                                  🗄 {sr.name} {posLabel}{extraSlots>0?` +${extraSlots}`:""}
+                                  borderRadius:20,padding:"2px 8px",fontWeight:600}}>
+                                  🗄 {abbr} {posLabel}{extraSlots>0?` +${extraSlots}`:""}
                                 </span>
                               );
                             })()}
                             {(()=>{const ag=getAgingStatus(wine);if(!ag)return null;
                               const age=new Date().getFullYear()-wine.year;
                               return(
-                                <span style={{fontSize:15,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700,
+                                <span style={{fontSize:12,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700,
                                   background:`${ag.c}12`,border:`1px solid ${ag.c}35`,
-                                  borderRadius:20,padding:"2px 10px"}}>
+                                  borderRadius:20,padding:"2px 8px"}}>
                                   {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {age}a
                                 </span>
                               );
