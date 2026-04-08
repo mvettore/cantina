@@ -473,7 +473,7 @@ export default function App() {
   const filtered = wines
     .filter(w => filterType === "Tutti" || w.type === filterType)
     .filter(w => filterAging === "Tutti" || getAgingStatus(w)?.s === filterAging)
-    .filter(w => !filterUnracked || (w.rackSlots||[]).every(s => (s.positions||[]).length === 0))
+    .filter(w => !filterUnracked || ((w.rackSlots||[]).reduce((sum, s) => sum + (s.positions||[]).length, 0) < (w.quantity || 0)))
     .filter(w => {
       const q = search.toLowerCase();
       // Costruisce array di tutti i campi testuali ricercabili
