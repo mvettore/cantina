@@ -1,4 +1,30 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+
+// Riduce il font-size finché il testo sta su una riga senza overflow
+function FitText({ text, maxSize = 20, minSize = 12, style }) {
+  const ref = useRef(null);
+  const fit = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    let s = maxSize;
+    el.style.fontSize = s + "px";
+    while (el.scrollWidth > el.offsetWidth && s > minSize) {
+      s -= 0.5;
+      el.style.fontSize = s + "px";
+    }
+  }, [text, maxSize, minSize]);
+  useEffect(() => {
+    fit();
+    const ro = new ResizeObserver(fit);
+    if (ref.current) ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, [fit]);
+  return (
+    <span ref={ref} style={{ ...style, fontSize: maxSize, whiteSpace: "nowrap", overflow: "hidden", display: "block" }}>
+      {text}
+    </span>
+  );
+}
 
 const WINE_TYPES = ["Rosso", "Bianco", "Rosato", "Spumante", "Dolce", "Passito"];
 const REGIONS = [
@@ -1076,8 +1102,8 @@ export default function App() {
                         {/* Blocco top: NOME + denominazione + bt */}
                         <div>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
-                            <div style={{fontFamily:"'Cinzel',serif",fontSize:20,fontWeight:700,color:C.text,lineHeight:1.2,
-                              overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",flex:1,minWidth:0}}>{wine.name}</div>
+                            <FitText text={wine.name} maxSize={20} minSize={12}
+                              style={{fontFamily:"'Cinzel',serif",fontWeight:700,color:C.text,lineHeight:1.2,flex:1,minWidth:0}} />
                             <span style={{
                               background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
                               color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
