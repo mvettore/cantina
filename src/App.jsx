@@ -397,6 +397,8 @@ export default function App() {
           const maxId = Math.max(...merged.map(w => w.id), 99);
           if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
           saveLocal(STORAGE_KEY, merged);
+          // Se ci sono vini local-only, ripushali al cloud subito
+          if (localOnly.length > 0) cloudSave({ wines: merged });
           return merged;
         });
       }
