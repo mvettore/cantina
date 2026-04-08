@@ -334,8 +334,9 @@ export default function App() {
   const [enriching, setEnriching] = useState(false);
   const [enrichData, setEnrichData] = useState(null);
   const [enrichError, setEnrichError] = useState(null);
-  const scanInputRef = useRef(null);
-  const addPhotoRef  = useRef(null);
+  const scanInputRef    = useRef(null);
+  const addPhotoRef     = useRef(null);
+  const tastingPhotoRef = useRef(null);
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
   const [searchBarVisible, setSearchBarVisible] = useState(true);
@@ -556,11 +557,11 @@ export default function App() {
       wineType: wine.type,
       wineGrape: wine.grape,
       wineRegion: wine.region,
-      winePhoto: (wine.photos||[])[0] || null,
+      winePhotos: wine.photos || [],
+      tastingPhotos: [],
       date: new Date().toISOString().split("T")[0],
       occasion: "",
       companions: "",
-      finished: true,
       // Scheda degustazione AIS
       rating: 0,
       vista_limpidezza: "",
@@ -1919,9 +1920,9 @@ export default function App() {
                   onClick={() => { setLogEntry(entry); setLogModal("edit"); }}
                   style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", display: "flex", gap: 0 }}
                   className="wine-card">
-                  {entry.winePhoto && (
+                  {((entry.winePhotos||[])[0] || entry.winePhoto) && (
                     <div style={{ width: 72, flexShrink: 0, overflow: "hidden", background: "#000" }}>
-                      <img src={entry.winePhoto} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} alt={entry.wineName} />
+                      <img src={(entry.winePhotos||[])[0] || entry.winePhoto} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} alt={entry.wineName} />
                     </div>
                   )}
                   <div style={{ flex: 1, minWidth: 0, padding: "12px 16px" }}>
@@ -1969,12 +1970,30 @@ export default function App() {
       {(logModal === "add" || logModal === "edit") && logEntry && (
         <div className="modal-overlay" onClick={() => setLogModal(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
-            <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 16, color: C.gold, letterSpacing: 2 }}>{logModal === "add" ? "🍷 REGISTRA LA BEVUTA" : "✏ MODIFICA VOCE"}</h2>
-                <p style={{ fontSize: 14, color: C.textMuted, marginTop: 4, fontStyle: "italic" }}>{logEntry.wineName} · {logEntry.wineYear}</p>
+            <div style={{ position:"sticky", top:0, zIndex:2, background:C.surface, borderBottom: `1px solid ${C.border}`, borderRadius:"14px 14px 0 0" }}>
+              {/* Foto vino (strip) */}
+              {(logEntry.winePhotos||[]).length > 0 && (
+                <div style={{ display:"flex", overflowX:"auto", background:"#1a0f08", maxHeight:100 }}>
+                  {(logEntry.winePhotos||[]).map((ph,i) => (
+                    <img key={i} src={ph} alt="" onClick={()=>setLightboxPhoto(ph)}
+                      style={{ height:100, width:"auto", objectFit:"cover", cursor:"zoom-in", flexShrink:0 }} />
+                  ))}
+                </div>
+              )}
+              <div style={{ padding: "14px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:11, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:2, marginBottom:4 }}>
+                    {logModal === "add" ? "🍷 REGISTRA DEGUSTAZIONE" : "✏ MODIFICA VOCE"}
+                  </div>
+                  <div style={{ fontFamily:"'Cinzel',serif", fontSize:20, fontWeight:700, color:C.text, lineHeight:1.2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{logEntry.wineName}</div>
+                  <div style={{ display:"flex", gap:8, marginTop:4, flexWrap:"wrap" }}>
+                    {logEntry.wineYear && <span style={{ fontFamily:"'Cinzel',serif", fontSize:16, color:C.gold, fontWeight:300 }}>{logEntry.wineYear}</span>}
+                    {logEntry.wineType && <span style={{ fontFamily:"'Cinzel',serif", fontSize:14, color:C.textMuted }}>{logEntry.wineType}</span>}
+                    {logEntry.wineProducer && <span style={{ fontFamily:"'Cinzel',serif", fontSize:14, color:C.textMuted }}>· {logEntry.wineProducer}</span>}
+                  </div>
+                </div>
+                <button onClick={() => setLogModal(null)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 20, flexShrink:0, paddingLeft:12 }}>✕</button>
               </div>
-              <button onClick={() => setLogModal(null)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 20 }}>✕</button>
             </div>
             <div style={{ padding: "16px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
 
@@ -1996,6 +2015,32 @@ export default function App() {
                   <input style={inputStyle} value={logEntry.companions}
                     onChange={e => setLogEntry(v => ({ ...v, companions: e.target.value }))}
                     placeholder="Famiglia, Amici, Da solo…" />
+                </div>
+              </div>
+
+              {/* Foto degustazione */}
+              <div style={{ background:C.bg, borderRadius:9, padding:"12px 14px", border:`1px solid ${C.border}` }}>
+                <p style={{ ...labelStyle, marginBottom:10, color:C.gold }}>📷 FOTO DEGUSTAZIONE</p>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"flex-start" }}>
+                  {(logEntry.tastingPhotos||[]).map((ph,i) => (
+                    <div key={i} style={{ position:"relative", width:72, height:72, borderRadius:7, overflow:"hidden", border:`1px solid ${C.border}` }}>
+                      <img src={ph} alt="" onClick={()=>setLightboxPhoto(ph)}
+                        style={{ width:"100%", height:"100%", objectFit:"cover", cursor:"zoom-in" }} />
+                      <button onClick={()=>setLogEntry(v=>({...v,tastingPhotos:(v.tastingPhotos||[]).filter((_,j)=>j!==i)}))}
+                        style={{ position:"absolute", top:3, right:3, background:"rgba(0,0,0,0.65)", border:"none", color:"#fff", borderRadius:"50%", width:20, height:20, cursor:"pointer", fontSize:11, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                    </div>
+                  ))}
+                  <input ref={tastingPhotoRef} type="file" accept="image/*" capture="environment" style={{ display:"none" }}
+                    onChange={async e => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      const dataUrl = await resizeImage(f, 1800, 0.93);
+                      setLogEntry(v => ({ ...v, tastingPhotos: [...(v.tastingPhotos||[]), dataUrl] }));
+                      e.target.value = "";
+                    }} />
+                  <button onClick={()=>tastingPhotoRef.current?.click()}
+                    style={{ width:72, height:72, borderRadius:7, border:`2px dashed ${C.border}`, background:"transparent", color:C.textFaint, cursor:"pointer", fontSize:24, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    +
+                  </button>
                 </div>
               </div>
 
