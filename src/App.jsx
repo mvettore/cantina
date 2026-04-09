@@ -1366,12 +1366,24 @@ export default function App() {
             <div style={{ width:`${pct}%`, height:"100%", background:color, borderRadius:4, transition:"width 0.6s ease" }}/>
           </div>
         );
-        const Section = ({ title, rows, color }) => (
+        const goToFilter = (type, value) => {
+          if (type === "type") {
+            setFilterType(value); setSearch(""); setFilterAging("Tutti"); setFilterUnracked(false);
+          } else {
+            setSearch(value); setFilterType("Tutti"); setFilterAging("Tutti"); setFilterUnracked(false);
+          }
+          setView("catalog");
+        };
+        const Section = ({ title, rows, color, filterType: ft }) => (
           <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
             <div style={{ padding:"14px 20px", borderBottom:`1px solid ${C.border}`, fontFamily:"'Cinzel', serif", fontSize:15, color:C.gold, letterSpacing:2 }}>{title}</div>
             <div style={{ padding:"12px 20px", display:"flex", flexDirection:"column", gap:10 }}>
               {rows.map(r => (
-                <div key={r.label}>
+                <div key={r.label} onClick={() => goToFilter(ft, r.label)}
+                  style={{ cursor:"pointer", borderRadius:8, padding:"4px 6px", margin:"-4px -6px",
+                    transition:"background 0.15s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = `${color}18`}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
                     <span style={{ fontSize:16, color:C.text, fontFamily:"'EB Garamond', serif" }}>{r.label}</span>
                     <div style={{ display:"flex", gap:10, alignItems:"center" }}>
@@ -1408,9 +1420,9 @@ export default function App() {
               ))}
             </div>
 
-            <Section title="PER TIPOLOGIA" rows={mkRows(byType)} color={C.gold}/>
-            <Section title="PER VITIGNO"   rows={mkRows(byGrape)} color="#7a9aba"/>
-            <Section title="PER REGIONE"   rows={mkRows(byRegion)} color="#8aba7a"/>
+            <Section title="PER TIPOLOGIA" rows={mkRows(byType)}   color={C.gold}    filterType="type"/>
+            <Section title="PER VITIGNO"   rows={mkRows(byGrape)}  color="#7a9aba"   filterType="grape"/>
+            <Section title="PER REGIONE"   rows={mkRows(byRegion)} color="#8aba7a"   filterType="region"/>
           </div></div>
         );
       })()}
