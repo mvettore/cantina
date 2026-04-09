@@ -96,7 +96,7 @@ const PHOTO_KEY_PREFIX = "cantina-photo-";
 function saveWinePhotos(wines) {
   wines.forEach(wine => {
     try {
-      if ((wine.photos||[]).length > 0)
+      if (!wine.deleted && (wine.photos||[]).length > 0)
         localStorage.setItem(PHOTO_KEY_PREFIX + wine.id, JSON.stringify(wine.photos));
       else
         localStorage.removeItem(PHOTO_KEY_PREFIX + wine.id);
@@ -581,7 +581,8 @@ export default function App() {
     setUndoState({ restore, timer: t });
   };
 
-  const filtered = wines
+  const activeWines = wines.filter(w => !w.deleted);
+  const filtered = activeWines
     .filter(w => filterType === "Tutti" || w.type === filterType)
     .filter(w => filterAging === "Tutti" || getAgingStatus(w)?.s === filterAging)
     .filter(w => !filterUnracked || ((w.rackSlots||[]).reduce((sum, s) => sum + (s.positions||[]).length, 0) < (w.quantity || 0)))
@@ -615,8 +616,8 @@ export default function App() {
       return 0;
     });
 
-  const totalBottles = wines.reduce((s, w) => s + w.quantity, 0);
-  const totalValue   = wines.reduce((s, w) => s + w.quantity * (parseFloat(w.price) || 0), 0);
+  const totalBottles = activeWines.reduce((s, w) => s + w.quantity, 0);
+  const totalValue   = activeWines.reduce((s, w) => s + w.quantity * (parseFloat(w.price) || 0), 0);
 
   // ── Esegue OCR su 1 o 2 foto e aggiorna il form ──
   const doScanAndFill = async (photo1, photo2 = null) => {
@@ -1166,7 +1167,7 @@ export default function App() {
           {filtered.length === 0 ? (
             <div style={{ textAlign: "center", padding: "80px 20px", color: C.textFaint }}>
               <div style={{ fontSize: 48, marginBottom: 14, opacity: 0.4 }}>🍷</div>
-              <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 2, fontSize: 15 }}>{wines.length===0?"LA CANTINA È VUOTA":"NESSUN RISULTATO"}</p>
+              <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 2, fontSize: 15 }}>{activeWines.length===0?"LA CANTINA È VUOTA":"NESSUN RISULTATO"}</p>
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 18 }}>
@@ -1344,9 +1345,9 @@ export default function App() {
 
       {/* ══════ STATS VIEW ══════ */}
       {view === "stats" && (() => {
-        const totalBt = wines.reduce((s,w) => s+w.quantity, 0);
+        const totalBt = activeWines.reduce((s,w) => s+w.quantity, 0);
         const byType  = {}, byGrape = {}, byRegion = {};
-        wines.forEach(w => {
+        activeWines.forEach(w => {
           const q = w.quantity || 1;
           byType[w.type]     = (byType[w.type]     || 0) + q;
           if (w.grape)  byGrape[w.grape]   = (byGrape[w.grape]   || 0) + q;
@@ -1386,10 +1387,10 @@ export default function App() {
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(120px,1fr))", gap:10 }}>
               {[
                 ["🍾","Bottiglie",totalBt],
-                ["🏷","Etichette",wines.length],
+                ["🏷","Etichette",activeWines.length],
                 ["🗄","Scaffali",racks.length],
                 ["📖","Degustazioni",log.length],
-                ["💰","Valore",`€${wines.reduce((s,w)=>s+w.quantity*(parseFloat(w.price)||0),0).toFixed(0)}`],
+                ["💰","Valore",`€${activeWines.reduce((s,w)=>s+w.quantity*(parseFloat(w.price)||0),0).toFixed(0)}`],
               ].map(([icon,label,val])=>(
                 <div key={label} style={{ background:C.surface, border:`1px solid ${C.border}`,
                   borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
@@ -1970,7 +1971,7 @@ export default function App() {
         };
         const removeAll = () => {
           const prev=wines;
-          saveWines(wines.filter(w=>w.id!==dw.id));
+          saveWines(wines.map(w=>w.id===dw.id?{...w,deleted:true,lastModified:Date.now()}:w));
           setDeleteConfirm(null);
           showUndoToast(`"${dw.name}" rimosso`, ()=>saveWines(prev));
         };
@@ -2420,7 +2421,7 @@ export default function App() {
                   if (logModal !== "edit" && pendingDrink) {
                     const { wine, newQty, newSlots } = pendingDrink;
                     if (newQty <= 0) {
-                      saveWines(wines.filter(w => w.id !== wine.id));
+                      saveWines(wines.map(w => w.id === wine.id ? { ...w, deleted: true, lastModified: Date.now() } : w));
                       setEditing(null); setModal(null);
                     } else {
                       const updated = { ...wine, quantity: newQty, rackSlots: newSlots };
@@ -2449,7 +2450,7 @@ export default function App() {
                     if (pendingDrink) {
                       const { wine, newQty, newSlots } = pendingDrink;
                       if (newQty <= 0) {
-                        saveWines(wines.filter(w => w.id !== wine.id));
+                        saveWines(wines.map(w => w.id === wine.id ? { ...w, deleted: true, lastModified: Date.now() } : w));
                         setEditing(null); setModal(null);
                       } else {
                         const updated = { ...wine, quantity: newQty, rackSlots: newSlots };
