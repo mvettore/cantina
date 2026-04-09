@@ -633,6 +633,10 @@ export default function App() {
       if (sortBy === "year")     return sortDir === "asc" ? a.year - b.year : b.year - a.year;
       if (sortBy === "rating")   return b.rating - a.rating;
       if (sortBy === "quantity") return b.quantity - a.quantity;
+      if (sortBy === "urgency") {
+        const score = w => { const s = getAgingStatus(w)?.s; return s==="Declino"?4:s==="Maturo"?3:s==="Apice"?2:s==="Giovane"?1:0; };
+        return score(b) - score(a);
+      }
       return 0;
     });
 
@@ -1164,6 +1168,7 @@ export default function App() {
                   <option value="name">Nome</option>
                   <option value="year">Annata</option>
                   <option value="quantity">Quantità</option>
+                  <option value="urgency">Da bere</option>
                 </select>
                 {sortBy === "year" && (
                   <button onClick={() => setSortDir(d => d==="asc"?"desc":"asc")} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.gold, cursor: "pointer", padding: "7px 12px", fontFamily: "'Cinzel', serif", fontSize: 13 }}>
@@ -1195,8 +1200,11 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 18 }}>
               {filtered.map(wine => {
                 const tc = typeColors[wine.type] || { bar: "#888" };
+                const ag = getAgingStatus(wine);
+                const urgent = ag?.s === "Declino" || ag?.s === "Maturo";
+                const urgentBorder = ag?.s === "Declino" ? "#9a5050" : "#b07030";
                 return (
-                  <div key={wine.id} className="wine-card" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,0.25)" }}
+                  <div key={wine.id} className="wine-card" style={{ background: C.surface, border: urgent ? `1px solid ${urgentBorder}` : `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: urgent ? `0 3px 14px ${urgentBorder}44` : "0 3px 12px rgba(0,0,0,0.25)" }}
                     onClick={() => { setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
                     <div style={{ height: 5, background: tc.bar }} />
 
