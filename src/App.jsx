@@ -1203,8 +1203,9 @@ export default function App() {
                 const ag = getAgingStatus(wine);
                 const urgent = ag?.s === "Declino" || ag?.s === "Maturo";
                 const urgentBorder = ag?.s === "Declino" ? "#9a5050" : "#b07030";
+                const urgentWidth  = ag?.s === "Maturo" ? "2px" : "1px";
                 return (
-                  <div key={wine.id} className="wine-card" style={{ background: C.surface, border: urgent ? `1px solid ${urgentBorder}` : `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: urgent ? `0 3px 14px ${urgentBorder}44` : "0 3px 12px rgba(0,0,0,0.25)" }}
+                  <div key={wine.id} className="wine-card" style={{ background: C.surface, border: urgent ? `${urgentWidth} solid ${urgentBorder}` : `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: urgent ? `0 3px 14px ${urgentBorder}44` : "0 3px 12px rgba(0,0,0,0.25)" }}
                     onClick={() => { setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
                     <div style={{ height: 5, background: tc.bar }} />
 
@@ -1273,11 +1274,15 @@ export default function App() {
                             })()}
                             {(()=>{const ag=getAgingStatus(wine);if(!ag)return null;
                               const age=new Date().getFullYear()-wine.year;
+                              const pf=wine.enrichment?.peakFrom, pt=wine.enrichment?.peakTo;
+                              const label = (pf!=null&&pt!=null)
+                                ? `${wine.year+pf}–${wine.year+pt}`
+                                : `${age}a`;
                               return(
                                 <span style={{fontSize:12,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700,
                                   background:`${ag.c}12`,border:`1px solid ${ag.c}35`,
                                   borderRadius:20,padding:"2px 8px"}}>
-                                  {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {age}a
+                                  {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {label}
                                 </span>
                               );
                             })()}
