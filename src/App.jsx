@@ -816,7 +816,7 @@ export default function App() {
       const enrichment = { ...data, enrichedAt: new Date().toISOString() };
       setEnrichData(enrichment);
       // Salva automaticamente l'analisi nella bottiglia
-      const updated = { ...wine, enrichment };
+      const updated = { ...wine, enrichment, lastModified: Date.now() };
       setWines(current => {
         const newList = current.map(w => w.id === wine.id ? updated : w);
         saveLocal(STORAGE_KEY, newList.map(({ photos: _, ...w }) => w));
@@ -869,7 +869,7 @@ export default function App() {
         // Usa il vino aggiornato da current, non l'oggetto stale passato ad autoEnrich
         const currentWine = current.find(w => w.id === wine.id);
         if (!currentWine) return current;
-        const updated = { ...currentWine, enrichment };
+        const updated = { ...currentWine, enrichment, lastModified: Date.now() };
         const newList = current.map(w => w.id === wine.id ? updated : w);
         saveLocal(STORAGE_KEY, newList.map(({ photos: _, ...w }) => w));
         cloudSave({ wines: newList });
