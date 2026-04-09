@@ -85,13 +85,35 @@ function loadLocal(key, fallback) {
   try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; } catch { return fallback; }
 }
 function saveLocal(key, val) {
-  try {
-    localStorage.setItem(key, JSON.stringify(val));
-  } catch {
-    // Quota superata: libera i backup e riprova
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {
     try { localStorage.removeItem("cantina-wines-backup-v1"); } catch {}
     try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
   }
+}
+
+// ── Foto separate: ogni vino ha la propria chiave, indipendente dai metadati ──
+const PHOTO_KEY_PREFIX = "cantina-photo-";
+function saveWinePhotos(wines) {
+  wines.forEach(wine => {
+    try {
+      if ((wine.photos||[]).length > 0)
+        localStorage.setItem(PHOTO_KEY_PREFIX + wine.id, JSON.stringify(wine.photos));
+      else
+        localStorage.removeItem(PHOTO_KEY_PREFIX + wine.id);
+    } catch {}
+  });
+}
+function loadWinePhotos(wines) {
+  return wines.map(wine => {
+    try {
+      const raw = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
+      if (raw) return { ...wine, photos: JSON.parse(raw) };
+    } catch {}
+    return wine;
+  });
+}
+function loadWinesLocal(fallback) {
+  return loadWinePhotos(loadLocal(STORAGE_KEY, fallback));
 }
 
 // ── Backup automatico degli ultimi 5 snapshot vini ──
@@ -380,7 +402,7 @@ const emptyWine = () => ({
 const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6 });
 
 export default function App() {
-  const [wines,   setWines]   = useState(() => migrateWines(loadLocal(STORAGE_KEY, INITIAL_WINES)));
+  const [wines,   setWines]   = useState(() => migrateWines(loadWinesLocal(INITIAL_WINES)));
   const [racks,   setRacks]   = useState(() => loadLocal(RACKS_KEY, INITIAL_RACKS));
   const [syncing, setSyncing] = useState(IS_NETLIFY); // true while loading from cloud
   const [view,    setView]    = useState("catalog"); // "catalog" | "racks" | "stats"
@@ -445,11 +467,12 @@ export default function App() {
       if (data) {
         if (data.wines) {
           const cloudWines = migrateWines(data.wines);
-          const localWines = loadLocal(STORAGE_KEY, []);
+          const localWines = loadWinesLocal([]);
           loadedWines = mergeWines(localWines, cloudWines);
           setWines(loadedWines);
-          saveLocal(STORAGE_KEY, loadedWines);
-          cloudSave({ wines: loadedWines }); // allinea cloud al merged
+          saveWinePhotos(loadedWines);
+          saveLocal(STORAGE_KEY, loadedWines.map(({ photos: _, ...w }) => w));
+          cloudSave({ wines: loadedWines });
           const maxId = Math.max(...loadedWines.map(w => w.id), 99);
           if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
         }
@@ -486,13 +509,12 @@ export default function App() {
           const merged = mergeWines(current, cloudWines);
           const maxId = Math.max(...merged.map(w => w.id), 99);
           if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
-          saveLocal(STORAGE_KEY, merged);
+          saveWinePhotos(merged);
+          saveLocal(STORAGE_KEY, merged.map(({ photos: _, ...w }) => w));
           return merged;
         });
-        // cloudSave fuori dall'updater per evitare side-effects multipli
-        // usa setTimeout(0) per eseguire dopo che setWines ha aggiornato lo state
         setTimeout(() => {
-          const current = loadLocal(STORAGE_KEY, []);
+          const current = loadWinesLocal([]);
           cloudSave({ wines: current });
         }, 0);
       }
@@ -534,7 +556,6 @@ export default function App() {
   ) : null;
 
   const saveWines = (w) => {
-    // Deduplicazione difensiva: in caso di id doppi, tieni l'ultimo inserito
     const seen = new Set();
     const deduped = [...w].reverse().filter(wine => {
       if (seen.has(wine.id)) return false;
@@ -543,8 +564,10 @@ export default function App() {
     }).reverse();
     saveWinesBackup(deduped);
     setWines(deduped);
-    saveLocal(STORAGE_KEY, deduped);
-    cloudSave({ wines: deduped });
+    // Foto in chiavi separate — il main array non le contiene più
+    saveWinePhotos(deduped);
+    saveLocal(STORAGE_KEY, deduped.map(({ photos: _, ...wine }) => wine));
+    cloudSave({ wines: deduped }); // cloud riceve le foto (best-effort)
   };
   const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY,  r); cloudSave({ racks: r }); };
   const saveLog   = (l) => { setLog(l);   saveLocal(LOG_KEY,   l); cloudSave({ log:   l }); };
