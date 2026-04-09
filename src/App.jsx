@@ -448,8 +448,12 @@ export default function App() {
   const [firstPhotoData, setFirstPhotoData] = useState(null); // {scanDataUrl, hiResDataUrl}
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
+  const latestWinesRef = useRef(wines); // sempre aggiornato con l'ultimo stato React
   const [searchBarVisible, setSearchBarVisible] = useState(true);
   const lastScrollY = useRef(0);
+
+  // Tiene latestWinesRef sempre aggiornato — usato da doCloudRefresh per il re-upload
+  useEffect(() => { latestWinesRef.current = wines; }, [wines]);
 
   // Pulizia una-tantum: rimuovi i backup con foto che riempivano il localStorage
   useEffect(() => {
@@ -469,6 +473,7 @@ export default function App() {
           const cloudWines = migrateWines(data.wines);
           const localWines = loadWinesLocal([]);
           loadedWines = mergeWines(localWines, cloudWines);
+          latestWinesRef.current = loadedWines;
           setWines(loadedWines);
           saveWinePhotos(loadedWines);
           saveLocal(STORAGE_KEY, loadedWines.map(({ photos: _, ...w }) => w));
@@ -516,10 +521,8 @@ export default function App() {
           saveLocal(STORAGE_KEY, mergedWithPhotos.map(({ photos: _, ...w }) => w));
           return mergedWithPhotos;
         });
-        setTimeout(() => {
-          const current = loadWinesLocal([]);
-          cloudSave({ wines: current });
-        }, 0);
+        // Usa React state (via ref) — più affidabile di localStorage che può fallire per quota
+        setTimeout(() => { cloudSave({ wines: latestWinesRef.current }); }, 0);
       }
       if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
       if (data.log)   { setLog(data.log);     saveLocal(LOG_KEY, data.log); }
@@ -566,6 +569,7 @@ export default function App() {
       return true;
     }).reverse();
     saveWinesBackup(deduped);
+    latestWinesRef.current = deduped;
     setWines(deduped);
     // Foto in chiavi separate — il main array non le contiene più
     saveWinePhotos(deduped);
