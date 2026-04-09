@@ -39,8 +39,10 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON)
   "tastingNotes": "3-4 frasi sui sentori tipici di questo vino in questa zona: profumi (primari, secondari, terziari se invecchiato), palato (struttura, tannini, acidità, corpo, finale)",
   "territory": "2-3 frasi sul territorio specifico indicato: suolo, microclima, altitudine, caratteristiche che lo distinguono da altre zone dello stesso vitigno",
   "aging": "1-2 frasi sul potenziale di invecchiamento e se aprire ora o aspettare",
+  "peakFrom": <numero intero: anni dalla vendemmia in cui inizia il momento ottimale di beva>,
+  "peakTo": <numero intero: anni dalla vendemmia in cui finisce il momento ottimale di beva>,
   "foodPairing": "3-4 abbinamenti gastronomici ideali, separati da virgola",
-  "curiosity": "1 curiosità storica o aneddoto interessante su questo vino, produttore o sulla storia vinicola di questa specifica zona"
+  "curiosity": "1 curiosità storica o anecdoto interessante su questo vino, produttore o sulla storia vinicola di questa specifica zona"
 }`;
 
   const controller = new AbortController();

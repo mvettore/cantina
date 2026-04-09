@@ -390,6 +390,15 @@ const AGING_PROFILES = {
 function getAgingStatus(wine) {
   if (!wine.year) return null;
   const age = new Date().getFullYear() - wine.year;
+  const pf = wine.enrichment?.peakFrom;
+  const pt = wine.enrichment?.peakTo;
+  if (pf != null && pt != null && pt > pf) {
+    const matEnd = pt + Math.ceil((pt - pf) / 2);
+    if (age < pf)      return { s: "Giovane", c: "#6aaa6a" };
+    if (age <= pt)     return { s: "Apice",   c: "#c9953a" };
+    if (age <= matEnd) return { s: "Maturo",  c: "#b07030" };
+    return                    { s: "Declino", c: "#9a5050" };
+  }
   const profile = AGING_PROFILES[wine.type] || AGING_PROFILES["Rosso"];
   return profile.find(p => age <= p.max) || profile[profile.length - 1];
 }
@@ -1759,6 +1768,11 @@ export default function App() {
                           <div>
                             <div style={{fontSize:20, color:ag.c, fontFamily:"'Cinzel', serif", fontWeight:700, letterSpacing:1}}>{ag.s}</div>
                             <div style={{fontSize:16, color:C.textMuted, fontFamily:"'Cinzel', serif"}}>{age} {age===1?"anno":"anni"} · {editing.type}</div>
+                            {editing.enrichment?.peakFrom != null && editing.enrichment?.peakTo != null && (
+                              <div style={{fontSize:13, color:C.textFaint, fontFamily:"'Cinzel', serif", marginTop:2}}>
+                                APICE: {editing.year + editing.enrichment.peakFrom}–{editing.year + editing.enrichment.peakTo}
+                              </div>
+                            )}
                           </div>
                         </div>
                         {/* Barra visiva invecchiamento */}
