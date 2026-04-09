@@ -408,6 +408,8 @@ export default function App() {
   const [view,    setView]    = useState("catalog"); // "catalog" | "racks" | "stats"
   const [search,  setSearch]  = useState("");
   const [filterType, setFilterType] = useState("Tutti");
+  const [filterGrape, setFilterGrape] = useState(null);
+  const [filterRegion, setFilterRegion] = useState(null);
   const [filterAging, setFilterAging] = useState("Tutti");
   const [filterUnracked, setFilterUnracked] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -591,6 +593,8 @@ export default function App() {
   const activeWines = wines.filter(w => !w.deleted);
   const filtered = activeWines
     .filter(w => filterType === "Tutti" || w.type === filterType)
+    .filter(w => !filterGrape || w.grape === filterGrape)
+    .filter(w => !filterRegion || w.region === filterRegion)
     .filter(w => filterAging === "Tutti" || getAgingStatus(w)?.s === filterAging)
     .filter(w => !filterUnracked || ((w.rackSlots||[]).reduce((sum, s) => sum + (s.positions||[]).length, 0) < (w.quantity || 0)))
     .filter(w => {
@@ -1088,9 +1092,11 @@ export default function App() {
               )}
             </div>
             {/* Indicatori filtri attivi */}
-            {(filterType !== "Tutti" || filterAging !== "Tutti" || filterUnracked) && (
-              <span style={{ fontSize: 12, color: C.gold, fontFamily: "'Cinzel', serif", whiteSpace: "nowrap" }}>
-                {[filterType !== "Tutti" ? filterType : null, filterAging !== "Tutti" ? filterAging : null, filterUnracked ? "Senza scaffale" : null].filter(Boolean).join(" · ")}
+            {(filterType !== "Tutti" || filterGrape || filterRegion || filterAging !== "Tutti" || filterUnracked) && (
+              <span onClick={() => { setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null); setFilterAging("Tutti"); setFilterUnracked(false); }}
+                style={{ fontSize: 12, color: C.gold, fontFamily: "'Cinzel', serif", whiteSpace: "nowrap", cursor: "pointer" }}
+                title="Rimuovi filtri">
+                {[filterType !== "Tutti" ? filterType : null, filterGrape, filterRegion, filterAging !== "Tutti" ? filterAging : null, filterUnracked ? "Senza scaffale" : null].filter(Boolean).join(" · ")} ✕
               </span>
             )}
             {/* Toggle filtri */}
@@ -1367,11 +1373,11 @@ export default function App() {
           </div>
         );
         const goToFilter = (type, value) => {
-          if (type === "type") {
-            setFilterType(value); setSearch(""); setFilterAging("Tutti"); setFilterUnracked(false);
-          } else {
-            setSearch(value); setFilterType("Tutti"); setFilterAging("Tutti"); setFilterUnracked(false);
-          }
+          setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null);
+          setFilterAging("Tutti"); setFilterUnracked(false); setSearch("");
+          if (type === "type")   setFilterType(value);
+          if (type === "grape")  setFilterGrape(value);
+          if (type === "region") setFilterRegion(value);
           setView("catalog");
         };
         const Section = ({ title, rows, color, filterType: ft }) => (
