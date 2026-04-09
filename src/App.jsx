@@ -507,11 +507,14 @@ export default function App() {
         // perché localStorage può fallire silenziosamente per quota piena
         setWines(current => {
           const merged = mergeWines(current, cloudWines);
-          const maxId = Math.max(...merged.map(w => w.id), 99);
+          // Ri-legge le foto dalle chiavi localStorage separate: se per qualsiasi motivo
+          // merged ha photos:[] ma la chiave cantina-photo-{id} esiste ancora, le recupera
+          const mergedWithPhotos = loadWinePhotos(merged);
+          const maxId = Math.max(...mergedWithPhotos.map(w => w.id), 99);
           if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
-          saveWinePhotos(merged);
-          saveLocal(STORAGE_KEY, merged.map(({ photos: _, ...w }) => w));
-          return merged;
+          saveWinePhotos(mergedWithPhotos);
+          saveLocal(STORAGE_KEY, mergedWithPhotos.map(({ photos: _, ...w }) => w));
+          return mergedWithPhotos;
         });
         setTimeout(() => {
           const current = loadWinesLocal([]);
@@ -795,7 +798,7 @@ export default function App() {
       const updated = { ...wine, enrichment };
       setWines(current => {
         const newList = current.map(w => w.id === wine.id ? updated : w);
-        saveLocal(STORAGE_KEY, newList);
+        saveLocal(STORAGE_KEY, newList.map(({ photos: _, ...w }) => w));
         cloudSave({ wines: newList });
         return newList;
       });
@@ -847,7 +850,7 @@ export default function App() {
         if (!currentWine) return current;
         const updated = { ...currentWine, enrichment };
         const newList = current.map(w => w.id === wine.id ? updated : w);
-        saveLocal(STORAGE_KEY, newList);
+        saveLocal(STORAGE_KEY, newList.map(({ photos: _, ...w }) => w));
         cloudSave({ wines: newList });
         return newList;
       });
