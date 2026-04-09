@@ -813,7 +813,7 @@ export default function App() {
     if (!editing.type) { showToast("Seleziona una tipologia"); return; }
     if (!editing.region) { showToast("Seleziona una regione"); return; }
     if (modal === "add") {
-      const wine = { ...editing, id: nextWineId.current++, lastModified: Date.now() };
+      const wine = { ...editing, id: nextWineId.current++, addedAt: Date.now(), lastModified: Date.now() };
       const newList = [...wines.filter(w => w.id !== wine.id), wine];
       saveWines(newList);
       setModal(null);
@@ -1710,6 +1710,13 @@ export default function App() {
                     );
                   })}
                 </div>
+
+                {/* Data aggiunta */}
+                {editing.addedAt && (
+                  <div style={{fontSize:13,color:C.textFaint,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:14}}>
+                    AGGIUNTO IL {new Date(editing.addedAt).toLocaleDateString("it-IT",{day:"2-digit",month:"long",year:"numeric"}).toUpperCase()}
+                  </div>
+                )}
 
                 {/* ── Stato del Vino ── */}
                 {(()=>{
