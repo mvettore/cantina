@@ -1511,7 +1511,7 @@ export default function App() {
                 </div>
                 <div>
                   <label style={labelStyle}>Annata</label>
-                  <input style={inputStyle} type="number" value={editing.year} onChange={e=>setEditing(v=>({...v,year:parseInt(e.target.value)||v.year}))}/>
+                  <input style={inputStyle} type="text" inputMode="numeric" pattern="[0-9]*" value={editing.year} onChange={e=>{const y=parseInt(e.target.value.replace(/\D/g,''));if(!isNaN(y))setEditing(v=>({...v,year:y}));}} />
                 </div>
                 <div>
                   <label style={labelStyle}>Tipologia *</label>
