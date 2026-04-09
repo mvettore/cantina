@@ -480,14 +480,21 @@ export default function App() {
       if (!data) return;
       if (data.wines) {
         const cloudWines = migrateWines(data.wines);
-        // Legge localStorage (sempre aggiornato da saveWines) come base locale
-        const localWines = loadLocal(STORAGE_KEY, []);
-        const merged = mergeWines(localWines, cloudWines);
-        const maxId = Math.max(...merged.map(w => w.id), 99);
-        if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
-        setWines(merged);
-        saveLocal(STORAGE_KEY, merged);
-        cloudSave({ wines: merged }); // debounced — il cloud converge al merged
+        // Usa React state (current) come base locale — più affidabile di localStorage
+        // perché localStorage può fallire silenziosamente per quota piena
+        setWines(current => {
+          const merged = mergeWines(current, cloudWines);
+          const maxId = Math.max(...merged.map(w => w.id), 99);
+          if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
+          saveLocal(STORAGE_KEY, merged);
+          return merged;
+        });
+        // cloudSave fuori dall'updater per evitare side-effects multipli
+        // usa setTimeout(0) per eseguire dopo che setWines ha aggiornato lo state
+        setTimeout(() => {
+          const current = loadLocal(STORAGE_KEY, []);
+          cloudSave({ wines: current });
+        }, 0);
       }
       if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
       if (data.log)   { setLog(data.log);     saveLocal(LOG_KEY, data.log); }
@@ -669,8 +676,9 @@ export default function App() {
   const handleAddPhoto = async (file) => {
     if (!file) return;
     try {
-      const hiRes = await resizeImage(file, 1800, 0.93);
-      setEditing(prev => ({ ...prev, photos: [...(prev.photos||[]), hiRes] }));
+      // 800px/0.80 per le foto display: ~80-150KB base64, compatibile con localStorage e cloudSave
+      const photo = await resizeImage(file, 800, 0.80);
+      setEditing(prev => ({ ...prev, photos: [...(prev.photos||[]), photo] }));
     } catch (err) {
       console.error(err);
     }
