@@ -601,9 +601,16 @@ export default function App() {
   };
 
   const activeWines = wines.filter(w => !w.deleted);
+  // Elenco dinamico vitigni (split su "," / "&" per blend), ordinati per frequenza
+  const splitGrapes = (s) => (s || "").split(/[,&/]+/).map(g => g.trim()).filter(Boolean);
+  const grapeList = (() => {
+    const counts = {};
+    activeWines.forEach(w => splitGrapes(w.grape).forEach(g => { counts[g] = (counts[g] || 0) + 1; }));
+    return Object.entries(counts).sort(([,a],[,b]) => b - a || 0).map(([k]) => k);
+  })();
   const filtered = activeWines
     .filter(w => filterType === "Tutti" || w.type === filterType)
-    .filter(w => !filterGrape || w.grape === filterGrape)
+    .filter(w => !filterGrape || splitGrapes(w.grape).includes(filterGrape))
     .filter(w => !filterRegion || w.region === filterRegion)
     .filter(w => filterAging === "Tutti" || getAgingStatus(w)?.s === filterAging)
     .filter(w => !filterUnracked || ((w.rackSlots||[]).reduce((sum, s) => sum + (s.positions||[]).length, 0) < (w.quantity || 0)))
@@ -1038,7 +1045,7 @@ export default function App() {
         .btn-sm:hover { color: ${C.gold}; border-color: ${C.gold}; }
         .btn-danger { background: transparent; color: #c07070; border: 1px solid #804040; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: background 0.15s; }
         .btn-danger:hover { background: rgba(180,60,60,0.15); }
-        .tab-btn { background: none; border: 1px solid transparent; cursor: pointer; padding: 8px 16px; border-radius: 20px; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: all 0.15s; }
+        .tab-btn { background: none; border: 1px solid transparent; cursor: pointer; padding: 5px 11px; border-radius: 20px; font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 1px; transition: all 0.15s; }
         .nav-btn { background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; padding: 12px 22px; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 2px; transition: all 0.15s; color: ${C.textFaint}; }
         .nav-btn.active { color: ${C.gold}; border-bottom-color: ${C.gold}; }
         .nav-btn:hover:not(.active) { color: ${C.textMuted}; }
@@ -1051,7 +1058,6 @@ export default function App() {
           .wine-card { font-size: 15px !important; }
           .wine-card h3 { font-size: 17px !important; }
           .wine-card p  { font-size: 14px !important; }
-          .tab-btn { padding: 5px 10px !important; font-size: 12px !important; }
           .nav-btn  { padding: 9px 14px !important; font-size: 13px !important; }
           .modal-box { border-radius: 20px 20px 0 0 !important; max-height: 95svh !important; }
           .mobile-header-title { font-size: 18px !important; }
@@ -1095,7 +1101,7 @@ export default function App() {
             <div style={{ flex: 1, position: "relative" }}>
               <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 14 }}>🔍</span>
               <input placeholder="Cerca in tutti i campi…" value={search} onChange={e => setSearch(e.target.value)}
-                style={{ ...inputStyle, paddingLeft: 34, paddingRight: search ? 34 : 12, padding: "7px 12px", paddingLeft: 34, fontSize: 16 }} />
+                style={{ ...inputStyle, padding: "7px 12px 7px 34px", paddingRight: search ? 34 : 12, fontSize: 16, fontFamily: "'Cinzel', serif", letterSpacing: 0.5 }} />
               {search && (
                 <button onClick={() => setSearch("")} style={{
                   position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
@@ -1108,7 +1114,7 @@ export default function App() {
             {/* Indicatori filtri attivi */}
             {(filterType !== "Tutti" || filterGrape || filterRegion || filterAging !== "Tutti" || filterUnracked) && (
               <span onClick={() => { setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null); setFilterAging("Tutti"); setFilterUnracked(false); }}
-                style={{ fontSize: 12, color: C.gold, fontFamily: "'Cinzel', serif", whiteSpace: "nowrap", cursor: "pointer" }}
+                style={{ fontSize: 12, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 1, whiteSpace: "nowrap", cursor: "pointer" }}
                 title="Rimuovi filtri">
                 {[filterType !== "Tutti" ? filterType : null, filterGrape, filterRegion, filterAging !== "Tutti" ? filterAging : null, filterUnracked ? "Senza scaffale" : null].filter(Boolean).join(" · ")} ✕
               </span>
@@ -1117,9 +1123,9 @@ export default function App() {
             <button onClick={() => setFiltersOpen(o => !o)} style={{
               background: filtersOpen ? "rgba(201,149,58,0.14)" : C.surface2,
               border: `1px solid ${filtersOpen ? "rgba(201,149,58,0.4)" : C.border}`,
-              borderRadius: 8, padding: "8px 13px", cursor: "pointer",
+              borderRadius: 8, padding: "7px 12px", cursor: "pointer",
               color: filtersOpen ? C.gold : C.textFaint,
-              fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1,
+              fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1,
               display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s",
               whiteSpace: "nowrap",
             }}>
@@ -1132,14 +1138,14 @@ export default function App() {
             <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
               {/* Tipo */}
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 38 }}>TIPO</span>
+                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>TIPO</span>
                 {["Tutti",...WINE_TYPES].map(t => (
                   <button key={t} className="tab-btn" onClick={() => setFilterType(t)} style={{ color: filterType===t?C.gold:C.textFaint, background: filterType===t?"rgba(201,149,58,0.14)":"none", border: filterType===t?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent" }}>{t.toUpperCase()}</button>
                 ))}
               </div>
               {/* Stato */}
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 38 }}>STATO</span>
+                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>STATO</span>
                 {[
                   { key: "Tutti", label: "Tutti", icon: "" },
                   { key: "Giovane", label: "Giovane", icon: "🌱" },
@@ -1154,8 +1160,27 @@ export default function App() {
                   }}>{icon} {label.toUpperCase()}</button>
                 ))}
               </div>
+              {/* Vitigno (dinamico dai vini presenti) */}
+              {grapeList.length > 0 && (
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>VITIGNO</span>
+                  <button className="tab-btn" onClick={() => setFilterGrape(null)} style={{
+                    color: !filterGrape?C.gold:C.textFaint,
+                    background: !filterGrape?"rgba(201,149,58,0.14)":"none",
+                    border: !filterGrape?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent",
+                  }}>TUTTI</button>
+                  {grapeList.map(g => (
+                    <button key={g} className="tab-btn" onClick={() => setFilterGrape(filterGrape===g?null:g)} style={{
+                      color: filterGrape===g?C.gold:C.textFaint,
+                      background: filterGrape===g?"rgba(201,149,58,0.14)":"none",
+                      border: filterGrape===g?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent",
+                    }}>{g.toUpperCase()}</button>
+                  ))}
+                </div>
+              )}
               {/* Senza scaffale */}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>STOCK</span>
                 <button className="tab-btn" onClick={() => setFilterUnracked(v => !v)} style={{
                   color: filterUnracked ? C.gold : C.textFaint,
                   background: filterUnracked ? "rgba(201,149,58,0.14)" : "none",
@@ -1163,17 +1188,25 @@ export default function App() {
                 }}>🗄 SENZA SCAFFALE</button>
               </div>
               {/* Ordina */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 38 }}>ORDINA</span>
-                <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ ...inputStyle, width: "auto", fontSize: 14, padding: "7px 10px" }}>
-                  <option value="name">Nome</option>
-                  <option value="year">Annata</option>
-                  <option value="quantity">Quantità</option>
-                  <option value="urgency">Da bere</option>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>ORDINA</span>
+                <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{
+                  background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7,
+                  color: C.text, padding: "5px 10px", width: "auto", outline: "none",
+                  fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1,
+                }}>
+                  <option value="name">NOME</option>
+                  <option value="year">ANNATA</option>
+                  <option value="quantity">QUANTITÀ</option>
+                  <option value="urgency">DA BERE</option>
                 </select>
                 {sortBy === "year" && (
-                  <button onClick={() => setSortDir(d => d==="asc"?"desc":"asc")} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.gold, cursor: "pointer", padding: "7px 12px", fontFamily: "'Cinzel', serif", fontSize: 13 }}>
-                    {sortDir==="asc" ? "↑ Più vecchi" : "↓ Più recenti"}
+                  <button onClick={() => setSortDir(d => d==="asc"?"desc":"asc")} style={{
+                    background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 20,
+                    color: C.gold, cursor: "pointer", padding: "5px 11px",
+                    fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1,
+                  }}>
+                    {sortDir==="asc" ? "↑ PIÙ VECCHI" : "↓ PIÙ RECENTI"}
                   </button>
                 )}
               </div>
