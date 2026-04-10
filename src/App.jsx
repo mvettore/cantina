@@ -448,6 +448,7 @@ export default function App() {
   const [logEntry, setLogEntry] = useState(null); // current entry being edited
   const [logView, setLogView] = useState("list"); // "list" | "entry"
   const [logSearch, setLogSearch] = useState("");
+  const [logFavOnly, setLogFavOnly] = useState(false);
   const [viewingEntry, setViewingEntry] = useState(null); // wine to drink from
   const [enriching, setEnriching] = useState(false);
   const [enrichData, setEnrichData] = useState(null);
@@ -2167,7 +2168,16 @@ export default function App() {
           <PullIndicator />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO DEGUSTAZIONI</h2>
-            <span style={{ fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length===1?"bottiglia":"bottiglie"}</span>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button onClick={() => setLogFavOnly(v => !v)} style={{
+                background: logFavOnly ? "rgba(201,149,58,0.18)" : C.surface2,
+                border: `1px solid ${logFavOnly ? "rgba(201,149,58,0.5)" : C.border}`,
+                borderRadius: 8, padding: "6px 12px", cursor: "pointer",
+                color: logFavOnly ? C.gold : C.textFaint,
+                fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1,
+              }}>★ PREFERITI</button>
+              <span style={{ fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length===1?"bt":"bt"}</span>
+            </div>
           </div>
           {/* Search bar */}
           <div style={{ position: "relative", marginBottom: 16 }}>
@@ -2193,6 +2203,7 @@ export default function App() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {[...log]
+                .filter(entry => !logFavOnly || entry.favorite)
                 .filter(entry => {
                   if (!logSearch) return true;
                   const q = logSearch.toLowerCase();
@@ -2225,12 +2236,20 @@ export default function App() {
                         </h3>
                         <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic" }}>{entry.wineProducer}{entry.wineYear ? ` · ${entry.wineYear}` : ""}</p>
                       </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>
-                          {new Date(entry.date).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" })}
+                      <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <button onClick={e => { e.stopPropagation(); saveLog(log.map(l => l.id === entry.id ? { ...l, favorite: !l.favorite } : l)); }}
+                            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 0,
+                              color: entry.favorite ? C.gold : C.textFaint, transition: "color 0.15s" }}
+                            title={entry.favorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}>
+                            {entry.favorite ? "★" : "☆"}
+                          </button>
+                          <div style={{ fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>
+                            {new Date(entry.date).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" })}
+                          </div>
                         </div>
                         {entry.rating > 0 && (
-                          <div style={{ marginTop: 3, fontFamily: "'Cinzel', serif", fontSize: 13, color: C.gold }}>
+                          <div style={{ fontFamily: "'Cinzel', serif", fontSize: 13, color: C.gold }}>
                             {entry.rating}/100
                           </div>
                         )}
