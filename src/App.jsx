@@ -91,19 +91,17 @@ function saveLocal(key, val) {
 }
 
 // ── Foto separate: ogni vino ha la propria chiave, indipendente dai metadati ──
+// ── Foto: helpers per distinguere URL (Supabase Storage) da base64 legacy ──
 const PHOTO_KEY_PREFIX = "cantina-photo-";
-function saveWinePhotos(wines) {
-  wines.forEach(wine => {
-    try {
-      if (!wine.deleted && (wine.photos||[]).length > 0)
-        localStorage.setItem(PHOTO_KEY_PREFIX + wine.id, JSON.stringify(wine.photos));
-      else
-        localStorage.removeItem(PHOTO_KEY_PREFIX + wine.id);
-    } catch {}
-  });
-}
+const isPhotoURL = (p) => typeof p === "string" && (p.startsWith("http://") || p.startsWith("https://"));
+const isPhotoBase64 = (p) => typeof p === "string" && p.startsWith("data:");
+
+// Carica foto legacy dalle chiavi localStorage separate (cantina-photo-{id}) SOLO
+// se il vino non ha già foto nel suo array. Questo preserva i nuovi URL Supabase
+// senza reintrodurre base64 legacy.
 function loadWinePhotos(wines) {
   return wines.map(wine => {
+    if ((wine.photos || []).length > 0) return wine; // già con foto (URL o base64 recente)
     try {
       const raw = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
       if (raw) return { ...wine, photos: JSON.parse(raw) };
@@ -113,6 +111,30 @@ function loadWinePhotos(wines) {
 }
 function loadWinesLocal(fallback) {
   return loadWinePhotos(loadLocal(STORAGE_KEY, fallback));
+}
+
+// Upload di una foto su Supabase Storage tramite function proxy.
+// Accetta sia un data URL base64 completo che base64 puro.
+// Ritorna l'URL pubblico da salvare in wine.photos[].
+async function uploadPhotoToStorage(wineId, index, base64DataUrl) {
+  const parts = base64DataUrl.split(",");
+  const base64 = parts.length > 1 ? parts[1] : base64DataUrl;
+  let mediaType = "image/jpeg";
+  if (parts.length > 1) {
+    const m = parts[0].match(/^data:([^;]+);/);
+    if (m) mediaType = m[1];
+  }
+  const resp = await fetch("/.netlify/functions/upload-photo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ wineId, index, base64, mediaType }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || `Upload HTTP ${resp.status}`);
+  }
+  const data = await resp.json();
+  return data.url;
 }
 
 // ── Backup automatico degli ultimi 5 snapshot vini ──
@@ -181,17 +203,25 @@ function cloudSave(payload) {
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
     } catch {
-      // Se fallisce (es. payload troppo grande), riprova senza foto
+      // Se fallisce (es. payload troppo grande da base64 legacy), riprova
+      // mantenendo solo gli URL (Supabase Storage). Base64 vengono strippati.
       try {
         const fallback = { ...toSave };
-        if (fallback.wines) fallback.wines = fallback.wines.map(w => ({ ...w, photos: [] }));
+        if (fallback.wines) {
+          fallback.wines = fallback.wines.map(w => ({
+            ...w,
+            photos: (w.photos || []).filter(
+              p => typeof p === "string" && (p.startsWith("http://") || p.startsWith("https://"))
+            ),
+          }));
+        }
         const r2 = await fetch("/.netlify/functions/data", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(fallback),
         });
         if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
-        _onCloudSaveError?.("⚠️ Foto non sincronizzate (payload troppo grande) — dati salvati");
+        _onCloudSaveError?.("⚠️ Alcune foto non sincronizzate — dati salvati");
       } catch {
         _onCloudSaveError?.("❌ Salvataggio cloud fallito — i dati sono al sicuro in locale");
       }
@@ -497,8 +527,12 @@ export default function App() {
           loadedWines = mergeWines(localWines, cloudWines);
           latestWinesRef.current = loadedWines;
           setWines(loadedWines);
-          saveWinePhotos(loadedWines);
-          saveLocal(STORAGE_KEY, loadedWines.map(({ photos: _, ...w }) => w));
+          // Persiste solo URL Supabase, le foto base64 restano in memoria
+          // fino a quando vengono caricate su Storage (migrazione asincrona)
+          saveLocal(STORAGE_KEY, loadedWines.map(w => ({
+            ...w,
+            photos: (w.photos || []).filter(isPhotoURL),
+          })));
           cloudSave({ wines: loadedWines });
           const maxId = Math.max(...loadedWines.map(w => w.id), 99);
           if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
@@ -520,9 +554,68 @@ export default function App() {
             setTimeout(() => autoEnrich(wine), i * 3000); // 3s di gap tra una e l'altra
           });
         }
+        // Migra foto base64 legacy → Supabase Storage in background
+        setTimeout(() => migrateLegacyPhotos(loadedWines), 2500);
       }
     });
   }, []);
+
+  // Migrazione one-shot: se ci sono foto base64 nelle chiavi localStorage legacy
+  // (cantina-photo-{id}), le carica su Supabase Storage e aggiorna wine.photos
+  // con gli URL. Viene eseguita in background dopo il primo cloud sync.
+  const migrateLegacyPhotos = async (wineList) => {
+    const needsMigration = wineList.filter(
+      w => (w.photos || []).some(isPhotoBase64)
+    );
+    if (needsMigration.length === 0) return;
+
+    console.log(`[migration] ${needsMigration.length} vini con foto base64 legacy da caricare`);
+    showToast(`📷 Migrazione foto cloud: ${needsMigration.length} vini…`);
+
+    const updates = new Map();
+    let succeeded = 0;
+    for (const wine of needsMigration) {
+      const newPhotos = [];
+      for (let i = 0; i < (wine.photos || []).length; i++) {
+        const p = wine.photos[i];
+        if (isPhotoURL(p)) {
+          newPhotos.push(p);
+        } else if (isPhotoBase64(p)) {
+          try {
+            const url = await uploadPhotoToStorage(wine.id, i, p);
+            newPhotos.push(url);
+            succeeded++;
+            console.log(`[migration] ${wine.id}/${i} → ${url.split("/").pop()}`);
+          } catch (err) {
+            console.error(`[migration] fallito ${wine.id}/${i}: ${err.message}`);
+            newPhotos.push(p); // mantiene base64, riproverà al prossimo avvio
+          }
+        }
+      }
+      updates.set(wine.id, newPhotos);
+    }
+
+    if (updates.size === 0) return;
+
+    setWines(current => {
+      const newList = current.map(w =>
+        updates.has(w.id)
+          ? { ...w, photos: updates.get(w.id), lastModified: Date.now() }
+          : w
+      );
+      // Persiste solo URL in localStorage
+      saveLocal(STORAGE_KEY, newList.map(w => ({
+        ...w,
+        photos: (w.photos || []).filter(isPhotoURL),
+      })));
+      cloudSave({ wines: newList });
+      return newList;
+    });
+
+    if (succeeded > 0) {
+      showToast(`✨ Foto caricate su cloud: ${succeeded}`);
+    }
+  };
 
   const doCloudRefresh = () => {
     if (!IS_NETLIFY) return Promise.resolve();
@@ -534,13 +627,15 @@ export default function App() {
         // perché localStorage può fallire silenziosamente per quota piena
         setWines(current => {
           const merged = mergeWines(current, cloudWines);
-          // Ri-legge le foto dalle chiavi localStorage separate: se per qualsiasi motivo
-          // merged ha photos:[] ma la chiave cantina-photo-{id} esiste ancora, le recupera
+          // Fallback legacy: ri-legge foto da chiavi separate cantina-photo-{id}
+          // se (e solo se) il vino non ne ha già nel suo array
           const mergedWithPhotos = loadWinePhotos(merged);
           const maxId = Math.max(...mergedWithPhotos.map(w => w.id), 99);
           if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
-          saveWinePhotos(mergedWithPhotos);
-          saveLocal(STORAGE_KEY, mergedWithPhotos.map(({ photos: _, ...w }) => w));
+          saveLocal(STORAGE_KEY, mergedWithPhotos.map(w => ({
+            ...w,
+            photos: (w.photos || []).filter(isPhotoURL),
+          })));
           return mergedWithPhotos;
         });
         // Usa React state (via ref) — più affidabile di localStorage che può fallire per quota
@@ -593,10 +688,13 @@ export default function App() {
     saveWinesBackup(deduped);
     latestWinesRef.current = deduped;
     setWines(deduped);
-    // Foto in chiavi separate — il main array non le contiene più
-    saveWinePhotos(deduped);
-    saveLocal(STORAGE_KEY, deduped.map(({ photos: _, ...wine }) => wine));
-    cloudSave({ wines: deduped }); // cloud riceve le foto (best-effort)
+    // Persiste solo URL (Supabase Storage): base64 temporanei restano in memoria
+    // fino all'upload, cosi localStorage non si riempie e il cloud non si bloata.
+    saveLocal(STORAGE_KEY, deduped.map(wine => ({
+      ...wine,
+      photos: (wine.photos || []).filter(isPhotoURL),
+    })));
+    cloudSave({ wines: deduped }); // data.js lato server filtra comunque base64
   };
   const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY,  r); cloudSave({ racks: r }); };
   const saveLog   = (l) => { setLog(l);   saveLocal(LOG_KEY,   l); cloudSave({ log:   l }); };
@@ -948,23 +1046,61 @@ export default function App() {
     }
   };
 
-  const handleSaveWine = () => {
+  // Carica su Supabase Storage eventuali foto base64 presenti in editing.photos[],
+  // sostituendole con gli URL pubblici. URL già presenti vengono mantenuti.
+  // Ritorna l'array photos[] con solo URL (o il base64 originale se l'upload è fallito).
+  const uploadPendingPhotos = async (wineId, photos) => {
+    const result = [];
+    let failed = 0;
+    for (let i = 0; i < (photos || []).length; i++) {
+      const p = photos[i];
+      if (isPhotoURL(p)) {
+        result.push(p); // già caricata
+      } else if (isPhotoBase64(p)) {
+        try {
+          const url = await uploadPhotoToStorage(wineId, i, p);
+          result.push(url);
+        } catch (err) {
+          console.error(`[upload] fallito per wine ${wineId}/${i}: ${err.message}`);
+          result.push(p); // mantieni il base64 in memoria, riproveremo al prossimo save
+          failed++;
+        }
+      } else {
+        // Forma inattesa (null, undefined, oggetto): ignora
+      }
+    }
+    return { photos: result, failed };
+  };
+
+  const handleSaveWine = async () => {
     if (!editing.name.trim()) return;
     if (!editing.type) { showToast("Seleziona una tipologia"); return; }
     if (!editing.region) { showToast("Seleziona una regione"); return; }
-    if (modal === "add") {
-      const wine = { ...editing, id: nextWineId.current++, addedAt: Date.now(), lastModified: Date.now() };
+
+    const isAdd = modal === "add";
+    const wineId = isAdd ? nextWineId.current : editing.id;
+
+    // Se ci sono foto base64 da caricare, mostra il toast di upload
+    const needsUpload = (editing.photos || []).some(isPhotoBase64);
+    if (needsUpload) showToast("📷 Caricamento foto…");
+
+    const { photos: uploadedPhotos, failed } = await uploadPendingPhotos(wineId, editing.photos);
+    const uploadSuffix = failed > 0 ? ` (${failed} foto non caricate)` : "";
+
+    if (isAdd) {
+      nextWineId.current = wineId + 1;
+      const wine = { ...editing, id: wineId, photos: uploadedPhotos, addedAt: Date.now(), lastModified: Date.now() };
       const newList = [...wines.filter(w => w.id !== wine.id), wine];
       saveWines(newList);
       setModal(null);
-      showToast(`"${wine.name}" aggiunto — analisi in corso…`);
+      showToast(`"${wine.name}" aggiunto${uploadSuffix} — analisi in corso…`);
       setTimeout(() => autoEnrich(wine), 500);
     } else {
       const original = wines.find(w => w.id === editing.id);
       const qtyDelta = (original?.quantity || 0) - (editing.quantity || 0);
-      const updated = { ...editing, lastModified: Date.now() };
+      const updated = { ...editing, photos: uploadedPhotos, lastModified: Date.now() };
       saveWines(wines.map(w => w.id === editing.id ? updated : w));
-      showToast(`"${editing.name}" aggiornato`);
+      showToast(`"${editing.name}" aggiornato${uploadSuffix}`);
       setModal(null);
       // Auto-log: se la quantità è stata decrementata manualmente, proponi lo storico
       if (qtyDelta > 0) {

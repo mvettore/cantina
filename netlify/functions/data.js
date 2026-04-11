@@ -12,14 +12,25 @@
  * se anche solo alcuni vini hanno immagini base64 embedded.
  */
 
-// Rimuove i campi foto dai vini. Resiste a input non-array o oggetti malformati.
+// Filtra selettivamente le foto dai vini:
+// - URL http/https (es. Supabase Storage) → mantenuti (piccoli, sincronizzabili)
+// - data URL base64                        → rimossi (troppo grandi, causano 413)
+// - Campo `photo` singolo legacy           → rimosso sempre
+// Resiste a input non-array o oggetti malformati.
 function stripPhotosFromWines(wines) {
   if (!Array.isArray(wines)) return wines;
   return wines.map(w => {
     if (!w || typeof w !== "object") return w;
-    // destructure per escludere photos/photo
-    const { photos, photo, ...rest } = w;
-    return rest;
+    const { photo, photos, ...rest } = w; // scarta sempre il campo `photo` legacy
+    let cleanPhotos = photos;
+    if (Array.isArray(cleanPhotos)) {
+      cleanPhotos = cleanPhotos.filter(
+        p => typeof p === "string" && (p.startsWith("http://") || p.startsWith("https://"))
+      );
+    } else {
+      cleanPhotos = [];
+    }
+    return { ...rest, photos: cleanPhotos };
   });
 }
 
