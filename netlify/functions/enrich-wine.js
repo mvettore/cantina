@@ -2,16 +2,18 @@
  * Netlify Function: enrich-wine
  * Riceve i dati base di un vino e restituisce informazioni approfondite
  * su vitigno, territorio, sentori e abbinamenti.
+ * Provider AI: Gemini (default, free tier) con fallback su Anthropic.
  */
+
+const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
 
 const handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: "API key non configurata" }) };
+  if (activeProvider() === "none") {
+    return { statusCode: 500, body: JSON.stringify({ error: "Nessuna API key configurata (GEMINI_API_KEY o ANTHROPIC_API_KEY)" }) };
   }
 
   let wine;
@@ -49,33 +51,15 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON)
   const timeoutId = setTimeout(() => controller.abort(), 24000);
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
+    const raw = await callAI({
+      prompt,
+      maxTokens: 1200,
+      temperature: 0.5,
+      jsonMode: true,
       signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1200,
-        messages: [{ role: "user", content: prompt }],
-      }),
     });
-
     clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const err = await response.text();
-      return { statusCode: response.status, body: JSON.stringify({ error: err }) };
-    }
-
-    const data = await response.json();
-    const raw = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
-    const clean = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
-    const parsed = JSON.parse(clean);
-
+    const parsed = parseJSONResponse(raw);
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -86,7 +70,7 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON)
     if (err.name === "AbortError") {
       return { statusCode: 504, body: JSON.stringify({ error: "Timeout" }) };
     }
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+    return { statusCode: err.status || 500, body: JSON.stringify({ error: err.message }) };
   }
 };
 

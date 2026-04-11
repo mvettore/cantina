@@ -9,6 +9,12 @@
 [functions."enrich-wine"]
   timeout = 26
 
+[functions."pair-wine"]
+  timeout = 26
+
+[functions."summarize-cellar"]
+  timeout = 26
+
 [functions."search-wine-url"]
   timeout = 26
 
