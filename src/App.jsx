@@ -438,6 +438,15 @@ export default function App() {
   const [scanError, setScanError] = useState(null);
   const [drinkModal, setDrinkModal] = useState(null);
   const [tonightOpen, setTonightOpen] = useState(false); // modale "Apri stasera"
+  const [groupVerticali, setGroupVerticali] = useState(false); // toggle raggruppamento verticali
+  const [verticaleOpen, setVerticaleOpen] = useState(null); // {key, wines[]} della verticale aperta
+  const [pairingOpen, setPairingOpen] = useState(false);
+  const [pairingDish, setPairingDish] = useState("");
+  const [pairingLoading, setPairingLoading] = useState(false);
+  const [pairingResult, setPairingResult] = useState(null); // {picks:[{wineId, reason}], error?}
+  const [cellarSummary, setCellarSummary] = useState(() => loadLocal('cellar-summary', null));
+  const [summarizing, setSummarizing] = useState(false);
+  const [summarizeError, setSummarizeError] = useState(null);
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
   const [cantinaName, setCantinaName] = useState(() => loadLocal('cantina-name', 'CANTINA VETTORELLO'));
   const [editingName, setEditingName] = useState(false);
@@ -705,6 +714,24 @@ export default function App() {
   const totalBottles = activeWines.reduce((s, w) => s + w.quantity, 0);
   const totalValue   = activeWines.reduce((s, w) => s + w.quantity * (parseFloat(w.price) || 0), 0);
 
+  // Verticali: chiave di raggruppamento case-insensitive su producer + name
+  const verticaleKey = (w) => `${(w.producer||"").trim().toLowerCase()}::${(w.name||"").trim().toLowerCase()}`;
+  // Quando groupVerticali è attivo, raggruppa `filtered` in un array di array (annate)
+  const filteredGrouped = (() => {
+    if (!groupVerticali) return null;
+    const groups = new Map();
+    filtered.forEach(w => {
+      const k = verticaleKey(w);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(w);
+    });
+    // Ordina le annate all'interno di ogni gruppo (più recente prima)
+    return Array.from(groups.entries()).map(([key, ws]) => ({
+      key,
+      wines: ws.slice().sort((a,b) => (b.year||0) - (a.year||0)),
+    }));
+  })();
+
   // ── Esegue OCR su 1 o 2 foto e aggiorna il form ──
   const doScanAndFill = async (photo1, photo2 = null) => {
     const info = await scanLabel(photo1.scanDataUrl, photo2?.scanDataUrl || null);
@@ -820,6 +847,10 @@ export default function App() {
     date: new Date().toISOString().split("T")[0],
     occasion: "",
     companions: "",
+    // Quick tasting (rating veloce 1-5)
+    quick_aromi: 0,
+    quick_struttura: 0,
+    quick_persistenza: 0,
     // Scheda degustazione AIS
     rating: 0,
     vista_limpidezza: "",
@@ -927,6 +958,68 @@ export default function App() {
           }
         }, 250);
       }
+    }
+  };
+
+  // Food pairing inverso: chiede a Claude i 2-3 vini della cantina più adatti al piatto
+  const handlePairWine = async () => {
+    const dish = pairingDish.trim();
+    if (!dish) return;
+    setPairingLoading(true);
+    setPairingResult(null);
+    try {
+      const resp = await fetch("/.netlify/functions/pair-wine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dish,
+          wines: activeWines.filter(w => (w.quantity||0) > 0).map(w => ({
+            id: w.id, name: w.name, producer: w.producer, year: w.year,
+            type: w.type, region: w.region, grape: w.grape,
+            foodPairing: w.enrichment?.foodPairing || "",
+          })),
+        }),
+      });
+      if (!resp.ok) throw new Error(`Errore ${resp.status}`);
+      const data = await resp.json();
+      setPairingResult(data);
+    } catch (err) {
+      setPairingResult({ error: err.message || "Errore durante il pairing" });
+    } finally {
+      setPairingLoading(false);
+    }
+  };
+
+  // Riassunto AI della cantina: paragrafo con composizione, punti di forza, lacune
+  const handleSummarizeCellar = async () => {
+    setSummarizing(true);
+    setSummarizeError(null);
+    try {
+      const resp = await fetch("/.netlify/functions/summarize-cellar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wines: activeWines.map(w => ({
+            name: w.name, producer: w.producer, year: w.year,
+            type: w.type, region: w.region, grape: w.grape,
+            quantity: w.quantity, price: w.price || null,
+            agingStatus: getAgingStatus(w)?.s || null,
+          })),
+          log: log.slice(-30).map(e => ({
+            wineName: e.wineName, wineType: e.wineType, wineGrape: e.wineGrape,
+            date: e.date, rating: e.rating || 0, favorite: !!e.favorite,
+          })),
+        }),
+      });
+      if (!resp.ok) throw new Error(`Errore ${resp.status}`);
+      const data = await resp.json();
+      const summary = { ...data, generatedAt: new Date().toISOString(), totalBt: totalBottles };
+      setCellarSummary(summary);
+      saveLocal('cellar-summary', summary);
+    } catch (err) {
+      setSummarizeError(err.message || "Errore durante la generazione");
+    } finally {
+      setSummarizing(false);
     }
   };
 
@@ -1321,6 +1414,18 @@ export default function App() {
                 🍷 STASERA
               </button>
             )}
+            {/* Food pairing inverso */}
+            <button onClick={() => { setPairingOpen(true); setPairingResult(null); }} style={{
+              background: "linear-gradient(135deg, #1a3a2a, #3a7a5a)",
+              border: "1px solid rgba(122,186,138,0.4)",
+              borderRadius: 8, padding: "7px 12px", cursor: "pointer",
+              color: "#d0f0dc",
+              fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
+              display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s",
+              whiteSpace: "nowrap",
+            }} title="Abbina un vino a un piatto">
+              🍽 ABBINA
+            </button>
             {/* Toggle filtri */}
             <button onClick={() => setFiltersOpen(o => !o)} style={{
               background: filtersOpen ? "rgba(201,149,58,0.14)" : C.surface2,
@@ -1380,14 +1485,19 @@ export default function App() {
                   ))}
                 </div>
               )}
-              {/* Senza scaffale */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>STOCK</span>
+              {/* Senza scaffale + Verticali */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>VISTA</span>
                 <button className="tab-btn" onClick={() => setFilterUnracked(v => !v)} style={{
                   color: filterUnracked ? C.gold : C.textFaint,
                   background: filterUnracked ? "rgba(201,149,58,0.14)" : "none",
                   border: filterUnracked ? `1px solid rgba(201,149,58,0.4)` : "1px solid transparent",
                 }}>🗄 SENZA SCAFFALE</button>
+                <button className="tab-btn" onClick={() => setGroupVerticali(v => !v)} style={{
+                  color: groupVerticali ? C.gold : C.textFaint,
+                  background: groupVerticali ? "rgba(201,149,58,0.14)" : "none",
+                  border: groupVerticali ? `1px solid rgba(201,149,58,0.4)` : "1px solid transparent",
+                }}>🏛 VERTICALI</button>
               </div>
               {/* Ordina */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1434,15 +1544,25 @@ export default function App() {
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 18 }}>
-              {filtered.map(wine => {
+              {(groupVerticali && filteredGrouped
+                ? filteredGrouped.map(g => ({ wine: g.wines[0], group: g }))
+                : filtered.map(w => ({ wine: w, group: null }))
+              ).map(({ wine, group }) => {
+                const isGroup = !!(group && group.wines.length > 1);
+                const groupTotalBt = isGroup ? group.wines.reduce((s,w) => s + (w.quantity || 0), 0) : (wine.quantity || 0);
+                const groupYearsMin = isGroup ? Math.min(...group.wines.map(w => w.year || 9999)) : null;
+                const groupYearsMax = isGroup ? Math.max(...group.wines.map(w => w.year || 0)) : null;
                 const tc = typeColors[wine.type] || { bar: "#888" };
                 const ag = getAgingStatus(wine);
                 const urgent = ag?.s === "Declino" || ag?.s === "Maturo";
                 const urgentBorder = ag?.s === "Declino" ? "#9a5050" : "#b07030";
                 const urgentWidth  = ag?.s === "Maturo" ? "2px" : "1px";
                 return (
-                  <div key={wine.id} className="wine-card" style={{ background: C.surface, border: urgent ? `${urgentWidth} solid ${urgentBorder}` : `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: urgent ? `0 3px 14px ${urgentBorder}44` : "0 3px 12px rgba(0,0,0,0.25)" }}
-                    onClick={() => { setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view"); }}>
+                  <div key={isGroup ? group.key : wine.id} className="wine-card" style={{ background: C.surface, border: urgent ? `${urgentWidth} solid ${urgentBorder}` : `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: urgent ? `0 3px 14px ${urgentBorder}44` : "0 3px 12px rgba(0,0,0,0.25)", position: "relative" }}
+                    onClick={() => {
+                      if (isGroup) { setVerticaleOpen(group); return; }
+                      setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view");
+                    }}>
                     <div style={{ height: 5, background: tc.bar }} />
 
                     <div style={{display:"flex",minHeight:0}}>
@@ -1463,11 +1583,11 @@ export default function App() {
                             <FitText text={wine.name} maxSize={20} minSize={12}
                               style={{fontFamily:"'Cinzel',serif",fontWeight:700,color:C.text,lineHeight:1.2,flex:1,minWidth:0}} />
                             <span style={{
-                              background:wine.quantity===0?"rgba(180,60,60,0.25)":wine.quantity<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
-                              color:wine.quantity===0?"#d07070":wine.quantity<=2?"#c0b040":"#70c070",
+                              background:groupTotalBt===0?"rgba(180,60,60,0.25)":groupTotalBt<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
+                              color:groupTotalBt===0?"#d07070":groupTotalBt<=2?"#c0b040":"#70c070",
                               padding:"1px 8px",borderRadius:20,fontSize:16,flexShrink:0,
                               fontFamily:"'Cinzel',serif",fontWeight:700,
-                            }}>{wine.quantity}bt</span>
+                            }}>{groupTotalBt}bt</span>
                           </div>
                           <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2,
                             minHeight:"1.3em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
@@ -1475,12 +1595,23 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Blocco mid: produttore · anno (+ prezzo) */}
+                        {/* Blocco mid: produttore · anno/e (+ prezzo) */}
                         <div>
                           <p style={{fontFamily:"'Cinzel',serif",fontSize:16,
                             color:C.text,margin:0,lineHeight:1.3,
                             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                            {[wine.producer, wine.year].filter(Boolean).join(" · ")}
+                            {isGroup
+                              ? [wine.producer, `${groupYearsMin}–${groupYearsMax}`].filter(Boolean).join(" · ")
+                              : [wine.producer, wine.year].filter(Boolean).join(" · ")
+                            }
+                            {isGroup && (
+                              <span style={{
+                                marginLeft: 8, fontSize: 11, color: C.gold,
+                                background: "rgba(201,149,58,0.15)", border: "1px solid rgba(201,149,58,0.35)",
+                                borderRadius: 10, padding: "1px 7px", fontWeight: 700, letterSpacing: 0.5,
+                                verticalAlign: "middle", whiteSpace: "nowrap",
+                              }}>🏛 {group.wines.length} ANNATE</span>
+                            )}
                           </p>
                           {wine.price && (
                             <p style={{fontFamily:"'Cinzel',serif",fontSize:14,color:C.textMuted,margin:"2px 0 0"}}>€{wine.price}</p>
@@ -1665,6 +1796,64 @@ export default function App() {
           <div style={{ flex:1, overflowY:"auto", minHeight:0 }} {...pullHandlers}><div style={{ padding:"20px 16px", display:"flex", flexDirection:"column", gap:16 }}>
             <PullIndicator />
             <h2 style={{ fontFamily:"'Cinzel', serif", fontSize:18, color:C.gold, letterSpacing:2 }}>COMPOSIZIONE DELLA CANTINA</h2>
+
+            {/* Riassunto AI della cantina */}
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <div style={{ fontFamily: "'Cinzel', serif", fontSize: 15, color: C.gold, letterSpacing: 2 }}>✨ ANALISI AI</div>
+                <button onClick={handleSummarizeCellar} disabled={summarizing} style={{
+                  background: summarizing ? C.surface2 : "rgba(201,149,58,0.14)",
+                  border: "1px solid rgba(201,149,58,0.4)", borderRadius: 8,
+                  padding: "6px 13px", cursor: summarizing ? "not-allowed" : "pointer",
+                  color: C.gold, fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
+                  whiteSpace: "nowrap",
+                }}>
+                  {summarizing ? "…" : cellarSummary ? "🔄 AGGIORNA" : "✨ GENERA"}
+                </button>
+              </div>
+              <div style={{ padding: "16px 20px" }}>
+                {summarizing && (
+                  <div style={{ textAlign: "center", padding: "30px 10px", color: C.textFaint }}>
+                    <div className="spinner" style={{ margin: "0 auto 14px", width: 24, height: 24 }} />
+                    <p style={{ fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1 }}>IL SOMMELIER STA ANALIZZANDO…</p>
+                  </div>
+                )}
+                {!summarizing && summarizeError && (
+                  <div style={{ padding: "10px 12px", background: "rgba(154,80,80,0.15)", border: "1px solid rgba(154,80,80,0.4)", borderRadius: 8, color: "#d08080", fontSize: 13 }}>
+                    ⚠ {summarizeError}
+                  </div>
+                )}
+                {!summarizing && cellarSummary && !summarizeError && (
+                  <>
+                    {Array.isArray(cellarSummary.highlights) && cellarSummary.highlights.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                        {cellarSummary.highlights.map((h, i) => (
+                          <div key={i} style={{
+                            fontFamily: "'Cinzel', serif", fontSize: 12, color: C.gold, letterSpacing: 0.5,
+                            background: "rgba(201,149,58,0.08)", borderLeft: `2px solid ${C.gold}`,
+                            padding: "6px 12px", borderRadius: "0 6px 6px 0",
+                          }}>{h}</div>
+                        ))}
+                      </div>
+                    )}
+                    {cellarSummary.summary && (
+                      <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 15, color: C.text, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+                        {cellarSummary.summary}
+                      </div>
+                    )}
+                    <p style={{ fontSize: 11, color: C.textFaint, fontStyle: "italic", marginTop: 12, textAlign: "right" }}>
+                      Aggiornato il {new Date(cellarSummary.generatedAt).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" })}
+                      {cellarSummary.totalBt !== totalBt && ` · la cantina è cambiata (${cellarSummary.totalBt}→${totalBt} bt)`}
+                    </p>
+                  </>
+                )}
+                {!summarizing && !cellarSummary && !summarizeError && (
+                  <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", lineHeight: 1.5 }}>
+                    Claude analizza la tua cantina: composizione, punti di forza, lacune e priorità. Tocca <strong style={{ color: C.gold }}>✨ GENERA</strong> per iniziare.
+                  </p>
+                )}
+              </div>
+            </div>
 
             {/* KPI */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(120px,1fr))", gap:10 }}>
@@ -2469,6 +2658,173 @@ export default function App() {
         </div>
       )}
 
+      {/* ── FOOD PAIRING MODAL ── */}
+      {pairingOpen && (
+        <div className="modal-overlay" onClick={() => setPairingOpen(false)}>
+          <div className="modal-box" style={{ maxWidth: 580 }} onClick={e => e.stopPropagation()}>
+            <div style={{ height: 4, background: `linear-gradient(90deg, #3a7a5a, #c9953a)`, borderRadius: "14px 14px 0 0" }} />
+            <div style={{ padding: "22px 22px 18px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                <div>
+                  <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, color: C.gold, letterSpacing: 2 }}>
+                    🍽 ABBINA A…
+                  </h2>
+                  <p style={{ fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginTop: 4 }}>
+                    COSA STAI MANGIANDO?
+                  </p>
+                </div>
+                <button onClick={() => setPairingOpen(false)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 22, lineHeight: 1 }}>✕</button>
+              </div>
+
+              <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+                <input style={{ ...inputStyle, fontSize: 16, fontFamily: "'Cinzel', serif", letterSpacing: 0.5 }}
+                  placeholder="es. brasato al Barolo, pesce al forno, carbonara…"
+                  value={pairingDish}
+                  onChange={e => setPairingDish(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !pairingLoading) handlePairWine(); }} />
+                <button onClick={handlePairWine} disabled={pairingLoading || !pairingDish.trim()} style={{
+                  background: pairingLoading || !pairingDish.trim() ? C.surface2 : "linear-gradient(135deg, #1a3a2a, #3a7a5a)",
+                  border: "1px solid rgba(122,186,138,0.4)",
+                  borderRadius: 8, padding: "0 18px", cursor: pairingLoading || !pairingDish.trim() ? "not-allowed" : "pointer",
+                  color: pairingLoading || !pairingDish.trim() ? C.textFaint : "#d0f0dc",
+                  fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
+                  whiteSpace: "nowrap", transition: "all 0.15s", flexShrink: 0,
+                }}>
+                  {pairingLoading ? "…" : "ABBINA"}
+                </button>
+              </div>
+
+              {pairingLoading && (
+                <div style={{ textAlign: "center", padding: "30px 10px", color: C.textFaint }}>
+                  <div className="spinner" style={{ margin: "0 auto 14px", width: 24, height: 24 }} />
+                  <p style={{ fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1 }}>IL SOMMELIER STA PENSANDO…</p>
+                </div>
+              )}
+
+              {!pairingLoading && pairingResult && pairingResult.error && (
+                <div style={{ marginTop: 18, padding: "12px 14px", background: "rgba(154,80,80,0.15)", border: "1px solid rgba(154,80,80,0.4)", borderRadius: 8, color: "#d08080", fontSize: 13 }}>
+                  ⚠ {pairingResult.error}
+                </div>
+              )}
+
+              {!pairingLoading && pairingResult && !pairingResult.error && (
+                <div style={{ marginTop: 18 }}>
+                  {pairingResult.note && (
+                    <p style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic", marginBottom: 14, lineHeight: 1.5 }}>
+                      {pairingResult.note}
+                    </p>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {(pairingResult.picks || []).map((pick, idx) => {
+                      const wine = activeWines.find(w => w.id === pick.wineId);
+                      if (!wine) return null;
+                      const tc = typeColors[wine.type] || { bar: "#888" };
+                      return (
+                        <div key={wine.id}
+                          onClick={() => { setPairingOpen(false); setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view"); }}
+                          style={{
+                            background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10,
+                            padding: "12px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
+                            transition: "all 0.15s",
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = C.gold; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; }}>
+                          <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: "50%",
+                            background: `${tc.bar}22`, border: `2px solid ${tc.bar}`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontFamily: "'Cinzel', serif", fontSize: 15, fontWeight: 700, color: tc.bar }}>{idx + 1}</div>
+                          {(wine.photos || [])[0] && (
+                            <img src={wine.photos[0]} alt={wine.name}
+                              style={{ flexShrink: 0, width: 44, height: 56, objectFit: "cover", borderRadius: 4, border: `1px solid ${C.border}` }} />
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: "'Cinzel', serif", fontSize: 16, color: C.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {wine.name}
+                            </div>
+                            <div style={{ fontFamily: "'Cinzel', serif", fontSize: 13, color: C.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
+                              {[wine.producer, wine.year].filter(Boolean).join(" · ")}
+                            </div>
+                            <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 13, color: C.textMuted, marginTop: 5, lineHeight: 1.4, fontStyle: "italic" }}>
+                              {pick.reason}
+                            </div>
+                          </div>
+                          <div style={{ flexShrink: 0, fontSize: 18, color: C.gold }}>›</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {!pairingLoading && !pairingResult && (
+                <p style={{ fontSize: 12, color: C.textFaint, fontStyle: "italic", marginTop: 16 }}>
+                  Scrivi un piatto e lascia che Claude scelga dai tuoi vini quelli più adatti.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── VERTICALE MODAL: lista annate raggruppate ── */}
+      {verticaleOpen && (
+        <div className="modal-overlay" onClick={() => setVerticaleOpen(null)}>
+          <div className="modal-box" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+            <div style={{ height: 4, background: `linear-gradient(90deg, #c9953a, #7a2a9a)`, borderRadius: "14px 14px 0 0" }} />
+            <div style={{ padding: "22px 22px 18px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 11, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 2, marginBottom: 4 }}>🏛 VERTICALE</div>
+                  <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, color: C.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {verticaleOpen.wines[0]?.name}
+                  </h2>
+                  <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", marginTop: 2 }}>
+                    {verticaleOpen.wines[0]?.producer} · {verticaleOpen.wines.length} annate · {verticaleOpen.wines.reduce((s,w)=>s+(w.quantity||0),0)} bt totali
+                  </p>
+                </div>
+                <button onClick={() => setVerticaleOpen(null)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 22, lineHeight: 1, flexShrink: 0, paddingLeft: 12 }}>✕</button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
+                {verticaleOpen.wines.map(w => {
+                  const ag = getAgingStatus(w);
+                  const tc = typeColors[w.type] || { bar: "#888" };
+                  return (
+                    <div key={w.id}
+                      onClick={() => {
+                        setVerticaleOpen(null);
+                        setEditing({...w}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view");
+                      }}
+                      style={{
+                        background: C.surface2, border: `1px solid ${ag?.c || C.border}`, borderRadius: 8,
+                        padding: "10px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
+                        transition: "all 0.15s",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = C.gold; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = ag?.c || C.border; }}>
+                      <div style={{ flexShrink: 0, width: 6, height: 36, background: tc.bar, borderRadius: 3 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, fontWeight: 700 }}>{w.year}</div>
+                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
+                          <span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Cinzel', serif" }}>{w.quantity || 0} bt</span>
+                          {ag && (
+                            <span style={{ fontSize: 12, color: ag.c, fontFamily: "'Cinzel', serif", fontWeight: 600 }}>
+                              {ag.s === "Giovane" ? "🌱" : ag.s === "Apice" ? "⭐" : ag.s === "Maturo" ? "🍂" : "📉"} {ag.s}
+                            </span>
+                          )}
+                          {w.price && <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>€{w.price}</span>}
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0, fontSize: 18, color: C.gold }}>›</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ══════ STORICO VIEW ══════ */}
       {view === "logview" && (
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px" }} {...pullHandlers}>
@@ -2660,6 +3016,42 @@ export default function App() {
                     +
                   </button>
                 </div>
+              </div>
+
+              {/* Quick tasting — slider 1-5 per dimensioni chiave */}
+              <div style={{ background: C.bg, borderRadius: 9, padding: "14px 16px", border: `1px solid ${C.border}` }}>
+                <p style={{ ...labelStyle, marginBottom: 12, color: C.gold }}>⚡ QUICK TASTING</p>
+                {[
+                  { key: "quick_aromi",       label: "Aromi (intensità)",     emoji: "👃" },
+                  { key: "quick_struttura",   label: "Struttura / corpo",     emoji: "💪" },
+                  { key: "quick_persistenza", label: "Persistenza al palato", emoji: "⏱" },
+                ].map(({ key, label, emoji }) => {
+                  const val = logEntry[key] || 0;
+                  return (
+                    <div key={key} style={{ marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, color: C.textMuted, fontFamily: "'EB Garamond', serif" }}>{emoji} {label}</span>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {[1,2,3,4,5].map(n => (
+                            <button key={n} type="button"
+                              onClick={() => setLogEntry(v => ({ ...v, [key]: val === n ? 0 : n }))}
+                              style={{
+                                width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
+                                background: n <= val ? "rgba(201,149,58,0.2)" : "transparent",
+                                border: `1px solid ${n <= val ? C.gold : C.border}`,
+                                color: n <= val ? C.gold : C.textFaint,
+                                fontFamily: "'Cinzel', serif", fontSize: 11, fontWeight: 700,
+                                padding: 0, lineHeight: 1, transition: "all 0.12s",
+                              }}>{n}</button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <p style={{ fontSize: 11, color: C.textFaint, fontStyle: "italic", marginTop: 4 }}>
+                  Valutazione rapida. Compila la scheda AIS sotto per maggior dettaglio.
+                </p>
               </div>
 
               {/* AIS — ESAME VISIVO */}
