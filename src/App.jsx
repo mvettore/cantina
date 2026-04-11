@@ -453,9 +453,10 @@ function getAgingStatus(wine) {
 const emptyWine = () => ({
   id: null, name: "", producer: "", year: new Date().getFullYear(),
   region: "", grape: "", type: "", denomination: "",
-  rating: 3, notes: "", quantity: 1, price: "", rackSlots: [], photos: [], enrichment: null,
+  rating: 3, notes: "", quantity: 1, price: "", rackSlots: [], location: "",
+  photos: [], enrichment: null,
 });
-const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6 });
+const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6, house: "" });
 
 export default function App() {
   const [wines,   setWines]   = useState(() => migrateWines(loadWinesLocal(INITIAL_WINES)));
@@ -485,6 +486,7 @@ export default function App() {
   const [scanError, setScanError] = useState(null);
   const [drinkModal, setDrinkModal] = useState(null);
   const [tonightOpen, setTonightOpen] = useState(false); // modale "Apri stasera"
+  const [tonightHouse, setTonightHouse] = useState(null); // filtro casa per "Apri stasera"
   const [verticaleOpen, setVerticaleOpen] = useState(null); // {key, wines[]} della verticale aperta
   const [pairingOpen, setPairingOpen] = useState(false);
   const [pairingDish, setPairingDish] = useState("");
@@ -752,11 +754,31 @@ export default function App() {
     return Object.entries(counts).sort(([,a],[,b]) => b - a || 0).map(([k]) => k);
   })();
 
+  // Lista case uniche: raccoglie valori da rack.house + wine.location (vini fuori scaffale)
+  const houseList = (() => {
+    const set = new Set();
+    racks.forEach(r => { if (r.house && r.house.trim()) set.add(r.house.trim()); });
+    activeWines.forEach(w => { if (w.location && w.location.trim()) set.add(w.location.trim()); });
+    return Array.from(set).sort((a,b) => a.localeCompare(b));
+  })();
+
+  // Helper: restituisce la "casa" effettiva di un vino:
+  // se ha rackSlots usa la house del primo rack assegnato, altrimenti usa wine.location
+  const getWineHouse = (wine) => {
+    const firstSlot = (wine.rackSlots || []).find(s => (s.positions || []).length > 0);
+    if (firstSlot) {
+      const rack = racks.find(r => r.id === firstSlot.rackId);
+      return rack?.house || null;
+    }
+    return wine.location || null;
+  };
+
   // "Apri stasera" — suggerisce fino a 3 bottiglie: priorità a urgenza + varietà
   // Scoring: Declino 30, Maturo 20, Apice 8, Giovane 0. Ultima bottiglia +6.
   // Bonus se non bevuto di recente (tipo non compare in log ultimi 7gg).
   // Penalità −20 se lo stesso vino è già nello storico negli ultimi 7 giorni.
-  const tonightPicks = (() => {
+  // `houseFilter`: se non null, considera solo vini in quella casa (via rack.house o wine.location).
+  const computeTonightPicks = (houseFilter) => {
     const recentLog = log.slice().sort((a,b) => (b.date||"").localeCompare(a.date||"")).slice(0, 10);
     const recentTypes = new Set(recentLog.slice(0, 3).map(e => e.wineType).filter(Boolean));
     const recentIds = new Set(recentLog.filter(e => {
@@ -766,6 +788,7 @@ export default function App() {
     }).map(e => e.wineId));
     const scored = activeWines
       .filter(w => (w.quantity || 0) > 0)
+      .filter(w => !houseFilter || getWineHouse(w) === houseFilter)
       .map(w => {
         const ag = getAgingStatus(w);
         let score = 0;
@@ -800,7 +823,9 @@ export default function App() {
       }
     }
     return picks;
-  })();
+  };
+  const tonightPicks = computeTonightPicks(null); // senza filtro casa, per la visibilità del bottone
+  const tonightFilteredPicks = computeTonightPicks(tonightHouse); // con filtro casa, per il contenuto della modale
   const filtered = activeWines
     .filter(w => filterType === "Tutti" || w.type === filterType)
     .filter(w => !filterGrape || splitGrapes(w.grape).includes(filterGrape))
@@ -1850,11 +1875,23 @@ export default function App() {
                               );
                             })}
                           </div>
-                        ) : ((wine.rackSlots||[]).some(s=>(s.positions||[]).length>0) || getAgingStatus(wine)) && (
+                        ) : ((wine.rackSlots||[]).some(s=>(s.positions||[]).length>0) || wine.location || getAgingStatus(wine)) && (
                           <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
                             {(()=>{
                               const slotsWithPos=(wine.rackSlots||[]).filter(s=>(s.positions||[]).length>0);
-                              if(!slotsWithPos.length) return null;
+                              if(!slotsWithPos.length){
+                                // Nessuno scaffale: mostra la location se presente
+                                if(wine.location){
+                                  return(
+                                    <span style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
+                                      background:"rgba(212,168,90,0.08)",border:`1px dashed rgba(212,168,90,0.4)`,
+                                      borderRadius:20,padding:"2px 8px",fontWeight:600}}>
+                                      📍 {wine.location}
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              }
                               const first=slotsWithPos[0];
                               const sr=racks.find(r=>r.id===first.rackId);
                               if(!sr) return null;
@@ -2263,7 +2300,7 @@ export default function App() {
                             setEditing(v=>({...v,rackSlots:ns}));
                           }}>
                             <option value="">— Scaffale —</option>
-                            {racks.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+                            {racks.map(r=><option key={r.id} value={r.id}>{r.name}{r.house?` · ${r.house}`:""}</option>)}
                           </select>
                           <button onClick={()=>{const ns=(editing.rackSlots||[]).filter((_,i)=>i!==idx);setEditing(v=>({...v,rackSlots:ns}));}}
                             style={{flexShrink:0,background:"none",border:`1px solid #804040`,borderRadius:6,color:"#c07070",cursor:"pointer",padding:"8px 11px",fontSize:15,lineHeight:1}}>✕</button>
@@ -2284,6 +2321,29 @@ export default function App() {
                     </button>
                   )}
                 </div>
+
+                {/* Location per vini fuori scaffale — casa/posto senza assegnazione scaffale */}
+                {(() => {
+                  const totalAssignedSlots = (editing.rackSlots || []).reduce((sum, s) => sum + (s.positions || []).length, 0);
+                  const hasUnracked = (editing.quantity || 0) > totalAssignedSlots;
+                  if (!hasUnracked) return null;
+                  const unrackedCount = (editing.quantity || 0) - totalAssignedSlots;
+                  return (
+                    <div style={{gridColumn:"1/-1",background:C.bg,borderRadius:9,padding:"16px 18px",border:`1px dashed rgba(212,168,90,0.35)`}}>
+                      <p style={{...labelStyle,marginBottom:8}}>📍 Dove si trovano le {unrackedCount === 1 ? "bottiglie fuori scaffale" : `${unrackedCount} bottiglie fuori scaffale`}?</p>
+                      <input
+                        style={inputStyle}
+                        value={editing.location || ""}
+                        onChange={e=>setEditing(v=>({...v,location:e.target.value}))}
+                        placeholder="es. Casa Milano, Cantina nonna, Ufficio…"
+                        list="houses-datalist"
+                      />
+                      <p style={{fontSize:12,color:C.textFaint,fontStyle:"italic",marginTop:6}}>
+                        Stessa lista delle case degli scaffali. Lascia vuoto se non lo sai.
+                      </p>
+                    </div>
+                  );
+                })()}
 
                 <div style={{gridColumn:"1/-1"}}>
                   <label style={labelStyle}>Note di degustazione</label>
@@ -2654,6 +2714,22 @@ export default function App() {
                 <label style={labelStyle}>Nome</label>
                 <input style={inputStyle} value={editingRack.name} onChange={e=>setEditingRack(v=>({...v,name:e.target.value}))} placeholder="es. Scaffale Cantina Nord"/>
               </div>
+              <div>
+                <label style={labelStyle}>Casa / Posizione</label>
+                <input
+                  style={inputStyle}
+                  value={editingRack.house || ""}
+                  onChange={e=>setEditingRack(v=>({...v,house:e.target.value}))}
+                  placeholder="es. Casa Milano, Casa Mare…"
+                  list="houses-datalist"
+                />
+                <datalist id="houses-datalist">
+                  {houseList.map(h => <option key={h} value={h}/>)}
+                </datalist>
+                <p style={{fontSize:12,color:C.textFaint,fontStyle:"italic",marginTop:6}}>
+                  Se hai scaffali in più case, puoi raggrupparli così.
+                </p>
+              </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
                 <div>
                   <label style={labelStyle}>File (A, B, C…)</label>
@@ -2842,21 +2918,43 @@ export default function App() {
                     🍷 APRI STASERA
                   </h2>
                   <p style={{ fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginTop: 4 }}>
-                    I MIEI SUGGERIMENTI
+                    {tonightHouse ? `IN ${tonightHouse.toUpperCase()}` : "I MIEI SUGGERIMENTI"}
                   </p>
                 </div>
                 <button onClick={() => setTonightOpen(false)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 22, lineHeight: 1 }}>✕</button>
               </div>
 
-              {tonightPicks.length === 0 ? (
+              {/* Filtro casa — visibile solo se hai almeno 2 case distinte */}
+              {houseList.length >= 2 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 14, paddingBottom: 12, borderBottom: `1px solid ${C.border}` }}>
+                  <button onClick={() => setTonightHouse(null)} className="tab-btn" style={{
+                    color: !tonightHouse ? C.gold : C.textFaint,
+                    background: !tonightHouse ? "rgba(212,168,90,0.16)" : "none",
+                    border: !tonightHouse ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                  }}>TUTTE LE CASE</button>
+                  {houseList.map(h => (
+                    <button key={h} onClick={() => setTonightHouse(h)} className="tab-btn" style={{
+                      color: tonightHouse === h ? C.gold : C.textFaint,
+                      background: tonightHouse === h ? "rgba(212,168,90,0.16)" : "none",
+                      border: tonightHouse === h ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                    }}>🏠 {h.toUpperCase()}</button>
+                  ))}
+                </div>
+              )}
+
+              {tonightFilteredPicks.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 10px", color: C.textFaint }}>
                   <div style={{ fontSize: 44, marginBottom: 10, opacity: 0.4 }}>🍷</div>
-                  <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 1, fontSize: 14 }}>NESSUN SUGGERIMENTO URGENTE</p>
-                  <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", marginTop: 8 }}>Tutti i tuoi vini sono tranquillamente in cantina.</p>
+                  <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 1, fontSize: 14 }}>
+                    {tonightHouse ? `NESSUN SUGGERIMENTO IN ${tonightHouse.toUpperCase()}` : "NESSUN SUGGERIMENTO URGENTE"}
+                  </p>
+                  <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", marginTop: 8 }}>
+                    {tonightHouse ? "Prova un'altra casa o togli il filtro." : "Tutti i tuoi vini sono tranquillamente in cantina."}
+                  </p>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 14 }}>
-                  {tonightPicks.map(({ wine, reason, aging }, idx) => {
+                  {tonightFilteredPicks.map(({ wine, reason, aging }, idx) => {
                     const tc = typeColors[wine.type] || { bar: "#888" };
                     return (
                       <div key={wine.id}
