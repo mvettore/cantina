@@ -45,11 +45,10 @@ const INITIAL_RACKS = [
   { id: 1, name: "Scaffale 1", rows: 4, cols: 6 },
   { id: 2, name: "Scaffale 2", rows: 3, cols: 8 },
 ];
-const INITIAL_WINES = [
-  { id: 1, name: "Barolo Riserva", producer: "Giacomo Conterno", year: 2017, region: "Piemonte", grape: "Nebbiolo", type: "Rosso", rating: 5, notes: "Struttura imponente, tannini setosi, finale lunghissimo.", quantity: 6, price: 120, rackId: 1, positions: ["A1","A2","A3","A4","A5","A6"], photo: null },
-  { id: 2, name: "Brunello di Montalcino", producer: "Biondi Santi", year: 2016, region: "Toscana", grape: "Sangiovese Grosso", type: "Rosso", rating: 5, notes: "Eleganza assoluta, profumi di ciliegia e spezie.", quantity: 3, price: 180, rackId: 1, positions: ["B1","B2","B3"], photo: null },
-  { id: 3, name: "Soave Classico", producer: "Pieropan", year: 2022, region: "Veneto", grape: "Garganega", type: "Bianco", rating: 4, notes: "Fresco, minerale, ottimo con pesce.", quantity: 12, price: 18, rackId: 2, positions: ["A1","A2","A3","A4","A5","A6","B1","B2","B3","B4","B5","B6"], photo: null },
-];
+// Stato iniziale vuoto: se il cloud sync fallisce, l'utente vede una cantina vuota
+// (segnale chiaro che c'è un problema) invece di finti dati demo che potrebbero
+// essere inavvertitamente pushati su Supabase sovrascrivendo la cantina reale.
+const INITIAL_WINES = [];
 
 // Migrazione dati vecchi
 function migrateWines(wines) {
