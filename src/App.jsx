@@ -832,6 +832,29 @@ export default function App() {
     }
   };
 
+  // Aggiungi una nuova annata dello stesso vino: copia i metadati stabili,
+  // azzera i dati specifici dell'annata (photos, enrichment, rack, qty, note, prezzo)
+  const addNewVintage = (fromWine) => {
+    setModal(null);
+    setEnrichData(null);
+    setEnrichError(null);
+    setScanError(null);
+    setViewFromPos(null);
+    setTimeout(() => {
+      setEditing({
+        ...emptyWine(),
+        name: fromWine.name || "",
+        producer: fromWine.producer || "",
+        type: fromWine.type || "",
+        region: fromWine.region || "",
+        grape: fromWine.grape || "",
+        denomination: fromWine.denomination || "",
+        // year resta al default di emptyWine() = anno corrente (sensibile per un acquisto recente)
+      });
+      setModal("add");
+    }, 0);
+  };
+
   // Helper: costruisce una log entry vuota precompilata dai dati del vino
   const makeLogEntryForWine = (wine) => ({
     id: Date.now(),
@@ -2392,6 +2415,21 @@ export default function App() {
                       whiteSpace:"nowrap",textAlign:"center",
                     }}>MODIFICA</button>
                 </div>
+
+                {/* Nuova annata — shortcut per aggiungere un'altra annata dello stesso vino */}
+                <button onClick={()=>addNewVintage(editing)}
+                  title="Crea una nuova voce con gli stessi metadati (nome, produttore, vitigno, regione) ma annata/scorte nuove"
+                  style={{
+                    marginTop:8, width:"100%",
+                    background:"transparent", border:`1px dashed ${C.border}`, borderRadius:8,
+                    color:C.textFaint, cursor:"pointer", padding:"10px 12px",
+                    fontFamily:"'Cinzel', serif", fontSize:12, letterSpacing:1.5,
+                    transition:"all 0.15s",
+                  }}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textFaint;}}>
+                  ＋ AGGIUNGI UN'ALTRA ANNATA DI QUESTO VINO
+                </button>
               </div>
             </div>
           </div>
@@ -2820,6 +2858,20 @@ export default function App() {
                   );
                 })}
               </div>
+
+              {/* Aggiungi un'altra annata alla verticale */}
+              <button onClick={() => { const from = verticaleOpen.wines[0]; setVerticaleOpen(null); addNewVintage(from); }}
+                style={{
+                  marginTop: 14, width: "100%",
+                  background: "transparent", border: `1px dashed ${C.border}`, borderRadius: 8,
+                  color: C.textFaint, cursor: "pointer", padding: "10px 12px",
+                  fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1.5,
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = C.gold; e.currentTarget.style.color = C.gold; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textFaint; }}>
+                ＋ AGGIUNGI UN'ALTRA ANNATA A QUESTA VERTICALE
+              </button>
             </div>
           </div>
         </div>
