@@ -2,9 +2,31 @@
  * Netlify Function: data
  * Database: Supabase (Postgres)
  *
- * GET  /.netlify/functions/data         → { wines, racks }
- * POST /.netlify/functions/data         → salva { wines?, racks? }
+ * GET  /.netlify/functions/data         → { wines, racks, log }
+ * POST /.netlify/functions/data         → salva { wines?, racks?, log? }
+ *
+ * NOTA IMPORTANTE: rimuove i campi `photos` e `photo` dai vini sia in
+ * lettura che in scrittura. Le foto vivono in chiavi localStorage separate
+ * sul client (`cantina-photo-{id}`) e NON devono finire su Supabase: le
+ * response Lambda hanno un hard limit di 6MB che viene facilmente superato
+ * se anche solo alcuni vini hanno immagini base64 embedded.
  */
+
+// Rimuove i campi foto dai vini. Resiste a input non-array o oggetti malformati.
+function stripPhotosFromWines(wines) {
+  if (!Array.isArray(wines)) return wines;
+  return wines.map(w => {
+    if (!w || typeof w !== "object") return w;
+    // destructure per escludere photos/photo
+    const { photos, photo, ...rest } = w;
+    return rest;
+  });
+}
+
+// Stima dimensione del payload in byte dopo il JSON.stringify (per logging)
+function estimateSize(obj) {
+  try { return JSON.stringify(obj).length; } catch { return -1; }
+}
 
 const handler = async (event) => {
   const headers = {
@@ -20,7 +42,6 @@ const handler = async (event) => {
   }
 
   // Separa i dati per ambiente: production usa chiavi semplici, staging le prefissa
-  // Usa l'header host (runtime) invece di CONTEXT (solo build-time)
   const host = event.headers?.host || event.headers?.Host || "";
   const keyPrefix = host.includes("staging--") ? "staging:" : "";
 
@@ -41,9 +62,20 @@ const handler = async (event) => {
         console.error("Supabase GET error:", rows);
         return { statusCode: 500, headers, body: JSON.stringify({ error: "Errore lettura DB", detail: rows }) };
       }
-      const wines = rows.find(r => r.key === `${keyPrefix}wines`)?.value ?? null;
-      const racks = rows.find(r => r.key === `${keyPrefix}racks`)?.value ?? null;
-      const logData = rows.find(r => r.key === `${keyPrefix}log`)?.value ?? null;
+      const winesRaw = rows.find(r => r.key === `${keyPrefix}wines`)?.value ?? null;
+      const racks    = rows.find(r => r.key === `${keyPrefix}racks`)?.value ?? null;
+      const logData  = rows.find(r => r.key === `${keyPrefix}log`)?.value   ?? null;
+
+      // Strip foto dai vini prima di inviarli: evita di superare il limite 6MB
+      const wines = stripPhotosFromWines(winesRaw);
+
+      // Logging utile per capire il dimensionamento dopo il fix
+      if (winesRaw) {
+        const before = estimateSize(winesRaw);
+        const after  = estimateSize(wines);
+        console.log(`[data GET] wines: ${before} bytes raw → ${after} bytes stripped (${wines.length} vini)`);
+      }
+
       return { statusCode: 200, headers, body: JSON.stringify({ wines, racks, log: logData }) };
     } catch (err) {
       console.error("GET error:", err.message);
@@ -59,12 +91,21 @@ const handler = async (event) => {
 
       for (const [key, value] of Object.entries(body)) {
         if (key !== "wines" && key !== "racks" && key !== "log") continue;
+
+        // Strip foto anche in scrittura: impedisce che il cloud si bloatazzi
+        // anche se il client (vecchie versioni cached) manda wines con photos embedded
+        const storedValue = key === "wines" ? stripPhotosFromWines(value) : value;
+
+        if (key === "wines" && Array.isArray(value)) {
+          console.log(`[data POST] wines: ${value.length} vini (${estimateSize(storedValue)} bytes dopo strip)`);
+        }
+
         // upsert: inserisce o aggiorna la riga con quella key (prefissata per ambiente)
         ops.push(
           fetch(`${apiBase}`, {
             method: "POST",
             headers: { ...sbHeaders, "Prefer": "resolution=merge-duplicates,return=minimal" },
-            body: JSON.stringify({ key: `${keyPrefix}${key}`, value }),
+            body: JSON.stringify({ key: `${keyPrefix}${key}`, value: storedValue }),
           })
         );
       }
