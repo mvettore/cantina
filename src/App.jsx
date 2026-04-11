@@ -4010,8 +4010,16 @@ export default function App() {
           <p style={{fontFamily:"'Cinzel', serif",color:C.gold,fontSize:11,letterSpacing:3,opacity:0.8}}>SINCRONIZZAZIONE</p>
         </div>
       )}
-      {/* ── FAB AGGIUNGI VINO — visibile SOLO sul catalogo ── */}
-      {!modal && !rackModal && view === "catalog" && <button
+      {/* ── FAB AGGIUNGI VINO — visibile SOLO sul catalogo e solo se nessun overlay e' aperto ── */}
+      {(() => {
+        const anyOverlayOpen = !!(
+          modal || rackModal || filtersOpen || searchModalOpen || pairingOpen ||
+          tonightOpen || verticaleOpen || logModal || deleteConfirm ||
+          deleteRackConfirm || drinkModal || lightboxPhoto
+        );
+        if (anyOverlayOpen || view !== "catalog") return null;
+        return (
+      <button
         onClick={() => { setEditing(emptyWine()); setScanError(null); setModal("add"); }}
         title="Aggiungi vino"
         style={{
@@ -4026,7 +4034,9 @@ export default function App() {
         }}
         onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.06)"; }}
         onMouseLeave={e => { e.currentTarget.style.transform = ""; }}
-      >+</button>}
+      >+</button>
+        );
+      })()}
     </div>
   );
 }
