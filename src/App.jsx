@@ -438,7 +438,6 @@ export default function App() {
   const [scanError, setScanError] = useState(null);
   const [drinkModal, setDrinkModal] = useState(null);
   const [tonightOpen, setTonightOpen] = useState(false); // modale "Apri stasera"
-  const [groupVerticali, setGroupVerticali] = useState(false); // toggle raggruppamento verticali
   const [verticaleOpen, setVerticaleOpen] = useState(null); // {key, wines[]} della verticale aperta
   const [pairingOpen, setPairingOpen] = useState(false);
   const [pairingDish, setPairingDish] = useState("");
@@ -714,11 +713,10 @@ export default function App() {
   const totalBottles = activeWines.reduce((s, w) => s + w.quantity, 0);
   const totalValue   = activeWines.reduce((s, w) => s + w.quantity * (parseFloat(w.price) || 0), 0);
 
-  // Verticali: chiave di raggruppamento case-insensitive su producer + name
+  // Verticali (sempre attive): raggruppa i vini per producer+name case-insensitive.
+  // Un singolo vino senza "gemelli" diventa un gruppo di 1 e viene renderizzato come card normale.
   const verticaleKey = (w) => `${(w.producer||"").trim().toLowerCase()}::${(w.name||"").trim().toLowerCase()}`;
-  // Quando groupVerticali è attivo, raggruppa `filtered` in un array di array (annate)
   const filteredGrouped = (() => {
-    if (!groupVerticali) return null;
     const groups = new Map();
     filtered.forEach(w => {
       const k = verticaleKey(w);
@@ -1508,19 +1506,14 @@ export default function App() {
                   ))}
                 </div>
               )}
-              {/* Senza scaffale + Verticali */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>VISTA</span>
+              {/* Senza scaffale */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>STOCK</span>
                 <button className="tab-btn" onClick={() => setFilterUnracked(v => !v)} style={{
                   color: filterUnracked ? C.gold : C.textFaint,
                   background: filterUnracked ? "rgba(201,149,58,0.14)" : "none",
                   border: filterUnracked ? `1px solid rgba(201,149,58,0.4)` : "1px solid transparent",
                 }}>🗄 SENZA SCAFFALE</button>
-                <button className="tab-btn" onClick={() => setGroupVerticali(v => !v)} style={{
-                  color: groupVerticali ? C.gold : C.textFaint,
-                  background: groupVerticali ? "rgba(201,149,58,0.14)" : "none",
-                  border: groupVerticali ? `1px solid rgba(201,149,58,0.4)` : "1px solid transparent",
-                }}>🏛 VERTICALI</button>
               </div>
               {/* Ordina */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1567,16 +1560,20 @@ export default function App() {
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 18 }}>
-              {(groupVerticali && filteredGrouped
-                ? filteredGrouped.map(g => ({ wine: g.wines[0], group: g }))
-                : filtered.map(w => ({ wine: w, group: null }))
-              ).map(({ wine, group }) => {
-                const isGroup = !!(group && group.wines.length > 1);
-                const groupTotalBt = isGroup ? group.wines.reduce((s,w) => s + (w.quantity || 0), 0) : (wine.quantity || 0);
+              {filteredGrouped.map(group => {
+                const wine = group.wines[0]; // rappresentativa = più recente
+                const isGroup = group.wines.length > 1;
+                const groupTotalBt = group.wines.reduce((s,w) => s + (w.quantity || 0), 0);
                 const groupYearsMin = isGroup ? Math.min(...group.wines.map(w => w.year || 9999)) : null;
-                const groupYearsMax = isGroup ? Math.max(...group.wines.map(w => w.year || 0)) : null;
+                const groupYearsMax = isGroup ? Math.max(...group.wines.map(w => w.year || 0))  : null;
                 const tc = typeColors[wine.type] || { bar: "#888" };
-                const ag = getAgingStatus(wine);
+                // Urgenza del gruppo: la peggiore annata (Declino > Maturo > Apice > Giovane)
+                const agingRank = s => s === "Declino" ? 4 : s === "Maturo" ? 3 : s === "Apice" ? 2 : s === "Giovane" ? 1 : 0;
+                const worstAg = group.wines.reduce((worst, w) => {
+                  const a = getAgingStatus(w);
+                  return (agingRank(a?.s) > agingRank(worst?.s)) ? a : worst;
+                }, null);
+                const ag = worstAg;
                 const urgent = ag?.s === "Declino" || ag?.s === "Maturo";
                 const urgentBorder = ag?.s === "Declino" ? "#9a5050" : "#b07030";
                 const urgentWidth  = ag?.s === "Maturo" ? "2px" : "1px";
@@ -1627,22 +1624,31 @@ export default function App() {
                               ? [wine.producer, `${groupYearsMin}–${groupYearsMax}`].filter(Boolean).join(" · ")
                               : [wine.producer, wine.year].filter(Boolean).join(" · ")
                             }
-                            {isGroup && (
-                              <span style={{
-                                marginLeft: 8, fontSize: 11, color: C.gold,
-                                background: "rgba(201,149,58,0.15)", border: "1px solid rgba(201,149,58,0.35)",
-                                borderRadius: 10, padding: "1px 7px", fontWeight: 700, letterSpacing: 0.5,
-                                verticalAlign: "middle", whiteSpace: "nowrap",
-                              }}>🏛 {group.wines.length} ANNATE</span>
-                            )}
                           </p>
-                          {wine.price && (
+                          {!isGroup && wine.price && (
                             <p style={{fontFamily:"'Cinzel',serif",fontSize:14,color:C.textMuted,margin:"2px 0 0"}}>€{wine.price}</p>
                           )}
                         </div>
 
-                        {/* Blocco bottom: scaffale + stato invecchiamento */}
-                        {((wine.rackSlots||[]).some(s=>(s.positions||[]).length>0) || getAgingStatus(wine)) && (
+                        {/* Blocco bottom: se gruppo → chip per ogni annata; altrimenti → scaffale + invecchiamento singolo */}
+                        {isGroup ? (
+                          <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+                            {group.wines.map(w => {
+                              const wag = getAgingStatus(w);
+                              const wc = wag?.c || C.border;
+                              const emo = wag?.s === "Giovane" ? "🌱" : wag?.s === "Apice" ? "⭐" : wag?.s === "Maturo" ? "🍂" : wag?.s === "Declino" ? "📉" : "";
+                              return (
+                                <span key={w.id} style={{
+                                  fontSize: 11, color: wc, fontFamily: "'Cinzel', serif", fontWeight: 700,
+                                  background: `${wc}12`, border: `1px solid ${wc}45`,
+                                  borderRadius: 14, padding: "2px 7px", whiteSpace: "nowrap",
+                                }}>
+                                  {w.year} · {w.quantity || 0}bt {emo}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : ((wine.rackSlots||[]).some(s=>(s.positions||[]).length>0) || getAgingStatus(wine)) && (
                           <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
                             {(()=>{
                               const slotsWithPos=(wine.rackSlots||[]).filter(s=>(s.positions||[]).length>0);
