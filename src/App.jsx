@@ -487,6 +487,7 @@ export default function App() {
   const [drinkModal, setDrinkModal] = useState(null);
   const [tonightOpen, setTonightOpen] = useState(false); // modale "Apri stasera"
   const [tonightHouse, setTonightHouse] = useState(null); // filtro casa per "Apri stasera"
+  const [searchModalOpen, setSearchModalOpen] = useState(false); // modale ricerca full-screen
   const [verticaleOpen, setVerticaleOpen] = useState(null); // {key, wines[]} della verticale aperta
   const [pairingOpen, setPairingOpen] = useState(false);
   const [pairingDish, setPairingDish] = useState("");
@@ -519,8 +520,6 @@ export default function App() {
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
   const latestWinesRef = useRef(wines); // sempre aggiornato con l'ultimo stato React
-  const [searchBarVisible, setSearchBarVisible] = useState(true);
-  const lastScrollY = useRef(0);
 
   // Tiene latestWinesRef sempre aggiornato — usato da doCloudRefresh per il re-upload
   useEffect(() => { latestWinesRef.current = wines; }, [wines]);
@@ -1612,6 +1611,41 @@ export default function App() {
                   {/* ── Azioni rapide ── */}
                   <div style={{ height: 1, background: C.border, margin: "6px 2px" }} />
 
+                  {/* Cerca */}
+                  <button onClick={() => { setMenuOpen(false); setView("catalog"); setSearchModalOpen(true); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12, width: "100%",
+                      background: "transparent", border: "1px solid transparent",
+                      borderRadius: 7, padding: "11px 13px", cursor: "pointer",
+                      color: C.textMuted,
+                      fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1.5,
+                      textAlign: "left", marginTop: 2, transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,149,58,0.07)"; e.currentTarget.style.color = C.gold; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textMuted; }}>
+                    <span style={{ fontSize: 16 }}>🔍</span>
+                    <span style={{ flex: 1 }}>CERCA</span>
+                    {search && (
+                      <span style={{ fontSize: 10, color: C.gold, fontStyle: "italic", letterSpacing: 0 }}>"{search.substring(0, 12)}{search.length > 12 ? "…" : ""}"</span>
+                    )}
+                  </button>
+
+                  {/* Filtri (accesso rapido dal menu, oltre che dal bottone inline) */}
+                  <button onClick={() => { setMenuOpen(false); setView("catalog"); setFiltersOpen(true); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12, width: "100%",
+                      background: "transparent", border: "1px solid transparent",
+                      borderRadius: 7, padding: "11px 13px", cursor: "pointer",
+                      color: C.textMuted,
+                      fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1.5,
+                      textAlign: "left", marginTop: 2, transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,149,58,0.07)"; e.currentTarget.style.color = C.gold; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textMuted; }}>
+                    <span style={{ fontSize: 16 }}>⚙</span>
+                    <span style={{ flex: 1 }}>FILTRI</span>
+                  </button>
+
                   {/* Abbina — food pairing */}
                   <button onClick={() => { setMenuOpen(false); setPairingOpen(true); setPairingResult(null); }}
                     style={{
@@ -1659,119 +1693,134 @@ export default function App() {
       })()}
 
       {/* ══════ CATALOG VIEW ══════ */}
-      {view === "catalog" && <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-        {/* Barra ricerca — si nasconde scorrendo giù, riappare scorrendo su */}
-        {(() => {
-          const activeFiltersCount = [
-            filterType !== "Tutti",
-            !!filterGrape,
-            !!filterRegion,
-            filterAging !== "Tutti",
-            filterUnracked,
-            filterUrgent,
-          ].filter(Boolean).length;
-          return (
+      {view === "catalog" && (() => {
+        const activeFiltersCount = [
+          filterType !== "Tutti",
+          !!filterGrape,
+          !!filterRegion,
+          filterAging !== "Tutti",
+          filterUnracked,
+          filterUrgent,
+        ].filter(Boolean).length;
+        const hasSearch = !!search.trim();
+        const showChipBar = hasSearch || activeFiltersCount > 0;
+        return (
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+        {/* Chip bar: compare solo se c'è una ricerca attiva o filtri attivi */}
+        {showChipBar && (
+          <div style={{
+            padding: "10px 14px", background: C.surface, borderBottom: `1px solid ${C.border}`,
+            display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", flexShrink: 0,
+          }}>
+            {hasSearch && (
+              <span onClick={() => setSearch("")} style={{
+                fontSize: 11, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 1,
+                background: "rgba(212,168,90,0.12)", border: "1px solid rgba(212,168,90,0.35)",
+                borderRadius: 14, padding: "4px 12px", cursor: "pointer", whiteSpace: "nowrap",
+              }} title="Rimuovi ricerca">
+                🔍 {search} ✕
+              </span>
+            )}
+            {activeFiltersCount > 0 && (
+              <span onClick={() => {
+                setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null);
+                setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(false);
+              }} style={{
+                fontSize: 11, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 1,
+                background: "rgba(212,168,90,0.12)", border: "1px solid rgba(212,168,90,0.35)",
+                borderRadius: 14, padding: "4px 12px", cursor: "pointer", whiteSpace: "nowrap",
+              }} title="Rimuovi tutti i filtri">
+                ⚙ {[
+                  filterType !== "Tutti" ? filterType : null,
+                  filterGrape,
+                  filterRegion,
+                  filterAging !== "Tutti" ? filterAging : null,
+                  filterUrgent ? "Urgenti" : null,
+                  filterUnracked ? "Senza scaffale" : null,
+                ].filter(Boolean).join(" · ")} ✕
+              </span>
+            )}
+          </div>
+        )}
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px", paddingBottom: 100 }}>
+          {/* ── Tonight section: banner con bottiglie da stappare oggi ── */}
+          {tonightPicks.length > 0 && !showChipBar && (
             <div style={{
-              overflow: "hidden", flexShrink: 0,
-              maxHeight: searchBarVisible ? "130px" : "0px",
-              transition: "max-height 0.3s ease",
+              background: `linear-gradient(180deg, ${C.surface} 0%, ${C.surface2} 100%)`,
+              border: `1px solid ${C.border}`, borderRadius: 12,
+              padding: "14px 16px 12px", marginBottom: 18,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
             }}>
-              <div style={{ padding: "12px 14px 10px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
-                {/* Riga 1: input ricerca grande + bottoni */}
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <div style={{ flex: 1, position: "relative" }}>
-                    <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 16, pointerEvents: "none" }}>🔍</span>
-                    <input
-                      placeholder="Cerca vino, produttore, annata…"
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      style={{
-                        ...inputStyle,
-                        padding: "12px 14px 12px 38px",
-                        paddingRight: search ? 38 : 14,
-                        fontSize: 16,
-                        fontFamily: "'Cinzel', serif",
-                        letterSpacing: 0.5,
-                      }}
-                    />
-                    {search && (
-                      <button onClick={() => setSearch("")} style={{
-                        position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                        background: C.border, border: "none", borderRadius: "50%",
-                        width: 22, height: 22, cursor: "pointer", color: C.text,
-                        fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>✕</button>
-                    )}
-                  </div>
-                  {/* Apri stasera — quick pick */}
-                  {tonightPicks.length > 0 && (
-                    <button onClick={() => setTonightOpen(true)} style={{
-                      background: "linear-gradient(135deg, #3a1a5a, #7a3a9a)",
-                      border: "1px solid rgba(201,149,58,0.4)",
-                      borderRadius: 9, padding: "11px 12px", cursor: "pointer",
-                      color: "#f0d0ff",
-                      fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
-                      display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s",
-                      whiteSpace: "nowrap", flexShrink: 0,
-                    }} title="Suggerimenti bottiglie da aprire">
-                      🍷
-                    </button>
-                  )}
-                  {/* Toggle filtri → apre modale */}
-                  <button onClick={() => setFiltersOpen(true)} style={{
-                    background: activeFiltersCount > 0 ? "rgba(212,168,90,0.16)" : C.surface2,
-                    border: `1px solid ${activeFiltersCount > 0 ? "rgba(212,168,90,0.5)" : C.border}`,
-                    borderRadius: 9, padding: "11px 13px", cursor: "pointer",
-                    color: activeFiltersCount > 0 ? C.gold : C.textMuted,
-                    fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
-                    display: "flex", alignItems: "center", gap: 6, transition: "all 0.15s",
-                    whiteSpace: "nowrap", flexShrink: 0, position: "relative",
-                  }}>
-                    ⚙ FILTRI
-                    {activeFiltersCount > 0 && (
-                      <span style={{
-                        background: C.gold, color: "#1a0800", borderRadius: 10,
-                        padding: "0 6px", fontSize: 10, fontWeight: 700,
-                        minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>{activeFiltersCount}</span>
-                    )}
-                  </button>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontFamily: "'Cinzel', serif", fontSize: 12, color: C.gold, letterSpacing: 2, fontWeight: 700 }}>
+                  🍷 DA APRIRE STASERA
                 </div>
-                {/* Riga 2: chip riassunto filtri attivi (se presenti) */}
-                {activeFiltersCount > 0 && (
-                  <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
-                    <span onClick={() => {
-                      setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null);
-                      setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(false);
-                    }} style={{
-                      fontSize: 11, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 1,
-                      background: "rgba(212,168,90,0.12)", border: "1px solid rgba(212,168,90,0.35)",
-                      borderRadius: 14, padding: "3px 10px", cursor: "pointer", whiteSpace: "nowrap",
-                    }} title="Rimuovi tutti i filtri">
-                      {[
-                        filterType !== "Tutti" ? filterType : null,
-                        filterGrape,
-                        filterRegion,
-                        filterAging !== "Tutti" ? filterAging : null,
-                        filterUrgent ? "Urgenti" : null,
-                        filterUnracked ? "Senza scaffale" : null,
-                      ].filter(Boolean).join(" · ")} ✕
-                    </span>
-                  </div>
+                {tonightFilteredPicks.length < tonightPicks.length && (
+                  <button onClick={() => setTonightHouse(null)} style={{
+                    background: "none", border: "none", color: C.textFaint,
+                    cursor: "pointer", fontSize: 10, fontFamily: "'Cinzel', serif", letterSpacing: 1,
+                  }}>✕ filtro casa</button>
                 )}
               </div>
+              {/* Pills casa se >= 2 case */}
+              {houseList.length >= 2 && (
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 10 }}>
+                  <button onClick={() => setTonightHouse(null)} className="tab-btn" style={{
+                    color: !tonightHouse ? C.gold : C.textFaint,
+                    background: !tonightHouse ? "rgba(212,168,90,0.16)" : "none",
+                    border: !tonightHouse ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                    fontSize: 10,
+                  }}>TUTTE</button>
+                  {houseList.map(h => (
+                    <button key={h} onClick={() => setTonightHouse(h)} className="tab-btn" style={{
+                      color: tonightHouse === h ? C.gold : C.textFaint,
+                      background: tonightHouse === h ? "rgba(212,168,90,0.16)" : "none",
+                      border: tonightHouse === h ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                      fontSize: 10,
+                    }}>🏠 {h.toUpperCase()}</button>
+                  ))}
+                </div>
+              )}
+              {/* Lista vini suggeriti */}
+              {tonightFilteredPicks.length === 0 ? (
+                <p style={{ fontSize: 13, color: C.textFaint, fontStyle: "italic", padding: "8px 0" }}>
+                  Nessun suggerimento {tonightHouse ? `in ${tonightHouse}` : ""}.
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {tonightFilteredPicks.map(({ wine, reason, aging }, idx) => {
+                    const tc = typeColors[wine.type] || { bar: "#888" };
+                    return (
+                      <div key={wine.id}
+                        onClick={() => { setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view"); }}
+                        style={{
+                          background: C.bg, border: `1px solid ${aging?.c || C.border}`, borderRadius: 8,
+                          padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10,
+                          transition: "all 0.15s",
+                        }}>
+                        <div style={{ flexShrink: 0, width: 4, alignSelf: "stretch", background: tc.bar, borderRadius: 2 }} />
+                        {(wine.photos || [])[0] && (
+                          <img src={wine.photos[0]} alt={wine.name}
+                            style={{ flexShrink: 0, width: 32, height: 42, objectFit: "cover", borderRadius: 3, border: `1px solid ${C.border}` }} />
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: "'Cinzel', serif", fontSize: 13, color: C.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {wine.name}
+                          </div>
+                          <div style={{ fontFamily: "'Cinzel', serif", fontSize: 11, color: C.textFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
+                            {[wine.producer, wine.year].filter(Boolean).join(" · ")} · <em style={{ color: aging?.c || C.textFaint }}>{reason}</em>
+                          </div>
+                        </div>
+                        <div style={{ flexShrink: 0, fontSize: 14, color: C.gold, opacity: 0.6 }}>›</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          );
-        })()}
+          )}
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px", paddingBottom: 100 }}
-          onScroll={e => {
-            const y = e.currentTarget.scrollTop;
-            if (y > lastScrollY.current + 8) setSearchBarVisible(false);
-            else if (y < lastScrollY.current - 8) setSearchBarVisible(true);
-            lastScrollY.current = y;
-          }}
-        >
           {filtered.length === 0 ? (
             <div style={{ textAlign: "center", padding: "80px 20px", color: C.textFaint }}>
               <div style={{ fontSize: 48, marginBottom: 14, opacity: 0.4 }}>🍷</div>
@@ -1932,14 +1981,22 @@ export default function App() {
             </div>
           )}
         </div>
-      </div>}
+        </div>
+        );
+      })()}
 
       {/* ══════ RACKS VIEW ══════ */}
       {view === "racks" && (
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px", paddingBottom: 100 }}>
-          <div style={{ marginBottom: 24 }}>
-            <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, color: C.gold, letterSpacing: 2, marginBottom: 6 }}>I MIEI SCAFFALI</h2>
-            <p style={{ fontSize: 15, color: C.textMuted, fontStyle: "italic" }}>Ogni cella è una posizione A1, B3… Clicca su una bottiglia per i dettagli.</p>
+          <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, color: C.gold, letterSpacing: 2, marginBottom: 6 }}>I MIEI SCAFFALI</h2>
+              <p style={{ fontSize: 15, color: C.textMuted, fontStyle: "italic" }}>Ogni cella è una posizione A1, B3… Clicca su una bottiglia per i dettagli.</p>
+            </div>
+            <button onClick={() => { setEditingRack(emptyRack()); setRackModal("add"); }}
+              className="btn-sm" style={{ whiteSpace: "nowrap", flexShrink: 0, fontSize: 12, padding: "8px 14px" }}>
+              ＋ NUOVO
+            </button>
           </div>
           {racks.length === 0 && (
             <div style={{ textAlign: "center", padding: "60px 20px", color: C.textFaint }}>
@@ -3000,6 +3057,130 @@ export default function App() {
         </div>
       )}
 
+      {/* ── SEARCH MODAL (full-screen) ── */}
+      {searchModalOpen && (() => {
+        // Risultati filtrati live dalla ricerca corrente (ignora i filtri attivi per semplicità:
+        // la ricerca qui si comporta come un tool di esplorazione su tutto il catalogo)
+        const q = search.trim().toLowerCase();
+        const results = q ? activeWines.filter(w => {
+          const fields = [
+            w.name || "", w.denomination || "", w.producer || "",
+            w.region || "", w.grape || "", w.type || "",
+            w.notes || "", w.year ? String(w.year) : "",
+            ...(w.rackSlots || []).flatMap(s => s.positions || []),
+          ];
+          return fields.some(f => f.toLowerCase().includes(q));
+        }).slice(0, 40) : [];
+        return (
+          <div className="modal-overlay" style={{ alignItems: "flex-start", padding: 0 }} onClick={() => setSearchModalOpen(false)}>
+            <div className="modal-box" style={{
+              maxWidth: "100%", borderRadius: 0, maxHeight: "100svh", height: "100svh",
+              display: "flex", flexDirection: "column",
+            }} onClick={e => e.stopPropagation()}>
+              {/* Header con input autofocus */}
+              <div style={{
+                position: "sticky", top: 0, zIndex: 2,
+                background: C.surface, borderBottom: `1px solid ${C.border}`,
+                padding: "env(safe-area-inset-top, 12px) 14px 12px 14px",
+                display: "flex", gap: 10, alignItems: "center",
+              }}>
+                <div style={{ flex: 1, position: "relative" }}>
+                  <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 16, pointerEvents: "none" }}>🔍</span>
+                  <input
+                    autoFocus
+                    placeholder="Cerca vino, produttore, annata…"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    style={{
+                      ...inputStyle,
+                      padding: "12px 14px 12px 38px",
+                      paddingRight: search ? 38 : 14,
+                      fontSize: 16,
+                      fontFamily: "'Cinzel', serif",
+                      letterSpacing: 0.5,
+                    }}
+                  />
+                  {search && (
+                    <button onClick={() => setSearch("")} style={{
+                      position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                      background: C.border, border: "none", borderRadius: "50%",
+                      width: 22, height: 22, cursor: "pointer", color: C.text,
+                      fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>✕</button>
+                  )}
+                </div>
+                <button onClick={() => setSearchModalOpen(false)} style={{
+                  background: "none", border: "none", color: C.textMuted,
+                  cursor: "pointer", fontSize: 13, fontFamily: "'Cinzel', serif", letterSpacing: 1.5, fontWeight: 700,
+                  flexShrink: 0, padding: "0 4px",
+                }}>FINE</button>
+              </div>
+
+              {/* Risultati */}
+              <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px 40px" }}>
+                {!q ? (
+                  <div style={{ textAlign: "center", padding: "60px 20px", color: C.textFaint }}>
+                    <div style={{ fontSize: 40, marginBottom: 10, opacity: 0.4 }}>🔍</div>
+                    <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 1.5, fontSize: 12 }}>
+                      INIZIA A SCRIVERE
+                    </p>
+                    <p style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic", marginTop: 8, lineHeight: 1.5 }}>
+                      Cerca per nome, produttore, annata, vitigno, regione, posizione scaffale o note.
+                    </p>
+                  </div>
+                ) : results.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "60px 20px", color: C.textFaint }}>
+                    <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 1.5, fontSize: 12 }}>
+                      NESSUN RISULTATO per "{search}"
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 11, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginBottom: 10 }}>
+                      {results.length} {results.length === 1 ? "risultato" : "risultati"}
+                    </p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {results.map(wine => {
+                        const tc = typeColors[wine.type] || { bar: "#888" };
+                        return (
+                          <div key={wine.id}
+                            onClick={() => {
+                              setSearchModalOpen(false);
+                              setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view");
+                            }}
+                            style={{
+                              background: C.surface, border: `1px solid ${C.border}`, borderRadius: 9,
+                              padding: "10px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10,
+                              transition: "all 0.15s",
+                            }}>
+                            <div style={{ flexShrink: 0, width: 4, alignSelf: "stretch", background: tc.bar, borderRadius: 2 }} />
+                            {(wine.photos || [])[0] && (
+                              <img src={wine.photos[0]} alt={wine.name}
+                                style={{ flexShrink: 0, width: 32, height: 42, objectFit: "cover", borderRadius: 3, border: `1px solid ${C.border}` }} />
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontFamily: "'Cinzel', serif", fontSize: 14, color: C.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {wine.name}
+                              </div>
+                              <div style={{ fontFamily: "'Cinzel', serif", fontSize: 11, color: C.textFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
+                                {[wine.producer, wine.year, wine.grape].filter(Boolean).join(" · ")}
+                              </div>
+                            </div>
+                            <div style={{ flexShrink: 0, fontFamily: "'Cinzel', serif", fontSize: 11, color: wine.quantity === 0 ? "#c07070" : C.gold, fontWeight: 700 }}>
+                              {wine.quantity}bt
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── FILTRI MODAL (bottom sheet su mobile) ── */}
       {filtersOpen && (() => {
         const sectionStyle = { marginBottom: 22 };
@@ -3172,8 +3353,8 @@ export default function App() {
 
       {/* ── FOOD PAIRING MODAL ── */}
       {pairingOpen && (
-        <div className="modal-overlay" onClick={() => setPairingOpen(false)}>
-          <div className="modal-box" style={{ maxWidth: 580 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" style={{ alignItems: "center", padding: 12 }} onClick={() => setPairingOpen(false)}>
+          <div className="modal-box" style={{ maxWidth: 580, maxHeight: "min(88svh, 720px)" }} onClick={e => e.stopPropagation()}>
             <div style={{ height: 4, background: `linear-gradient(90deg, #3a7a5a, #c9953a)`, borderRadius: "14px 14px 0 0" }} />
             <div style={{ padding: "22px 22px 18px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
@@ -3829,12 +4010,9 @@ export default function App() {
           <p style={{fontFamily:"'Cinzel', serif",color:C.gold,fontSize:11,letterSpacing:3,opacity:0.8}}>SINCRONIZZAZIONE</p>
         </div>
       )}
-      {/* ── FAB AGGIUNGI VINO ── */}
-      {!modal && !rackModal && (view === "catalog" || view === "racks") && <button
-        onClick={() => {
-          if (view === "racks") { setEditingRack(emptyRack()); setRackModal("add"); }
-          else { setEditing(emptyWine()); setScanError(null); setModal("add"); }
-        }}
+      {/* ── FAB AGGIUNGI VINO — visibile SOLO sul catalogo ── */}
+      {!modal && !rackModal && view === "catalog" && <button
+        onClick={() => { setEditing(emptyWine()); setScanError(null); setModal("add"); }}
         title="Aggiungi vino"
         style={{
           position: "fixed", bottom: 28, right: 24, zIndex: 300,
