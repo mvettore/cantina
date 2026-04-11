@@ -17,21 +17,14 @@ const SUPABASE_URL  = process.env.SUPABASE_URL;
 const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const BUCKET        = "wine-photos";
 
-// Crea il bucket "wine-photos" (public) se non esiste ancora.
-// Chiamata a ogni upload ma idempotente: dopo la prima volta ritorna subito.
+// Assicura che il bucket "wine-photos" esista (public).
+// Nota: Supabase su "bucket check" GET ritorna HTTP 400 con body
+// {statusCode:"404",error:"Bucket not found"} quando non esiste, quindi il
+// check via GET non e affidabile. Usiamo direttamente POST /bucket che e
+// idempotente: se il bucket esiste gia ritorna un errore "already exists"
+// che trattiamo come successo.
 async function ensureBucket() {
   try {
-    const check = await fetch(`${SUPABASE_URL}/storage/v1/bucket/${BUCKET}`, {
-      headers: { Authorization: `Bearer ${SUPABASE_KEY}` },
-    });
-    if (check.ok) return true;
-    if (check.status !== 404) {
-      const err = await check.text().catch(() => "");
-      console.error(`[upload-photo] bucket check HTTP ${check.status}: ${err.substring(0, 200)}`);
-      return false;
-    }
-    // 404 → non esiste, crealo
-    console.log(`[upload-photo] creating bucket "${BUCKET}" (public)`);
     const create = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
       method: "POST",
       headers: {
@@ -42,19 +35,30 @@ async function ensureBucket() {
         id: BUCKET,
         name: BUCKET,
         public: true,
-        file_size_limit: 2 * 1024 * 1024, // 2MB per file (le foto resize sono ~100-500KB)
+        file_size_limit: 2 * 1024 * 1024, // 2MB per file
         allowed_mime_types: ["image/jpeg", "image/png", "image/webp", "image/heic"],
       }),
     });
-    if (!create.ok) {
-      const err = await create.text().catch(() => "");
-      console.error(`[upload-photo] bucket create HTTP ${create.status}: ${err.substring(0, 200)}`);
-      return false;
+
+    if (create.ok) {
+      console.log(`[upload-photo] bucket "${BUCKET}" created (public)`);
+      return true;
     }
-    console.log(`[upload-photo] bucket "${BUCKET}" created`);
-    return true;
+
+    const errText = await create.text().catch(() => "");
+    // "Bucket already exists" / "The resource already exists" → OK
+    if (
+      /already\s*exists/i.test(errText) ||
+      /duplicate/i.test(errText) ||
+      create.status === 409
+    ) {
+      return true; // bucket gia presente, procediamo con upload
+    }
+
+    console.error(`[upload-photo] bucket create HTTP ${create.status}: ${errText.substring(0, 200)}`);
+    return false;
   } catch (err) {
-    console.error(`[upload-photo] ensureBucket error: ${err.message}`);
+    console.error(`[upload-photo] ensureBucket fetch error: ${err.message}`);
     return false;
   }
 }
