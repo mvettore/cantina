@@ -435,6 +435,7 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState(null);
   const [drinkModal, setDrinkModal] = useState(null);
+  const [tonightOpen, setTonightOpen] = useState(false); // modale "Apri stasera"
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
   const [cantinaName, setCantinaName] = useState(() => loadLocal('cantina-name', 'CANTINA VETTORELLO'));
   const [editingName, setEditingName] = useState(false);
@@ -608,6 +609,56 @@ export default function App() {
     activeWines.forEach(w => splitGrapes(w.grape).forEach(g => { counts[g] = (counts[g] || 0) + 1; }));
     return Object.entries(counts).sort(([,a],[,b]) => b - a || 0).map(([k]) => k);
   })();
+
+  // "Apri stasera" — suggerisce fino a 3 bottiglie: priorità a urgenza + varietà
+  // Scoring: Declino 30, Maturo 20, Apice 8, Giovane 0. Ultima bottiglia +6.
+  // Bonus se non bevuto di recente (tipo non compare in log ultimi 7gg).
+  // Penalità −20 se lo stesso vino è già nello storico negli ultimi 7 giorni.
+  const tonightPicks = (() => {
+    const recentLog = log.slice().sort((a,b) => (b.date||"").localeCompare(a.date||"")).slice(0, 10);
+    const recentTypes = new Set(recentLog.slice(0, 3).map(e => e.wineType).filter(Boolean));
+    const recentIds = new Set(recentLog.filter(e => {
+      if (!e.date) return false;
+      const d = new Date(e.date); const now = new Date();
+      return (now - d) / (1000*60*60*24) <= 7;
+    }).map(e => e.wineId));
+    const scored = activeWines
+      .filter(w => (w.quantity || 0) > 0)
+      .map(w => {
+        const ag = getAgingStatus(w);
+        let score = 0;
+        if (ag?.s === "Declino") score += 30;
+        else if (ag?.s === "Maturo") score += 20;
+        else if (ag?.s === "Apice")  score += 8;
+        if ((w.quantity || 0) === 1) score += 6;
+        if (recentTypes.has(w.type)) score -= 6;
+        if (recentIds.has(w.id))     score -= 20;
+        let reason = "";
+        if (ag?.s === "Declino")      reason = "In declino, da aprire subito";
+        else if (ag?.s === "Maturo")  reason = "Pronto, non aspettare troppo";
+        else if (ag?.s === "Apice")   reason = "In piena forma";
+        else if ((w.quantity || 0) === 1) reason = "Ultima bottiglia";
+        else                          reason = ag?.s ? `${ag.s}, pronta da stappare` : "Pronta da stappare";
+        return { wine: w, score, reason, aging: ag };
+      })
+      .filter(x => x.score > 0)
+      .sort((a,b) => b.score - a.score);
+    // Garantisci varietà di tipo nei top 3 (se possibile)
+    const picks = [];
+    const usedTypes = new Set();
+    for (const x of scored) {
+      if (picks.length >= 3) break;
+      if (!usedTypes.has(x.wine.type)) { picks.push(x); usedTypes.add(x.wine.type); }
+    }
+    // Se non arriviamo a 3 con varietà, completa col resto
+    if (picks.length < 3) {
+      for (const x of scored) {
+        if (picks.length >= 3) break;
+        if (!picks.includes(x)) picks.push(x);
+      }
+    }
+    return picks;
+  })();
   const filtered = activeWines
     .filter(w => filterType === "Tutti" || w.type === filterType)
     .filter(w => !filterGrape || splitGrapes(w.grape).includes(filterGrape))
@@ -751,6 +802,38 @@ export default function App() {
     }
   };
 
+  // Helper: costruisce una log entry vuota precompilata dai dati del vino
+  const makeLogEntryForWine = (wine) => ({
+    id: Date.now(),
+    wineId: wine.id,
+    wineName: wine.name,
+    wineProducer: wine.producer,
+    wineYear: wine.year,
+    wineType: wine.type,
+    wineGrape: wine.grape,
+    wineRegion: wine.region,
+    winePhotos: wine.photos || [],
+    tastingPhotos: [],
+    date: new Date().toISOString().split("T")[0],
+    occasion: "",
+    companions: "",
+    // Scheda degustazione AIS
+    rating: 0,
+    vista_limpidezza: "",
+    vista_colore: "",
+    vista_intensita_colore: "",
+    olfatto_intensita: "",
+    olfatto_qualita: "",
+    olfatto_descrizione: "",
+    gusto_corpo: "",
+    gusto_acidita: "",
+    gusto_tannini: "",
+    gusto_persistenza: "",
+    gusto_equilibrio: "",
+    notes: wine.notes || "",
+    wineEnrichment: wine.enrichment || null,
+  });
+
   // Conferma la bevuta: memorizza il pending e apre il form storico
   // La cantina viene aggiornata SOLO quando si salva il log (o si salta)
   const commitDrink = (wine, posToRemove) => {
@@ -772,36 +855,7 @@ export default function App() {
     setDrinkModal(null);
 
     // Apri il form per registrare la bevuta nello storico
-    setLogEntry({
-      id: Date.now(),
-      wineId: wine.id,
-      wineName: wine.name,
-      wineProducer: wine.producer,
-      wineYear: wine.year,
-      wineType: wine.type,
-      wineGrape: wine.grape,
-      wineRegion: wine.region,
-      winePhotos: wine.photos || [],
-      tastingPhotos: [],
-      date: new Date().toISOString().split("T")[0],
-      occasion: "",
-      companions: "",
-      // Scheda degustazione AIS
-      rating: 0,
-      vista_limpidezza: "",
-      vista_colore: "",
-      vista_intensita_colore: "",
-      olfatto_intensita: "",
-      olfatto_qualita: "",
-      olfatto_descrizione: "",
-      gusto_corpo: "",
-      gusto_acidita: "",
-      gusto_tannini: "",
-      gusto_persistenza: "",
-      gusto_equilibrio: "",
-      notes: wine.notes || "",
-      wineEnrichment: wine.enrichment || null,
-    });
+    setLogEntry(makeLogEntryForWine(wine));
     setLogModal("add");
   };
 
@@ -852,10 +906,24 @@ export default function App() {
       showToast(`"${wine.name}" aggiunto — analisi in corso…`);
       setTimeout(() => autoEnrich(wine), 500);
     } else {
+      const original = wines.find(w => w.id === editing.id);
+      const qtyDelta = (original?.quantity || 0) - (editing.quantity || 0);
       const updated = { ...editing, lastModified: Date.now() };
       saveWines(wines.map(w => w.id === editing.id ? updated : w));
       showToast(`"${editing.name}" aggiornato`);
       setModal(null);
+      // Auto-log: se la quantità è stata decrementata manualmente, proponi lo storico
+      if (qtyDelta > 0) {
+        setTimeout(() => {
+          const msg = qtyDelta === 1
+            ? `Hai stappato una bottiglia di "${updated.name}". Registrala nello storico?`
+            : `Sono state rimosse ${qtyDelta} bottiglie di "${updated.name}". Registra una degustazione nello storico?`;
+          if (window.confirm(msg)) {
+            setLogEntry(makeLogEntryForWine(updated));
+            setLogModal("add");
+          }
+        }, 250);
+      }
     }
   };
 
@@ -1081,11 +1149,31 @@ export default function App() {
       `}</style>
 
       {/* ── NAV ── */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 8px", paddingTop: "env(safe-area-inset-top, 0px)", display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch", flexShrink: 0 }}>
-        {[["catalog","📋  CATALOGO"],["racks","🗄  SCAFFALI"],["stats","📊  STATISTICHE"],["logview","📖  STORICO"]].map(([v,l]) => (
-          <button key={v} className={`nav-btn ${view===v?"active":""}`} onClick={() => setView(v)}>{l}</button>
-        ))}
-      </div>
+      {(() => {
+        const urgentCount = activeWines.filter(w => {
+          if ((w.quantity || 0) <= 0) return false;
+          const s = getAgingStatus(w)?.s;
+          return s === "Maturo" || s === "Declino";
+        }).length;
+        return (
+          <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 8px", paddingTop: "env(safe-area-inset-top, 0px)", display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch", flexShrink: 0 }}>
+            {[["catalog","📋  CATALOGO", urgentCount],["racks","🗄  SCAFFALI", 0],["stats","📊  STATISTICHE", 0],["logview","📖  STORICO", 0]].map(([v,l,badge]) => (
+              <button key={v} className={`nav-btn ${view===v?"active":""}`} onClick={() => setView(v)} style={{ position: "relative" }}>
+                {l}
+                {badge > 0 && (
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    minWidth: 18, height: 18, padding: "0 5px", marginLeft: 6,
+                    background: "#9a5050", color: "#fff", borderRadius: 10,
+                    fontFamily: "'Cinzel', serif", fontSize: 11, fontWeight: 700, letterSpacing: 0,
+                    verticalAlign: "middle",
+                  }}>{badge}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* ══════ CATALOG VIEW ══════ */}
       {view === "catalog" && <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
@@ -1118,6 +1206,20 @@ export default function App() {
                 title="Rimuovi filtri">
                 {[filterType !== "Tutti" ? filterType : null, filterGrape, filterRegion, filterAging !== "Tutti" ? filterAging : null, filterUnracked ? "Senza scaffale" : null].filter(Boolean).join(" · ")} ✕
               </span>
+            )}
+            {/* Apri stasera — quick pick */}
+            {tonightPicks.length > 0 && (
+              <button onClick={() => setTonightOpen(true)} style={{
+                background: "linear-gradient(135deg, #3a1a5a, #7a3a9a)",
+                border: "1px solid rgba(201,149,58,0.4)",
+                borderRadius: 8, padding: "7px 12px", cursor: "pointer",
+                color: "#f0d0ff",
+                fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
+                display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s",
+                whiteSpace: "nowrap",
+              }} title="Suggerimenti bottiglie da aprire">
+                🍷 STASERA
+              </button>
             )}
             {/* Toggle filtri */}
             <button onClick={() => setFiltersOpen(o => !o)} style={{
@@ -2194,6 +2296,78 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* ── APRI STASERA MODAL ── */}
+      {tonightOpen && (
+        <div className="modal-overlay" onClick={() => setTonightOpen(false)}>
+          <div className="modal-box" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+            <div style={{ height: 4, background: `linear-gradient(90deg, #7a2a9a, #c9953a)`, borderRadius: "14px 14px 0 0" }} />
+            <div style={{ padding: "22px 22px 18px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                <div>
+                  <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, color: C.gold, letterSpacing: 2 }}>
+                    🍷 APRI STASERA
+                  </h2>
+                  <p style={{ fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginTop: 4 }}>
+                    I MIEI SUGGERIMENTI
+                  </p>
+                </div>
+                <button onClick={() => setTonightOpen(false)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 22, lineHeight: 1 }}>✕</button>
+              </div>
+
+              {tonightPicks.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 10px", color: C.textFaint }}>
+                  <div style={{ fontSize: 44, marginBottom: 10, opacity: 0.4 }}>🍷</div>
+                  <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 1, fontSize: 14 }}>NESSUN SUGGERIMENTO URGENTE</p>
+                  <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", marginTop: 8 }}>Tutti i tuoi vini sono tranquillamente in cantina.</p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 14 }}>
+                  {tonightPicks.map(({ wine, reason, aging }, idx) => {
+                    const tc = typeColors[wine.type] || { bar: "#888" };
+                    return (
+                      <div key={wine.id}
+                        onClick={() => { setTonightOpen(false); setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view"); }}
+                        style={{
+                          background: C.surface2, border: `1px solid ${aging?.c || C.border}`, borderRadius: 10,
+                          padding: "12px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
+                          transition: "all 0.15s",
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = C.gold; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = aging?.c || C.border; }}>
+                        <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: "50%",
+                          background: `${tc.bar}22`, border: `2px solid ${tc.bar}`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontFamily: "'Cinzel', serif", fontSize: 15, fontWeight: 700, color: tc.bar }}>{idx + 1}</div>
+                        {(wine.photos || [])[0] && (
+                          <img src={wine.photos[0]} alt={wine.name}
+                            style={{ flexShrink: 0, width: 44, height: 56, objectFit: "cover", borderRadius: 4, border: `1px solid ${C.border}` }} />
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: "'Cinzel', serif", fontSize: 16, color: C.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {wine.name}
+                          </div>
+                          <div style={{ fontFamily: "'Cinzel', serif", fontSize: 13, color: C.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
+                            {[wine.producer, wine.year].filter(Boolean).join(" · ")}
+                          </div>
+                          <div style={{ fontFamily: "'Cinzel', serif", fontSize: 11, color: aging?.c || C.textFaint, letterSpacing: 0.8, marginTop: 4, fontStyle: "italic" }}>
+                            {reason}
+                          </div>
+                        </div>
+                        <div style={{ flexShrink: 0, fontSize: 18, color: C.gold }}>›</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <p style={{ fontSize: 12, color: C.textFaint, fontStyle: "italic", marginTop: 16, textAlign: "center" }}>
+                Basato su invecchiamento, scorte e varietà rispetto al tuo storico.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══════ STORICO VIEW ══════ */}
       {view === "logview" && (
