@@ -1318,7 +1318,7 @@ export default function App() {
             </button>
 
             {/* Vinario wordmark — sempre centrato */}
-            <div style={{ padding: "16px 0 6px", textAlign: "center" }}>
+            <div style={{ padding: "16px 0 14px", textAlign: "center" }}>
               <div style={{
                 fontFamily: "'Cormorant Garamond', 'Cinzel', serif",
                 fontSize: 30, fontWeight: 300, letterSpacing: 12,
@@ -1349,18 +1349,6 @@ export default function App() {
                   background: `linear-gradient(90deg, ${C.gold}, transparent)`,
                 }}/>
               </div>
-            </div>
-
-            {/* Subtitle: vista corrente */}
-            <div style={{
-              textAlign: "center", paddingBottom: 12, paddingLeft: 60, paddingRight: 60,
-              fontFamily: "'Cinzel', serif", fontSize: 10, color: C.textFaint,
-              letterSpacing: 4, fontWeight: 500,
-            }}>
-              {current.icon}&nbsp;&nbsp;{current.l}
-              {view === "catalog" && filterUrgent && (
-                <span style={{ marginLeft: 10, color: C.accent, fontWeight: 700 }}>⚠ URGENTI</span>
-              )}
             </div>
 
             {/* Dropdown */}
