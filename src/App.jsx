@@ -173,12 +173,30 @@ function mergeWines(localWines, cloudWines) {
 // ── Cloud sync via Netlify Function ──
 const IS_NETLIFY = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
 
+// Chiave localStorage per l'ETag del cloud sync
+const ETAG_KEY = "cantina-cloud-etag";
+
 async function cloudLoad() {
   if (!IS_NETLIFY) return null;
   try {
-    const r = await fetch("/.netlify/functions/data");
+    const savedEtag = loadLocal(ETAG_KEY, null);
+    const headers = {};
+    if (savedEtag) headers["If-None-Match"] = savedEtag;
+
+    const r = await fetch("/.netlify/functions/data", { headers });
+
+    // 304 Not Modified: contenuto invariato, salta parsing/merge
+    if (r.status === 304) {
+      return { notModified: true };
+    }
+
     if (!r.ok) return null;
-    return await r.json(); // { wines, racks }
+
+    // Salva il nuovo ETag per il prossimo sync differenziale
+    const newEtag = r.headers.get("etag") || r.headers.get("ETag");
+    if (newEtag) saveLocal(ETAG_KEY, newEtag);
+
+    return await r.json(); // { wines, racks, log }
   } catch { return null; }
 }
 
@@ -479,9 +497,7 @@ export default function App() {
   const [cantinaName, setCantinaName] = useState(() => loadLocal('cantina-name', 'CANTINA VETTORELLO'));
   const [editingName, setEditingName] = useState(false);
   const [viewFromPos, setViewFromPos] = useState(null); // posizione rack che ha aperto il modal view
-  const [pullY, setPullY] = useState(0);
-  const [pullRefreshing, setPullRefreshing] = useState(false);
-  const pullStartY = useRef(0);
+  const [lastSync, setLastSync] = useState(() => loadLocal('cantina-last-sync', null));
   const [pendingDrink, setPendingDrink] = useState(null); // {wine, newQty, newSlots}
   const [log, setLog] = useState(() => loadLocal(LOG_KEY, []));
   const [logModal, setLogModal] = useState(null); // wine being logged
@@ -521,6 +537,26 @@ export default function App() {
     cloudLoad().then(data => {
       let loadedWines = null;
       if (data) {
+        // Registra timestamp ultimo sync riuscito
+        const now = Date.now();
+        setLastSync(now);
+        saveLocal('cantina-last-sync', now);
+
+        // 304 Not Modified: il cloud non ha nulla di nuovo, usa solo localStorage
+        if (data.notModified) {
+          const localWines = loadWinesLocal([]);
+          loadedWines = localWines;
+          latestWinesRef.current = localWines;
+          setWines(localWines);
+          console.log("[cloudLoad] 304: stato invariato, uso localStorage");
+          setSyncing(false);
+          // Migra comunque eventuali foto base64 legacy in background
+          if (loadedWines.length > 0) {
+            setTimeout(() => migrateLegacyPhotos(loadedWines), 2500);
+          }
+          return;
+        }
+
         if (data.wines) {
           const cloudWines = migrateWines(data.wines);
           const localWines = loadWinesLocal([]);
@@ -621,6 +657,14 @@ export default function App() {
     if (!IS_NETLIFY) return Promise.resolve();
     return cloudLoad().then(data => {
       if (!data) return;
+      const now = Date.now();
+      setLastSync(now);
+      saveLocal('cantina-last-sync', now);
+      // 304: nessun cambiamento dal cloud, non serve toccare lo stato
+      if (data.notModified) {
+        console.log("[doCloudRefresh] 304: stato invariato");
+        return;
+      }
       if (data.wines) {
         const cloudWines = migrateWines(data.wines);
         // Usa React state (current) come base locale — più affidabile di localStorage
@@ -654,29 +698,20 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
-  const PULL_THRESHOLD = 72;
-  const onPullStart = (e) => { pullStartY.current = e.touches[0].clientY; };
-  const onPullMove  = (e) => {
-    const el = e.currentTarget;
-    if (el.scrollTop > 0) return;
-    const dy = e.touches[0].clientY - pullStartY.current;
-    if (dy > 0) setPullY(Math.min(dy, PULL_THRESHOLD * 1.4));
-  };
-  const onPullEnd   = () => {
-    if (pullY >= PULL_THRESHOLD && !pullRefreshing) {
-      setPullRefreshing(true);
-      doCloudRefresh().finally(() => { setPullRefreshing(false); setPullY(0); });
-    } else {
-      setPullY(0);
+  // Sync manuale dal menu (ex pull-to-refresh)
+  const handleManualSync = async () => {
+    setMenuOpen(false);
+    showToast("🔄 Sincronizzazione…");
+    try {
+      await doCloudRefresh();
+      const now = Date.now();
+      setLastSync(now);
+      saveLocal('cantina-last-sync', now);
+      showToast("✓ Sincronizzato");
+    } catch {
+      showToast("❌ Sync fallito");
     }
   };
-  const pullHandlers = IS_NETLIFY ? { onTouchStart: onPullStart, onTouchMove: onPullMove, onTouchEnd: onPullEnd } : {};
-  const pullIndicatorH = pullRefreshing ? 44 : Math.round(pullY * 0.55);
-  const PullIndicator = () => pullIndicatorH > 4 ? (
-    <div style={{ display:"flex", justifyContent:"center", alignItems:"center", height: pullIndicatorH, overflow:"hidden", transition: pullRefreshing ? "none" : "height 0.2s" }}>
-      <div style={{ width:22, height:22, border:`2px solid rgba(201,149,58,0.3)`, borderTopColor:C.gold, borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
-    </div>
-  ) : null;
 
   const saveWines = (w) => {
     const seen = new Set();
@@ -1548,6 +1583,49 @@ export default function App() {
                       </button>
                     );
                   })}
+
+                  {/* ── Azioni rapide ── */}
+                  <div style={{ height: 1, background: C.border, margin: "6px 2px" }} />
+
+                  {/* Abbina — food pairing */}
+                  <button onClick={() => { setMenuOpen(false); setPairingOpen(true); setPairingResult(null); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12, width: "100%",
+                      background: "transparent", border: "1px solid transparent",
+                      borderRadius: 7, padding: "11px 13px", cursor: "pointer",
+                      color: C.textMuted,
+                      fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1.5,
+                      textAlign: "left", marginTop: 2, transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(122,186,138,0.1)"; e.currentTarget.style.color = "#a0d0a8"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textMuted; }}>
+                    <span style={{ fontSize: 16 }}>🍽</span>
+                    <span style={{ flex: 1 }}>ABBINA A PIATTO</span>
+                    <span style={{ fontSize: 16, opacity: 0.5 }}>›</span>
+                  </button>
+
+                  {/* Sync manuale */}
+                  <button onClick={handleManualSync}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12, width: "100%",
+                      background: "transparent", border: "1px solid transparent",
+                      borderRadius: 7, padding: "11px 13px", cursor: "pointer",
+                      color: C.textMuted,
+                      fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1.5,
+                      textAlign: "left", marginTop: 2, transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,149,58,0.07)"; e.currentTarget.style.color = C.gold; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textMuted; }}>
+                    <span style={{ fontSize: 16 }}>🔄</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div>SINCRONIZZA</div>
+                      {lastSync && (
+                        <div style={{ fontSize: 10, color: C.textFaint, fontFamily: "'EB Garamond', serif", fontStyle: "italic", letterSpacing: 0, marginTop: 2 }}>
+                          Ultimo: {new Date(lastSync).toLocaleDateString("it-IT", { day: "2-digit", month: "short" })} · {new Date(lastSync).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      )}
+                    </div>
+                  </button>
                 </div>
               </>
             )}
@@ -1710,7 +1788,6 @@ export default function App() {
         </div>{/* fine wrapper search collassabile */}
 
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px", paddingBottom: 100 }}
-          {...pullHandlers}
           onScroll={e => {
             const y = e.currentTarget.scrollTop;
             if (y > lastScrollY.current + 8) setSearchBarVisible(false);
@@ -1718,7 +1795,6 @@ export default function App() {
             lastScrollY.current = y;
           }}
         >
-          <PullIndicator />
           {filtered.length === 0 ? (
             <div style={{ textAlign: "center", padding: "80px 20px", color: C.textFaint }}>
               <div style={{ fontSize: 48, marginBottom: 14, opacity: 0.4 }}>🍷</div>
@@ -1871,8 +1947,7 @@ export default function App() {
 
       {/* ══════ RACKS VIEW ══════ */}
       {view === "racks" && (
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px", paddingBottom: 100 }} {...pullHandlers}>
-          <PullIndicator />
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px", paddingBottom: 100 }}>
           <div style={{ marginBottom: 24 }}>
             <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 20, color: C.gold, letterSpacing: 2, marginBottom: 6 }}>I MIEI SCAFFALI</h2>
             <p style={{ fontSize: 15, color: C.textMuted, fontStyle: "italic" }}>Ogni cella è una posizione A1, B3… Clicca su una bottiglia per i dettagli.</p>
@@ -1996,8 +2071,7 @@ export default function App() {
           </div>
         );
         return (
-          <div style={{ flex:1, overflowY:"auto", minHeight:0 }} {...pullHandlers}><div style={{ padding:"20px 16px", display:"flex", flexDirection:"column", gap:16 }}>
-            <PullIndicator />
+          <div style={{ flex:1, overflowY:"auto", minHeight:0 }}><div style={{ padding:"20px 16px", display:"flex", flexDirection:"column", gap:16 }}>
             <h2 style={{ fontFamily:"'Cinzel', serif", fontSize:18, color:C.gold, letterSpacing:2 }}>COMPOSIZIONE DELLA CANTINA</h2>
 
             {/* Riassunto AI della cantina */}
@@ -3059,8 +3133,7 @@ export default function App() {
 
       {/* ══════ STORICO VIEW ══════ */}
       {view === "logview" && (
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px" }} {...pullHandlers}>
-          <PullIndicator />
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO DEGUSTAZIONI</h2>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
