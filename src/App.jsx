@@ -1097,22 +1097,32 @@ export default function App() {
 
   const getWineAtPosition = (rackId, pos) => wines.find(w => (w.rackSlots||[]).some(s => s.rackId === rackId && (s.positions||[]).includes(pos)));
 
+  // v2 palette: deep wine & champagne — più elegante, meno "rustico marrone"
   const C = {
-    bg: "#2e1f0f", surface: "#3e2a16", surface2: "#4e3520",
-    border: "#7a5535", borderLight: "#9a7550",
-    gold: "#c9953a", goldLight: "#e0b85a",
-    text: "#f2e0c5", textMuted: "#c0a07a", textFaint: "#907050",
+    bg: "#180b10",                 // vino nero profondo
+    surface: "#241319",            // wine surface
+    surface2: "#2e1a22",           // più chiaro, cards elevate
+    border: "#3a2029",             // bordo sottile
+    borderLight: "#563040",        // bordo accentato
+    gold: "#d4a85a",               // champagne gold (meno arancio)
+    goldLight: "#ead0a0",          // gold highlight
+    text: "#f0e4d0",               // cream
+    textMuted: "#b8a08a",          // warm muted
+    textFaint: "#7a6352",          // low emphasis
+    accent: "#8b1e3f",             // wine red (urgenza, highlight)
   };
 
   const inputStyle = {
-    background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7,
+    background: C.bg, border: `1px solid ${C.border}`, borderRadius: 9,
     color: C.text, padding: "11px 14px", width: "100%",
     fontFamily: "'EB Garamond', serif", fontSize: 20, outline: "none",
-    transition: "border-color 0.15s",
+    transition: "border-color 0.2s, box-shadow 0.2s",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)",
   };
   const labelStyle = {
-    color: C.textFaint, fontSize: 15, letterSpacing: 1.2,
-    fontFamily: "'Cinzel', serif", textTransform: "uppercase", marginBottom: 6, display: "block",
+    color: C.textFaint, fontSize: 12, letterSpacing: 2,
+    fontFamily: "'Cinzel', serif", textTransform: "uppercase", marginBottom: 7, display: "block",
+    fontWeight: 500,
   };
 
   const MiniRackMap = ({ rack, highlightPositions }) => (
@@ -1209,7 +1219,7 @@ export default function App() {
   return (
     <div style={{ height: "100svh", display: "flex", flexDirection: "column", overflow: "hidden", background: C.bg, fontFamily: "'EB Garamond', serif", color: C.text, fontSize: 20 }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { overflow: hidden; height: 100%; max-width: 100vw; }
         ::-webkit-scrollbar { width: 6px; }
@@ -1219,20 +1229,23 @@ export default function App() {
         input::placeholder, textarea::placeholder { color: ${C.textFaint}; }
         select option { background: ${C.surface}; color: ${C.text}; }
         input:focus, select:focus, textarea:focus { border-color: ${C.gold} !important; box-shadow: 0 0 0 2px rgba(201,149,58,0.14); }
-        .wine-card { transition: transform 0.18s, box-shadow 0.18s; }
-        .wine-card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,0,0,0.4) !important; }
-        .btn-gold { background: linear-gradient(135deg, #a07828, ${C.gold}, #a07828); color: #1a0800; border: none; border-radius: 8px; padding: 12px 24px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 1.5px; font-weight: 700; transition: opacity 0.15s, transform 0.12s; white-space: nowrap; }
-        .btn-gold:hover { opacity: 0.88; transform: translateY(-1px); }
-        .btn-ghost { background: transparent; color: ${C.textMuted}; border: 1px solid ${C.border}; border-radius: 8px; padding: 11px 22px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 1px; transition: border-color 0.15s, color 0.15s; white-space: nowrap; }
-        .btn-ghost:hover { border-color: ${C.gold}; color: ${C.gold}; }
-        .btn-sm { background: ${C.surface2}; color: ${C.textMuted}; border: 1px solid ${C.border}; border-radius: 7px; padding: 8px 16px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: all 0.15s; }
+        .wine-card { transition: transform 0.2s cubic-bezier(.2,.7,.3,1), box-shadow 0.2s, border-color 0.2s; position: relative; }
+        .wine-card::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: linear-gradient(135deg, transparent 50%, ${C.gold}20 100%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; opacity: 0; transition: opacity 0.2s; }
+        .wine-card:hover::before { opacity: 1; }
+        .wine-card:hover { transform: translateY(-3px); box-shadow: 0 14px 32px rgba(0,0,0,0.5) !important; }
+        .btn-gold { background: linear-gradient(135deg, #8a6828, ${C.gold} 50%, #8a6828); color: #1a0800; border: none; border-radius: 9px; padding: 12px 24px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 1.5px; font-weight: 700; transition: opacity 0.15s, transform 0.12s, box-shadow 0.15s; white-space: nowrap; box-shadow: 0 4px 14px rgba(212,168,90,0.22); }
+        .btn-gold:hover { opacity: 0.95; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(212,168,90,0.32); }
+        .btn-ghost { background: transparent; color: ${C.textMuted}; border: 1px solid ${C.border}; border-radius: 9px; padding: 11px 22px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 1px; transition: border-color 0.18s, color 0.18s, background 0.18s; white-space: nowrap; }
+        .btn-ghost:hover { border-color: ${C.gold}; color: ${C.gold}; background: rgba(212,168,90,0.05); }
+        .btn-sm { background: ${C.surface2}; color: ${C.textMuted}; border: 1px solid ${C.border}; border-radius: 7px; padding: 8px 16px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: all 0.18s; }
         .btn-sm:hover { color: ${C.gold}; border-color: ${C.gold}; }
-        .btn-danger { background: transparent; color: #c07070; border: 1px solid #804040; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: background 0.15s; }
-        .btn-danger:hover { background: rgba(180,60,60,0.15); }
-        .tab-btn { background: none; border: 1px solid transparent; cursor: pointer; padding: 5px 11px; border-radius: 20px; font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 1px; transition: all 0.15s; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: flex-end; justify-content: center; z-index: 200; padding-top: env(safe-area-inset-top, 44px); overflow: hidden; backdrop-filter: blur(4px); }
+        .btn-danger { background: transparent; color: #c07070; border: 1px solid #804040; border-radius: 9px; padding: 10px 16px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: background 0.15s, color 0.15s; }
+        .btn-danger:hover { background: rgba(180,60,60,0.15); color: #e09090; }
+        .tab-btn { background: none; border: 1px solid transparent; cursor: pointer; padding: 5px 11px; border-radius: 20px; font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 1px; transition: all 0.18s; }
+        .tab-btn:hover { color: ${C.gold}; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex; align-items: flex-end; justify-content: center; z-index: 200; padding-top: env(safe-area-inset-top, 44px); overflow: hidden; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
         @media (min-width: 600px) { .modal-overlay { align-items: center; padding: 8px; } }
-        .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(98vw, 1100px); max-height: 96svh; overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; padding-bottom: env(safe-area-inset-bottom, 16px); }
+        .modal-box { background: linear-gradient(180deg, ${C.surface} 0%, ${C.surface2} 100%); border: 1px solid ${C.border}; border-radius: 16px; width: 100%; max-width: min(98vw, 1100px); max-height: 96svh; overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 40px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(212,168,90,0.06) inset; animation: fadeUp 0.24s cubic-bezier(.2,.7,.3,1); padding-bottom: env(safe-area-inset-bottom, 16px); }
         @keyframes fadeUp { from { opacity:0; transform: translateY(18px) scale(0.97); } to { opacity:1; transform: none; } }
 
         @media (max-width: 600px) {
@@ -1276,47 +1289,65 @@ export default function App() {
         const current = items.find(i => i.v === view) || items[0];
         return (
           <div style={{
-            background: C.surface, borderBottom: `1px solid ${C.border}`,
+            background: `linear-gradient(180deg, ${C.surface} 0%, ${C.bg} 100%)`,
+            borderBottom: `1px solid ${C.border}`,
             paddingTop: "env(safe-area-inset-top, 0px)", flexShrink: 0,
             position: "relative", zIndex: 50,
           }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", height: 52 }}>
-              {/* Titolo vista corrente */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <span style={{ fontSize: 20, flexShrink: 0 }}>{current.icon}</span>
-                <span className="mobile-header-title" style={{
-                  fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2,
-                  fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                }}>{current.l}</span>
-                {view === "catalog" && filterUrgent && (
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", gap: 4,
-                    background: "rgba(154,80,80,0.2)", border: "1px solid #9a5050",
-                    color: "#d08080", borderRadius: 12, padding: "2px 8px",
-                    fontFamily: "'Cinzel', serif", fontSize: 10, letterSpacing: 1, fontWeight: 700,
-                  }}>⚠ URGENTI</span>
-                )}
-              </div>
+            {/* Bottone menu — posizionato assolutamente in alto a destra */}
+            <button onClick={() => setMenuOpen(o => !o)} aria-label="Menu" style={{
+              position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 14px)", right: 14,
+              background: menuOpen ? "rgba(212,168,90,0.16)" : "transparent",
+              border: `1px solid ${menuOpen ? "rgba(212,168,90,0.5)" : C.border}`,
+              borderRadius: 8, padding: "8px 11px", cursor: "pointer",
+              color: menuOpen ? C.gold : C.textMuted,
+              fontSize: 18, lineHeight: 1, transition: "all 0.15s", zIndex: 2,
+            }}>
+              ☰
+              {urgentCount > 0 && (
+                <span style={{
+                  position: "absolute", top: -5, right: -5,
+                  minWidth: 18, height: 18, padding: "0 5px",
+                  background: C.accent, color: "#fff", borderRadius: 10,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontFamily: "'Cinzel', serif", fontSize: 11, fontWeight: 700,
+                  border: `2px solid ${C.surface}`, boxSizing: "content-box",
+                }}>{urgentCount}</span>
+              )}
+            </button>
 
-              {/* Bottone menu (hamburger) con badge urgenza */}
-              <button onClick={() => setMenuOpen(o => !o)} aria-label="Menu" style={{
-                position: "relative", background: menuOpen ? "rgba(201,149,58,0.14)" : "transparent",
-                border: `1px solid ${menuOpen ? "rgba(201,149,58,0.5)" : C.border}`,
-                borderRadius: 8, padding: "8px 11px", cursor: "pointer", color: menuOpen ? C.gold : C.textMuted,
-                fontSize: 18, lineHeight: 1, transition: "all 0.15s", flexShrink: 0,
+            {/* Vinario wordmark — sempre centrato */}
+            <div style={{ padding: "16px 0 14px", textAlign: "center" }}>
+              <div style={{
+                fontFamily: "'Cormorant Garamond', 'Cinzel', serif",
+                fontSize: 30, fontWeight: 300, letterSpacing: 12,
+                color: C.goldLight,
+                background: `linear-gradient(180deg, ${C.goldLight} 0%, ${C.gold} 60%, #a07830 100%)`,
+                WebkitBackgroundClip: "text", backgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                paddingLeft: 12, // compensa letter-spacing a destra
+                textTransform: "none",
+                userSelect: "none",
+              }}>Vinario</div>
+              {/* Ornamento decorativo sotto il wordmark */}
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                marginTop: 2, opacity: 0.85,
               }}>
-                ☰
-                {urgentCount > 0 && (
-                  <span style={{
-                    position: "absolute", top: -5, right: -5,
-                    minWidth: 18, height: 18, padding: "0 5px",
-                    background: "#9a5050", color: "#fff", borderRadius: 10,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontFamily: "'Cinzel', serif", fontSize: 11, fontWeight: 700,
-                    border: `2px solid ${C.surface}`, boxSizing: "content-box",
-                  }}>{urgentCount}</span>
-                )}
-              </button>
+                <div style={{
+                  height: 1, width: 48,
+                  background: `linear-gradient(90deg, transparent, ${C.gold})`,
+                }}/>
+                <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                  <div style={{ width: 3, height: 3, borderRadius: "50%", background: C.gold, opacity: 0.6 }}/>
+                  <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.goldLight }}/>
+                  <div style={{ width: 3, height: 3, borderRadius: "50%", background: C.gold, opacity: 0.6 }}/>
+                </div>
+                <div style={{
+                  height: 1, width: 48,
+                  background: `linear-gradient(90deg, ${C.gold}, transparent)`,
+                }}/>
+              </div>
             </div>
 
             {/* Dropdown */}
@@ -1577,12 +1608,20 @@ export default function App() {
                 const urgentBorder = ag?.s === "Declino" ? "#9a5050" : "#b07030";
                 const urgentWidth  = ag?.s === "Maturo" ? "2px" : "1px";
                 return (
-                  <div key={isGroup ? group.key : wine.id} className="wine-card" style={{ background: C.surface, border: urgent ? `${urgentWidth} solid ${urgentBorder}` : `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", boxShadow: urgent ? `0 3px 14px ${urgentBorder}44` : "0 3px 12px rgba(0,0,0,0.25)", position: "relative" }}
+                  <div key={isGroup ? group.key : wine.id} className="wine-card" style={{
+                    background: `linear-gradient(180deg, ${C.surface} 0%, ${C.surface2} 100%)`,
+                    border: urgent ? `${urgentWidth} solid ${urgentBorder}` : `1px solid ${C.border}`,
+                    borderRadius: 12, overflow: "hidden", cursor: "pointer",
+                    boxShadow: urgent
+                      ? `0 4px 18px ${urgentBorder}3a, 0 0 0 1px ${urgentBorder}22 inset`
+                      : "0 4px 16px rgba(0,0,0,0.3)",
+                    position: "relative",
+                  }}
                     onClick={() => {
                       if (isGroup) { setVerticaleOpen(group); return; }
                       setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view");
                     }}>
-                    <div style={{ height: 5, background: tc.bar }} />
+                    <div style={{ height: 3, background: `linear-gradient(90deg, ${tc.bar} 0%, ${tc.bar}dd 100%)` }} />
 
                     <div style={{display:"flex",minHeight:0}}>
                       {/* Foto verticale */}
@@ -3342,10 +3381,23 @@ export default function App() {
 
       {/* Syncing overlay — mostrato solo al primo caricamento dal cloud */}
       {syncing&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(46,31,15,0.92)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:400,backdropFilter:"blur(6px)"}}>
-          <div style={{width:48,height:48,border:"3px solid rgba(201,149,58,0.3)",borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.8s linear infinite",marginBottom:22}}/>
-          <p style={{fontFamily:"'Cinzel', serif",color:C.gold,fontSize:16,letterSpacing:2}}>SINCRONIZZAZIONE…</p>
-          <p style={{fontFamily:"'Cormorant Garamond', serif",color:C.textMuted,fontSize:14,marginTop:8,fontStyle:"italic"}}>Caricamento dati dalla cantina</p>
+        <div style={{position:"fixed",inset:0,background:"rgba(24,11,16,0.94)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:400,backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)"}}>
+          {/* Wordmark di caricamento */}
+          <div style={{
+            fontFamily: "'Cormorant Garamond', serif",
+            fontSize: 44, fontWeight: 300, letterSpacing: 14,
+            background: `linear-gradient(180deg, ${C.goldLight}, ${C.gold} 60%, #8a6828)`,
+            WebkitBackgroundClip: "text", backgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            paddingLeft: 14, marginBottom: 6,
+          }}>Vinario</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
+            <div style={{ height: 1, width: 60, background: `linear-gradient(90deg, transparent, ${C.gold})` }}/>
+            <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.goldLight }}/>
+            <div style={{ height: 1, width: 60, background: `linear-gradient(90deg, ${C.gold}, transparent)` }}/>
+          </div>
+          <div style={{width:40,height:40,border:`2px solid ${C.gold}33`,borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.9s linear infinite",marginBottom:16}}/>
+          <p style={{fontFamily:"'Cinzel', serif",color:C.gold,fontSize:11,letterSpacing:3,opacity:0.8}}>SINCRONIZZAZIONE</p>
         </div>
       )}
       {/* ── FAB AGGIUNGI VINO ── */}
@@ -3357,13 +3409,16 @@ export default function App() {
         title="Aggiungi vino"
         style={{
           position: "fixed", bottom: 28, right: 24, zIndex: 300,
-          width: 56, height: 56, borderRadius: "50%",
-          background: "linear-gradient(135deg, #c9953a, #a06820)",
-          border: "none", color: "#fff",
-          fontSize: 30, lineHeight: 1,
-          boxShadow: "0 4px 18px rgba(0,0,0,0.5)",
+          width: 60, height: 60, borderRadius: "50%",
+          background: `radial-gradient(circle at 35% 30%, ${C.goldLight}, ${C.gold} 55%, #7a5a22 100%)`,
+          border: `1px solid ${C.goldLight}`, color: "#1a0800",
+          fontSize: 32, lineHeight: 1, fontWeight: 300, fontFamily: "'Cormorant Garamond', serif",
+          boxShadow: `0 6px 24px rgba(0,0,0,0.55), 0 0 0 4px ${C.bg}, 0 0 0 5px ${C.gold}55`,
           cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          transition: "transform 0.15s, box-shadow 0.2s",
         }}
+        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.06)"; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = ""; }}
       >+</button>}
     </div>
   );
