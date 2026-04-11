@@ -421,7 +421,9 @@ export default function App() {
   const [filterRegion, setFilterRegion] = useState(null);
   const [filterAging, setFilterAging] = useState("Tutti");
   const [filterUnracked, setFilterUnracked] = useState(false);
+  const [filterUrgent, setFilterUrgent] = useState(false); // Maturo + Declino
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [sortBy,  setSortBy]  = useState("name");
   const [sortDir, setSortDir] = useState("desc");
   const [modal,   setModal]   = useState(null);
@@ -664,6 +666,7 @@ export default function App() {
     .filter(w => !filterGrape || splitGrapes(w.grape).includes(filterGrape))
     .filter(w => !filterRegion || w.region === filterRegion)
     .filter(w => filterAging === "Tutti" || getAgingStatus(w)?.s === filterAging)
+    .filter(w => !filterUrgent || ["Maturo","Declino"].includes(getAgingStatus(w)?.s))
     .filter(w => !filterUnracked || ((w.rackSlots||[]).reduce((sum, s) => sum + (s.positions||[]).length, 0) < (w.quantity || 0)))
     .filter(w => {
       const q = search.toLowerCase();
@@ -1114,9 +1117,6 @@ export default function App() {
         .btn-danger { background: transparent; color: #c07070; border: 1px solid #804040; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: background 0.15s; }
         .btn-danger:hover { background: rgba(180,60,60,0.15); }
         .tab-btn { background: none; border: 1px solid transparent; cursor: pointer; padding: 5px 11px; border-radius: 20px; font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 1px; transition: all 0.15s; }
-        .nav-btn { background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; padding: 12px 22px; font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 2px; transition: all 0.15s; color: ${C.textFaint}; }
-        .nav-btn.active { color: ${C.gold}; border-bottom-color: ${C.gold}; }
-        .nav-btn:hover:not(.active) { color: ${C.textMuted}; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: flex-end; justify-content: center; z-index: 200; padding-top: env(safe-area-inset-top, 44px); overflow: hidden; backdrop-filter: blur(4px); }
         @media (min-width: 600px) { .modal-overlay { align-items: center; padding: 8px; } }
         .modal-box { background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 14px; width: 100%; max-width: min(98vw, 1100px); max-height: 96svh; overflow-y: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 30px 80px rgba(0,0,0,0.6); animation: fadeUp 0.22s ease; padding-bottom: env(safe-area-inset-bottom, 16px); }
@@ -1126,7 +1126,6 @@ export default function App() {
           .wine-card { font-size: 15px !important; }
           .wine-card h3 { font-size: 17px !important; }
           .wine-card p  { font-size: 14px !important; }
-          .nav-btn  { padding: 9px 14px !important; font-size: 13px !important; }
           .modal-box { border-radius: 20px 20px 0 0 !important; max-height: 95svh !important; }
           .mobile-header-title { font-size: 18px !important; }
         }
@@ -1148,29 +1147,130 @@ export default function App() {
         .spinner { width: 18px; height: 18px; border: 2px solid rgba(201,149,58,0.3); border-top-color: ${C.gold}; border-radius: 50%; animation: spin 0.8s linear infinite; }
       `}</style>
 
-      {/* ── NAV ── */}
+      {/* ── HEADER + DROPDOWN MENU ── */}
       {(() => {
         const urgentCount = activeWines.filter(w => {
           if ((w.quantity || 0) <= 0) return false;
           const s = getAgingStatus(w)?.s;
           return s === "Maturo" || s === "Declino";
         }).length;
+        const items = [
+          { v: "catalog", l: "CATALOGO",    icon: "📋" },
+          { v: "racks",   l: "SCAFFALI",    icon: "🗄" },
+          { v: "stats",   l: "STATISTICHE", icon: "📊" },
+          { v: "logview", l: "STORICO",     icon: "📖" },
+        ];
+        const current = items.find(i => i.v === view) || items[0];
         return (
-          <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 8px", paddingTop: "env(safe-area-inset-top, 0px)", display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch", flexShrink: 0 }}>
-            {[["catalog","📋  CATALOGO", urgentCount],["racks","🗄  SCAFFALI", 0],["stats","📊  STATISTICHE", 0],["logview","📖  STORICO", 0]].map(([v,l,badge]) => (
-              <button key={v} className={`nav-btn ${view===v?"active":""}`} onClick={() => setView(v)} style={{ position: "relative" }}>
-                {l}
-                {badge > 0 && (
+          <div style={{
+            background: C.surface, borderBottom: `1px solid ${C.border}`,
+            paddingTop: "env(safe-area-inset-top, 0px)", flexShrink: 0,
+            position: "relative", zIndex: 50,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", height: 52 }}>
+              {/* Titolo vista corrente */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>{current.icon}</span>
+                <span className="mobile-header-title" style={{
+                  fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2,
+                  fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>{current.l}</span>
+                {view === "catalog" && filterUrgent && (
                   <span style={{
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    minWidth: 18, height: 18, padding: "0 5px", marginLeft: 6,
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    background: "rgba(154,80,80,0.2)", border: "1px solid #9a5050",
+                    color: "#d08080", borderRadius: 12, padding: "2px 8px",
+                    fontFamily: "'Cinzel', serif", fontSize: 10, letterSpacing: 1, fontWeight: 700,
+                  }}>⚠ URGENTI</span>
+                )}
+              </div>
+
+              {/* Bottone menu (hamburger) con badge urgenza */}
+              <button onClick={() => setMenuOpen(o => !o)} aria-label="Menu" style={{
+                position: "relative", background: menuOpen ? "rgba(201,149,58,0.14)" : "transparent",
+                border: `1px solid ${menuOpen ? "rgba(201,149,58,0.5)" : C.border}`,
+                borderRadius: 8, padding: "8px 11px", cursor: "pointer", color: menuOpen ? C.gold : C.textMuted,
+                fontSize: 18, lineHeight: 1, transition: "all 0.15s", flexShrink: 0,
+              }}>
+                ☰
+                {urgentCount > 0 && (
+                  <span style={{
+                    position: "absolute", top: -5, right: -5,
+                    minWidth: 18, height: 18, padding: "0 5px",
                     background: "#9a5050", color: "#fff", borderRadius: 10,
-                    fontFamily: "'Cinzel', serif", fontSize: 11, fontWeight: 700, letterSpacing: 0,
-                    verticalAlign: "middle",
-                  }}>{badge}</span>
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontFamily: "'Cinzel', serif", fontSize: 11, fontWeight: 700,
+                    border: `2px solid ${C.surface}`, boxSizing: "content-box",
+                  }}>{urgentCount}</span>
                 )}
               </button>
-            ))}
+            </div>
+
+            {/* Dropdown */}
+            {menuOpen && (
+              <>
+                <div onClick={() => setMenuOpen(false)} style={{
+                  position: "fixed", inset: 0, zIndex: 49, background: "transparent",
+                }} />
+                <div style={{
+                  position: "absolute", top: "100%", right: 10, zIndex: 51,
+                  background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+                  boxShadow: "0 14px 40px rgba(0,0,0,0.55)",
+                  minWidth: 240, padding: 6, marginTop: 4,
+                  animation: "fadeUp 0.15s ease",
+                }}>
+                  {/* Urgenti — jump a catalogo filtrato */}
+                  {urgentCount > 0 && (
+                    <>
+                      <button onClick={() => {
+                        setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null);
+                        setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(true);
+                        setSearch(""); setView("catalog"); setMenuOpen(false);
+                      }} style={{
+                        display: "flex", alignItems: "center", gap: 10, width: "100%",
+                        background: "rgba(154,80,80,0.15)", border: "1px solid rgba(154,80,80,0.4)",
+                        borderRadius: 7, padding: "11px 13px", cursor: "pointer",
+                        color: "#d08080", fontFamily: "'Cinzel', serif", fontSize: 13,
+                        letterSpacing: 1, fontWeight: 700, textAlign: "left",
+                        transition: "all 0.15s",
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(154,80,80,0.25)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "rgba(154,80,80,0.15)"; }}>
+                        <span style={{ fontSize: 16 }}>⚠</span>
+                        <span style={{ flex: 1 }}>{urgentCount} VINI DA BERE</span>
+                        <span style={{ fontSize: 16, opacity: 0.7 }}>›</span>
+                      </button>
+                      <div style={{ height: 1, background: C.border, margin: "6px 2px" }} />
+                    </>
+                  )}
+                  {items.map(({ v, l, icon }) => {
+                    const active = view === v;
+                    return (
+                      <button key={v} onClick={() => {
+                        setView(v);
+                        // Reset del filtro urgenti quando cambi vista liberamente dal menu
+                        if (v !== "catalog") setFilterUrgent(false);
+                        setMenuOpen(false);
+                      }} style={{
+                        display: "flex", alignItems: "center", gap: 12, width: "100%",
+                        background: active ? "rgba(201,149,58,0.14)" : "transparent",
+                        border: `1px solid ${active ? "rgba(201,149,58,0.4)" : "transparent"}`,
+                        borderRadius: 7, padding: "11px 13px", cursor: "pointer",
+                        color: active ? C.gold : C.textMuted,
+                        fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1.5, fontWeight: active ? 700 : 400,
+                        textAlign: "left", marginTop: 2, transition: "all 0.15s",
+                      }}
+                        onMouseEnter={e => { if (!active) { e.currentTarget.style.background = "rgba(201,149,58,0.07)"; e.currentTarget.style.color = C.gold; } }}
+                        onMouseLeave={e => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textMuted; } }}>
+                        <span style={{ fontSize: 16 }}>{icon}</span>
+                        <span style={{ flex: 1 }}>{l}</span>
+                        {active && <span style={{ fontSize: 14, color: C.gold }}>●</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         );
       })()}
@@ -1200,11 +1300,11 @@ export default function App() {
               )}
             </div>
             {/* Indicatori filtri attivi */}
-            {(filterType !== "Tutti" || filterGrape || filterRegion || filterAging !== "Tutti" || filterUnracked) && (
-              <span onClick={() => { setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null); setFilterAging("Tutti"); setFilterUnracked(false); }}
+            {(filterType !== "Tutti" || filterGrape || filterRegion || filterAging !== "Tutti" || filterUnracked || filterUrgent) && (
+              <span onClick={() => { setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null); setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(false); }}
                 style={{ fontSize: 12, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 1, whiteSpace: "nowrap", cursor: "pointer" }}
                 title="Rimuovi filtri">
-                {[filterType !== "Tutti" ? filterType : null, filterGrape, filterRegion, filterAging !== "Tutti" ? filterAging : null, filterUnracked ? "Senza scaffale" : null].filter(Boolean).join(" · ")} ✕
+                {[filterType !== "Tutti" ? filterType : null, filterGrape, filterRegion, filterAging !== "Tutti" ? filterAging : null, filterUrgent ? "Urgenti" : null, filterUnracked ? "Senza scaffale" : null].filter(Boolean).join(" · ")} ✕
               </span>
             )}
             {/* Apri stasera — quick pick */}
