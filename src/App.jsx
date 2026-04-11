@@ -1636,156 +1636,108 @@ export default function App() {
       {/* ══════ CATALOG VIEW ══════ */}
       {view === "catalog" && <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
         {/* Barra ricerca — si nasconde scorrendo giù, riappare scorrendo su */}
-        <div style={{
-          overflow: "hidden", flexShrink: 0,
-          maxHeight: searchBarVisible ? (filtersOpen ? "500px" : "60px") : "0px",
-          transition: "max-height 0.3s ease",
-        }}>
-        <div style={{ padding: "7px 12px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
-          {/* Barra ricerca + toggle filtri */}
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <div style={{ flex: 1, position: "relative" }}>
-              <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 14 }}>🔍</span>
-              <input placeholder="Cerca in tutti i campi…" value={search} onChange={e => setSearch(e.target.value)}
-                style={{ ...inputStyle, padding: "7px 12px 7px 34px", paddingRight: search ? 34 : 12, fontSize: 16, fontFamily: "'Cinzel', serif", letterSpacing: 0.5 }} />
-              {search && (
-                <button onClick={() => setSearch("")} style={{
-                  position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                  background: C.border, border: "none", borderRadius: "50%",
-                  width: 22, height: 22, cursor: "pointer", color: C.text,
-                  fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
-                }}>✕</button>
-              )}
-            </div>
-            {/* Indicatori filtri attivi */}
-            {(filterType !== "Tutti" || filterGrape || filterRegion || filterAging !== "Tutti" || filterUnracked || filterUrgent) && (
-              <span onClick={() => { setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null); setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(false); }}
-                style={{ fontSize: 12, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 1, whiteSpace: "nowrap", cursor: "pointer" }}
-                title="Rimuovi filtri">
-                {[filterType !== "Tutti" ? filterType : null, filterGrape, filterRegion, filterAging !== "Tutti" ? filterAging : null, filterUrgent ? "Urgenti" : null, filterUnracked ? "Senza scaffale" : null].filter(Boolean).join(" · ")} ✕
-              </span>
-            )}
-            {/* Apri stasera — quick pick */}
-            {tonightPicks.length > 0 && (
-              <button onClick={() => setTonightOpen(true)} style={{
-                background: "linear-gradient(135deg, #3a1a5a, #7a3a9a)",
-                border: "1px solid rgba(201,149,58,0.4)",
-                borderRadius: 8, padding: "7px 12px", cursor: "pointer",
-                color: "#f0d0ff",
-                fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
-                display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s",
-                whiteSpace: "nowrap",
-              }} title="Suggerimenti bottiglie da aprire">
-                🍷 STASERA
-              </button>
-            )}
-            {/* Food pairing inverso */}
-            <button onClick={() => { setPairingOpen(true); setPairingResult(null); }} style={{
-              background: "linear-gradient(135deg, #1a3a2a, #3a7a5a)",
-              border: "1px solid rgba(122,186,138,0.4)",
-              borderRadius: 8, padding: "7px 12px", cursor: "pointer",
-              color: "#d0f0dc",
-              fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
-              display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s",
-              whiteSpace: "nowrap",
-            }} title="Abbina un vino a un piatto">
-              🍽 ABBINA
-            </button>
-            {/* Toggle filtri */}
-            <button onClick={() => setFiltersOpen(o => !o)} style={{
-              background: filtersOpen ? "rgba(201,149,58,0.14)" : C.surface2,
-              border: `1px solid ${filtersOpen ? "rgba(201,149,58,0.4)" : C.border}`,
-              borderRadius: 8, padding: "7px 12px", cursor: "pointer",
-              color: filtersOpen ? C.gold : C.textFaint,
-              fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1,
-              display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s",
-              whiteSpace: "nowrap",
+        {(() => {
+          const activeFiltersCount = [
+            filterType !== "Tutti",
+            !!filterGrape,
+            !!filterRegion,
+            filterAging !== "Tutti",
+            filterUnracked,
+            filterUrgent,
+          ].filter(Boolean).length;
+          return (
+            <div style={{
+              overflow: "hidden", flexShrink: 0,
+              maxHeight: searchBarVisible ? "130px" : "0px",
+              transition: "max-height 0.3s ease",
             }}>
-              FILTRI {filtersOpen ? "▲" : "▼"}
-            </button>
-          </div>
-
-          {/* Filtri espandibili */}
-          {filtersOpen && (
-            <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-              {/* Tipo */}
-              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>TIPO</span>
-                {["Tutti",...WINE_TYPES].map(t => (
-                  <button key={t} className="tab-btn" onClick={() => setFilterType(t)} style={{ color: filterType===t?C.gold:C.textFaint, background: filterType===t?"rgba(201,149,58,0.14)":"none", border: filterType===t?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent" }}>{t.toUpperCase()}</button>
-                ))}
-              </div>
-              {/* Stato */}
-              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>STATO</span>
-                {[
-                  { key: "Tutti", label: "Tutti", icon: "" },
-                  { key: "Giovane", label: "Giovane", icon: "🌱" },
-                  { key: "Apice", label: "Apice", icon: "⭐" },
-                  { key: "Maturo", label: "Maturo", icon: "🍂" },
-                  { key: "Declino", label: "Declino", icon: "📉" },
-                ].map(({ key, label, icon }) => (
-                  <button key={key} className="tab-btn" onClick={() => setFilterAging(key)} style={{
-                    color: filterAging===key?C.gold:C.textFaint,
-                    background: filterAging===key?"rgba(201,149,58,0.14)":"none",
-                    border: filterAging===key?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent",
-                  }}>{icon} {label.toUpperCase()}</button>
-                ))}
-              </div>
-              {/* Vitigno (dinamico dai vini presenti) */}
-              {grapeList.length > 0 && (
-                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                  <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>VITIGNO</span>
-                  <button className="tab-btn" onClick={() => setFilterGrape(null)} style={{
-                    color: !filterGrape?C.gold:C.textFaint,
-                    background: !filterGrape?"rgba(201,149,58,0.14)":"none",
-                    border: !filterGrape?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent",
-                  }}>TUTTI</button>
-                  {grapeList.map(g => (
-                    <button key={g} className="tab-btn" onClick={() => setFilterGrape(filterGrape===g?null:g)} style={{
-                      color: filterGrape===g?C.gold:C.textFaint,
-                      background: filterGrape===g?"rgba(201,149,58,0.14)":"none",
-                      border: filterGrape===g?`1px solid rgba(201,149,58,0.4)`:"1px solid transparent",
-                    }}>{g.toUpperCase()}</button>
-                  ))}
-                </div>
-              )}
-              {/* Senza scaffale */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>STOCK</span>
-                <button className="tab-btn" onClick={() => setFilterUnracked(v => !v)} style={{
-                  color: filterUnracked ? C.gold : C.textFaint,
-                  background: filterUnracked ? "rgba(201,149,58,0.14)" : "none",
-                  border: filterUnracked ? `1px solid rgba(201,149,58,0.4)` : "1px solid transparent",
-                }}>🗄 SENZA SCAFFALE</button>
-              </div>
-              {/* Ordina */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, minWidth: 62 }}>ORDINA</span>
-                <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{
-                  background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7,
-                  color: C.text, padding: "5px 10px", width: "auto", outline: "none",
-                  fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1,
-                }}>
-                  <option value="name">NOME</option>
-                  <option value="year">ANNATA</option>
-                  <option value="quantity">QUANTITÀ</option>
-                  <option value="urgency">DA BERE</option>
-                </select>
-                {sortBy === "year" && (
-                  <button onClick={() => setSortDir(d => d==="asc"?"desc":"asc")} style={{
-                    background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 20,
-                    color: C.gold, cursor: "pointer", padding: "5px 11px",
-                    fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1,
+              <div style={{ padding: "12px 14px 10px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+                {/* Riga 1: input ricerca grande + bottoni */}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ flex: 1, position: "relative" }}>
+                    <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: C.textFaint, fontSize: 16, pointerEvents: "none" }}>🔍</span>
+                    <input
+                      placeholder="Cerca vino, produttore, annata…"
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      style={{
+                        ...inputStyle,
+                        padding: "12px 14px 12px 38px",
+                        paddingRight: search ? 38 : 14,
+                        fontSize: 16,
+                        fontFamily: "'Cinzel', serif",
+                        letterSpacing: 0.5,
+                      }}
+                    />
+                    {search && (
+                      <button onClick={() => setSearch("")} style={{
+                        position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                        background: C.border, border: "none", borderRadius: "50%",
+                        width: 22, height: 22, cursor: "pointer", color: C.text,
+                        fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>✕</button>
+                    )}
+                  </div>
+                  {/* Apri stasera — quick pick */}
+                  {tonightPicks.length > 0 && (
+                    <button onClick={() => setTonightOpen(true)} style={{
+                      background: "linear-gradient(135deg, #3a1a5a, #7a3a9a)",
+                      border: "1px solid rgba(201,149,58,0.4)",
+                      borderRadius: 9, padding: "11px 12px", cursor: "pointer",
+                      color: "#f0d0ff",
+                      fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
+                      display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s",
+                      whiteSpace: "nowrap", flexShrink: 0,
+                    }} title="Suggerimenti bottiglie da aprire">
+                      🍷
+                    </button>
+                  )}
+                  {/* Toggle filtri → apre modale */}
+                  <button onClick={() => setFiltersOpen(true)} style={{
+                    background: activeFiltersCount > 0 ? "rgba(212,168,90,0.16)" : C.surface2,
+                    border: `1px solid ${activeFiltersCount > 0 ? "rgba(212,168,90,0.5)" : C.border}`,
+                    borderRadius: 9, padding: "11px 13px", cursor: "pointer",
+                    color: activeFiltersCount > 0 ? C.gold : C.textMuted,
+                    fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
+                    display: "flex", alignItems: "center", gap: 6, transition: "all 0.15s",
+                    whiteSpace: "nowrap", flexShrink: 0, position: "relative",
                   }}>
-                    {sortDir==="asc" ? "↑ PIÙ VECCHI" : "↓ PIÙ RECENTI"}
+                    ⚙ FILTRI
+                    {activeFiltersCount > 0 && (
+                      <span style={{
+                        background: C.gold, color: "#1a0800", borderRadius: 10,
+                        padding: "0 6px", fontSize: 10, fontWeight: 700,
+                        minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>{activeFiltersCount}</span>
+                    )}
                   </button>
+                </div>
+                {/* Riga 2: chip riassunto filtri attivi (se presenti) */}
+                {activeFiltersCount > 0 && (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                    <span onClick={() => {
+                      setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null);
+                      setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(false);
+                    }} style={{
+                      fontSize: 11, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 1,
+                      background: "rgba(212,168,90,0.12)", border: "1px solid rgba(212,168,90,0.35)",
+                      borderRadius: 14, padding: "3px 10px", cursor: "pointer", whiteSpace: "nowrap",
+                    }} title="Rimuovi tutti i filtri">
+                      {[
+                        filterType !== "Tutti" ? filterType : null,
+                        filterGrape,
+                        filterRegion,
+                        filterAging !== "Tutti" ? filterAging : null,
+                        filterUrgent ? "Urgenti" : null,
+                        filterUnracked ? "Senza scaffale" : null,
+                      ].filter(Boolean).join(" · ")} ✕
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
-          )}
-        </div>
-        </div>{/* fine wrapper search collassabile */}
+          );
+        })()}
 
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px", paddingBottom: 100 }}
           onScroll={e => {
@@ -2949,6 +2901,176 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ── FILTRI MODAL (bottom sheet su mobile) ── */}
+      {filtersOpen && (() => {
+        const sectionStyle = { marginBottom: 22 };
+        const labelH = { fontSize: 11, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 2, fontWeight: 700, marginBottom: 10, display: "block" };
+        const pillRow = { display: "flex", gap: 6, flexWrap: "wrap" };
+        const activeCount = [
+          filterType !== "Tutti",
+          !!filterGrape,
+          !!filterRegion,
+          filterAging !== "Tutti",
+          filterUnracked,
+          filterUrgent,
+        ].filter(Boolean).length;
+        return (
+          <div className="modal-overlay" onClick={() => setFiltersOpen(false)}>
+            <div className="modal-box" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
+              {/* Header sticky con X */}
+              <div style={{
+                position: "sticky", top: 0, zIndex: 2,
+                background: C.surface, borderBottom: `1px solid ${C.border}`,
+                borderRadius: "16px 16px 0 0",
+                padding: "16px 22px 14px",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+                <div>
+                  <div style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2, fontWeight: 700 }}>
+                    ⚙ FILTRI
+                  </div>
+                  {activeCount > 0 && (
+                    <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'EB Garamond', serif", fontStyle: "italic", marginTop: 2 }}>
+                      {activeCount} {activeCount === 1 ? "filtro attivo" : "filtri attivi"}
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => setFiltersOpen(false)} style={{
+                  background: "none", border: `1px solid ${C.border}`, color: C.textMuted,
+                  cursor: "pointer", fontSize: 18, lineHeight: 1,
+                  width: 36, height: 36, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>✕</button>
+              </div>
+
+              {/* Body scrollabile */}
+              <div style={{ padding: "18px 22px 12px" }}>
+                {/* Tipo */}
+                <div style={sectionStyle}>
+                  <span style={labelH}>TIPOLOGIA</span>
+                  <div style={pillRow}>
+                    {["Tutti", ...WINE_TYPES].map(t => (
+                      <button key={t} className="tab-btn" onClick={() => setFilterType(t)} style={{
+                        color: filterType === t ? C.gold : C.textFaint,
+                        background: filterType === t ? "rgba(212,168,90,0.16)" : "none",
+                        border: filterType === t ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                      }}>{t.toUpperCase()}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Stato invecchiamento */}
+                <div style={sectionStyle}>
+                  <span style={labelH}>STATO INVECCHIAMENTO</span>
+                  <div style={pillRow}>
+                    {[
+                      { key: "Tutti",   label: "Tutti",   icon: "" },
+                      { key: "Giovane", label: "Giovane", icon: "🌱" },
+                      { key: "Apice",   label: "Apice",   icon: "⭐" },
+                      { key: "Maturo",  label: "Maturo",  icon: "🍂" },
+                      { key: "Declino", label: "Declino", icon: "📉" },
+                    ].map(({ key, label, icon }) => (
+                      <button key={key} className="tab-btn" onClick={() => setFilterAging(key)} style={{
+                        color: filterAging === key ? C.gold : C.textFaint,
+                        background: filterAging === key ? "rgba(212,168,90,0.16)" : "none",
+                        border: filterAging === key ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                      }}>{icon} {label.toUpperCase()}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Vitigno (dinamico) */}
+                {grapeList.length > 0 && (
+                  <div style={sectionStyle}>
+                    <span style={labelH}>VITIGNO</span>
+                    <div style={pillRow}>
+                      <button className="tab-btn" onClick={() => setFilterGrape(null)} style={{
+                        color: !filterGrape ? C.gold : C.textFaint,
+                        background: !filterGrape ? "rgba(212,168,90,0.16)" : "none",
+                        border: !filterGrape ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                      }}>TUTTI</button>
+                      {grapeList.map(g => (
+                        <button key={g} className="tab-btn" onClick={() => setFilterGrape(filterGrape === g ? null : g)} style={{
+                          color: filterGrape === g ? C.gold : C.textFaint,
+                          background: filterGrape === g ? "rgba(212,168,90,0.16)" : "none",
+                          border: filterGrape === g ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                        }}>{g.toUpperCase()}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Stock / Senza scaffale */}
+                <div style={sectionStyle}>
+                  <span style={labelH}>STOCK</span>
+                  <div style={pillRow}>
+                    <button className="tab-btn" onClick={() => setFilterUnracked(v => !v)} style={{
+                      color: filterUnracked ? C.gold : C.textFaint,
+                      background: filterUnracked ? "rgba(212,168,90,0.16)" : "none",
+                      border: filterUnracked ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                    }}>🗄 SENZA SCAFFALE</button>
+                    <button className="tab-btn" onClick={() => setFilterUrgent(v => !v)} style={{
+                      color: filterUrgent ? C.accent : C.textFaint,
+                      background: filterUrgent ? "rgba(139,30,63,0.16)" : "none",
+                      border: filterUrgent ? `1px solid rgba(139,30,63,0.5)` : `1px solid ${C.border}`,
+                    }}>⚠ URGENTI</button>
+                  </div>
+                </div>
+
+                {/* Ordinamento */}
+                <div style={sectionStyle}>
+                  <span style={labelH}>ORDINA PER</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{
+                      background: C.bg, border: `1px solid ${C.border}`, borderRadius: 9,
+                      color: C.text, padding: "10px 14px", width: "auto", outline: "none",
+                      fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1,
+                    }}>
+                      <option value="name">NOME</option>
+                      <option value="year">ANNATA</option>
+                      <option value="quantity">QUANTITÀ</option>
+                      <option value="urgency">DA BERE</option>
+                    </select>
+                    {sortBy === "year" && (
+                      <button onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")} style={{
+                        background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 9,
+                        color: C.gold, cursor: "pointer", padding: "10px 14px",
+                        fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1,
+                      }}>
+                        {sortDir === "asc" ? "↑ PIÙ VECCHI" : "↓ PIÙ RECENTI"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer sticky con Reset + Applica */}
+              <div style={{
+                position: "sticky", bottom: 0, zIndex: 2,
+                background: C.surface, borderTop: `1px solid ${C.border}`,
+                padding: "14px 22px",
+                display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center",
+              }}>
+                <button onClick={() => {
+                  setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null);
+                  setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(false);
+                }} disabled={activeCount === 0} style={{
+                  background: "transparent", border: `1px solid ${C.border}`, borderRadius: 9,
+                  color: activeCount === 0 ? C.textFaint : C.textMuted,
+                  cursor: activeCount === 0 ? "not-allowed" : "pointer",
+                  padding: "10px 16px",
+                  fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1.5, fontWeight: 700,
+                  opacity: activeCount === 0 ? 0.5 : 1,
+                }}>RESET</button>
+                <button onClick={() => setFiltersOpen(false)} className="btn-gold" style={{ padding: "10px 22px", fontSize: 13 }}>
+                  APPLICA
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── FOOD PAIRING MODAL ── */}
       {pairingOpen && (
