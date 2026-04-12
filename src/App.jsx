@@ -2552,20 +2552,41 @@ export default function App() {
                   const ag = getAgingStatus(editing);
                   if (!ag) return null;
                   const age = new Date().getFullYear() - editing.year;
-                  const agingNote = editing.enrichment?.aging || null;
+                  const pf = editing.enrichment?.peakFrom;
+                  const pt = editing.enrichment?.peakTo;
+                  const hasPeak = pf != null && pt != null;
+                  const apiceStart = hasPeak ? editing.year + pf : null;
+                  const apiceEnd   = hasPeak ? editing.year + pt : null;
+                  const yearsToApice = hasPeak ? Math.max(0, pf - age) : null;
+
+                  // Testo invecchiamento computato dinamicamente dallo stato corrente,
+                  // sempre aggiornato e coerente con la fase (non più il testo AI statico).
+                  const agingDescription = (() => {
+                    if (!hasPeak) {
+                      if (ag.s === "Giovane") return `Questo ${editing.type || "vino"} ha ${age} ${age===1?"anno":"anni"}. Ancora giovane e in fase di sviluppo.`;
+                      if (ag.s === "Apice")   return `Questo ${editing.type || "vino"} ha ${age} ${age===1?"anno":"anni"} ed è nella finestra di beva ideale.`;
+                      if (ag.s === "Maturo")  return `Questo ${editing.type || "vino"} ha ${age} ${age===1?"anno":"anni"}. Maturità avanzata: consigliamo di non aspettare troppo.`;
+                      return `Questo ${editing.type || "vino"} ha ${age} ${age===1?"anno":"anni"} e ha superato il periodo ottimale. Meglio aprirlo al più presto.`;
+                    }
+                    if (ag.s === "Giovane") return `Questo ${editing.type || "vino"} ha ${age} ${age===1?"anno":"anni"} ed è ancora in fase di sviluppo. L'apice di beva è previsto tra ${yearsToApice} ${yearsToApice===1?"anno":"anni"} (dal ${apiceStart}). Può essere goduto per la freschezza, ma regalerà complessità con la maturazione.`;
+                    if (ag.s === "Apice")   return `Questo ${editing.type || "vino"} è nel pieno della finestra di beva ideale (${apiceStart}–${apiceEnd}). È il momento migliore per aprirlo: struttura, aromi terziari e equilibrio sono al loro massimo.`;
+                    if (ag.s === "Maturo")  return `Questo ${editing.type || "vino"} ha superato la finestra di apice (${apiceStart}–${apiceEnd}) ed è in fase di maturità avanzata. Ancora piacevole ma con caratteristiche in evoluzione — consigliamo di non aspettare troppo.`;
+                    return `Questo ${editing.type || "vino"} ha ${age} ${age===1?"anno":"anni"} e ha superato il periodo ottimale di beva (apice ${apiceStart}–${apiceEnd}). Meglio aprirlo al più presto: le caratteristiche organolettiche stanno cedendo.`;
+                  })();
+
                   return (
                     <div style={{background:C.bg, border:`1px solid ${ag.c}44`, borderRadius:10, padding:"14px 16px", marginBottom:14}}>
-                      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: agingNote ? 10 : 0}}>
+                      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 10}}>
                         <div style={{display:"flex", alignItems:"center", gap:10}}>
                           <span style={{fontSize:28}}>
                             {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"}
                           </span>
                           <div>
-                            <div style={{fontSize:20, color:ag.c, fontFamily:"'Cinzel', serif", fontWeight:700, letterSpacing:1}}>{ag.s}</div>
+                            <div style={{fontSize:20, color:ag.c, fontFamily:"'Cinzel', serif", fontWeight:700, letterSpacing:1}}>{ag.s.toUpperCase()}</div>
                             <div style={{fontSize:16, color:C.textMuted, fontFamily:"'Cinzel', serif"}}>{age} {age===1?"anno":"anni"} · {editing.type}</div>
-                            {editing.enrichment?.peakFrom != null && editing.enrichment?.peakTo != null && (
+                            {hasPeak && (
                               <div style={{fontSize:13, color:C.textFaint, fontFamily:"'Cinzel', serif", marginTop:2}}>
-                                APICE: {editing.year + editing.enrichment.peakFrom}–{editing.year + editing.enrichment.peakTo}
+                                APICE: {apiceStart}–{apiceEnd}
                               </div>
                             )}
                           </div>
@@ -2591,11 +2612,9 @@ export default function App() {
                           );
                         })()}
                       </div>
-                      {agingNote && (
-                        <p style={{fontSize:18, color:C.textMuted, fontFamily:"Georgia, 'Times New Roman', serif", lineHeight:1.6, margin:0, fontWeight:400}}>
-                          {agingNote}
-                        </p>
-                      )}
+                      <p style={{fontSize:16, color:C.textMuted, fontFamily:"'EB Garamond', serif", lineHeight:1.65, margin:0, fontWeight:400}}>
+                        {agingDescription}
+                      </p>
                     </div>
                   );
                 })()}
