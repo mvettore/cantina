@@ -2438,6 +2438,12 @@ export default function App() {
       {/* ══════ MODAL VIEW WINE ══════ */}
       {modal==="view" && editing && (()=>{
         const tc=typeColors[editing.type]||{bar:"#888"};
+        // Fratelli nella stessa verticale (stesso producer+name, annate diverse)
+        const siblings = activeWines
+          .filter(w => verticaleKey(w) === verticaleKey(editing) && w.id !== editing.id)
+          .sort((a,b) => (a.year||0) - (b.year||0));
+        const allVintages = [...siblings, editing].sort((a,b) => (a.year||0) - (b.year||0));
+        const hasVertical = siblings.length > 0;
         return(
           <div className="modal-overlay" onClick={()=>setModal(null)}>
             <div className="modal-box" onClick={e=>e.stopPropagation()}>
@@ -2503,6 +2509,34 @@ export default function App() {
                   <TypeBadge type={editing.type}/>
                   <span style={{fontSize:38,fontWeight:300,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:2}}>{editing.year}</span>
                 </div>
+
+                {/* Navigazione verticale: pill per ogni annata */}
+                {hasVertical && (
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12,marginTop:4}}>
+                    {allVintages.map(w => {
+                      const isCurrent = w.id === editing.id;
+                      const ag = getAgingStatus(w);
+                      return (
+                        <button key={w.id} onClick={() => {
+                          if (!isCurrent) {
+                            setEditing({...w});
+                            setEnrichData(null);
+                            setEnrichError(null);
+                          }
+                        }} style={{
+                          background: isCurrent ? "rgba(212,168,90,0.2)" : C.bg,
+                          border: `1px solid ${isCurrent ? C.gold : ag?.c || C.border}`,
+                          borderRadius: 20, padding: "4px 12px", cursor: isCurrent ? "default" : "pointer",
+                          color: isCurrent ? C.gold : ag?.c || C.textMuted,
+                          fontFamily: "'Cinzel', serif", fontSize: 13, fontWeight: isCurrent ? 700 : 400,
+                          letterSpacing: 1, transition: "all 0.15s",
+                        }}>
+                          {w.year} <span style={{fontSize:10,opacity:0.7}}>{w.quantity}bt</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Nome + denominazione */}
                 <h2 style={{fontFamily:"'Cinzel', serif",fontSize:42,fontWeight:700,color:C.text,margin:"0 0 6px",lineHeight:1.1}}>{editing.name}</h2>
