@@ -1003,7 +1003,12 @@ export default function App() {
         region: fromWine.region || "",
         grape: fromWine.grape || "",
         denomination: fromWine.denomination || "",
-        // year resta al default di emptyWine() = anno corrente (sensibile per un acquisto recente)
+        // Copia enrichment dal vino sorgente: peakFrom/peakTo sono relativi alla
+        // vendemmia e quindi validi per qualsiasi annata dello stesso vino.
+        // Questo evita che l'AI dia valori diversi per la stessa etichetta e
+        // generi stati di invecchiamento incoerenti (es. 2017 Maturo, 2018 Declino).
+        enrichment: fromWine.enrichment || null,
+        // year resta al default = anno corrente (sensibile per un acquisto recente)
       });
       setModal("add");
     }, 0);
@@ -1152,8 +1157,14 @@ export default function App() {
       const newList = [...wines.filter(w => w.id !== wine.id), wine];
       saveWines(newList);
       setModal(null);
-      showToast(`"${wine.name}" aggiunto${uploadSuffix} — analisi in corso…`);
-      setTimeout(() => autoEnrich(wine), 500);
+      // Salta autoEnrich se il vino ha già un enrichment (es. copiato da addNewVintage):
+      // peakFrom/peakTo sono relativi alla vendemmia e validi per qualsiasi annata.
+      if (wine.enrichment) {
+        showToast(`"${wine.name}" aggiunto${uploadSuffix}`);
+      } else {
+        showToast(`"${wine.name}" aggiunto${uploadSuffix} — analisi in corso…`);
+        setTimeout(() => autoEnrich(wine), 500);
+      }
     } else {
       const original = wines.find(w => w.id === editing.id);
       const qtyDelta = (original?.quantity || 0) - (editing.quantity || 0);
@@ -3059,18 +3070,30 @@ export default function App() {
 
       {/* ── SEARCH MODAL (full-screen) ── */}
       {searchModalOpen && (() => {
-        // Risultati filtrati live dalla ricerca corrente (ignora i filtri attivi per semplicità:
-        // la ricerca qui si comporta come un tool di esplorazione su tutto il catalogo)
+        // Risultati filtrati e raggruppati per verticale (stesso producer+name = 1 entry)
         const q = search.trim().toLowerCase();
-        const results = q ? activeWines.filter(w => {
-          const fields = [
-            w.name || "", w.denomination || "", w.producer || "",
-            w.region || "", w.grape || "", w.type || "",
-            w.notes || "", w.year ? String(w.year) : "",
-            ...(w.rackSlots || []).flatMap(s => s.positions || []),
-          ];
-          return fields.some(f => f.toLowerCase().includes(q));
-        }).slice(0, 40) : [];
+        const searchResults = (() => {
+          if (!q) return [];
+          const matching = activeWines.filter(w => {
+            const fields = [
+              w.name || "", w.denomination || "", w.producer || "",
+              w.region || "", w.grape || "", w.type || "",
+              w.notes || "", w.year ? String(w.year) : "",
+              ...(w.rackSlots || []).flatMap(s => s.positions || []),
+            ];
+            return fields.some(f => f.toLowerCase().includes(q));
+          });
+          // Raggruppa per verticale (come nel catalogo)
+          const groups = new Map();
+          matching.forEach(w => {
+            const k = verticaleKey(w);
+            if (!groups.has(k)) groups.set(k, []);
+            groups.get(k).push(w);
+          });
+          return Array.from(groups.values())
+            .map(ws => ws.sort((a, b) => (b.year || 0) - (a.year || 0)))
+            .slice(0, 30);
+        })();
         return (
           <div className="modal-overlay" style={{ alignItems: "flex-start", padding: 0 }} onClick={() => setSearchModalOpen(false)}>
             <div className="modal-box" style={{
@@ -3116,7 +3139,7 @@ export default function App() {
                 }}>FINE</button>
               </div>
 
-              {/* Risultati */}
+              {/* Risultati raggruppati per verticale */}
               <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px 40px" }}>
                 {!q ? (
                   <div style={{ textAlign: "center", padding: "60px 20px", color: C.textFaint }}>
@@ -3128,7 +3151,7 @@ export default function App() {
                       Cerca per nome, produttore, annata, vitigno, regione, posizione scaffale o note.
                     </p>
                   </div>
-                ) : results.length === 0 ? (
+                ) : searchResults.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "60px 20px", color: C.textFaint }}>
                     <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 1.5, fontSize: 12 }}>
                       NESSUN RISULTATO per "{search}"
@@ -3137,16 +3160,24 @@ export default function App() {
                 ) : (
                   <>
                     <p style={{ fontSize: 11, color: C.textFaint, fontFamily: "'Cinzel', serif", letterSpacing: 1, marginBottom: 10 }}>
-                      {results.length} {results.length === 1 ? "risultato" : "risultati"}
+                      {searchResults.length} {searchResults.length === 1 ? "etichetta" : "etichette"}
                     </p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {results.map(wine => {
+                      {searchResults.map(group => {
+                        const wine = group[0]; // rappresentativa (più recente)
+                        const isGroup = group.length > 1;
+                        const totalBt = group.reduce((s, w) => s + (w.quantity || 0), 0);
                         const tc = typeColors[wine.type] || { bar: "#888" };
                         return (
-                          <div key={wine.id}
+                          <div key={`${wine.producer}::${wine.name}`}
                             onClick={() => {
-                              setSearchModalOpen(false);
-                              setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view");
+                              if (isGroup) {
+                                setSearchModalOpen(false);
+                                setVerticaleOpen({ key: verticaleKey(wine), wines: group });
+                              } else {
+                                setSearchModalOpen(false);
+                                setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view");
+                              }
                             }}
                             style={{
                               background: C.surface, border: `1px solid ${C.border}`, borderRadius: 9,
@@ -3163,11 +3194,20 @@ export default function App() {
                                 {wine.name}
                               </div>
                               <div style={{ fontFamily: "'Cinzel', serif", fontSize: 11, color: C.textFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
-                                {[wine.producer, wine.year, wine.grape].filter(Boolean).join(" · ")}
+                                {isGroup
+                                  ? `${wine.producer} · ${Math.min(...group.map(w=>w.year||9999))}–${Math.max(...group.map(w=>w.year||0))}`
+                                  : [wine.producer, wine.year, wine.grape].filter(Boolean).join(" · ")}
                               </div>
                             </div>
-                            <div style={{ flexShrink: 0, fontFamily: "'Cinzel', serif", fontSize: 11, color: wine.quantity === 0 ? "#c07070" : C.gold, fontWeight: 700 }}>
-                              {wine.quantity}bt
+                            <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                              <span style={{ fontFamily: "'Cinzel', serif", fontSize: 11, color: totalBt === 0 ? "#c07070" : C.gold, fontWeight: 700 }}>
+                                {totalBt}bt
+                              </span>
+                              {isGroup && (
+                                <span style={{ fontSize: 10, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 0.5, opacity: 0.8 }}>
+                                  {group.length} annate
+                                </span>
+                              )}
                             </div>
                           </div>
                         );
