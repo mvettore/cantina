@@ -3695,7 +3695,6 @@ export default function App() {
                       {entry.occasion && <span>📅 {entry.occasion}</span>}
                       {entry.companions && <span>👥 {entry.companions}</span>}
                     </div>
-                    {entry.notes && <p style={{ fontSize: 14, color: C.textMuted, fontStyle: "italic", lineHeight: 1.5, margin: 0 }}>"{entry.notes}"</p>}
                   </div>
                   <button onClick={e => { e.stopPropagation(); const removed = entry; saveLog(log.filter(l => l.id !== entry.id)); showUndoToast("Voce eliminata", () => saveLog([removed, ...log.filter(l => l.id !== removed.id)])); }}
                     style={{ alignSelf: "stretch", background: "none", border: "none", borderLeft: `1px solid ${C.bg}`, padding: "0 12px", cursor: "pointer", color: "#7a4040", fontSize: 16, transition: "color 0.15s" }}
