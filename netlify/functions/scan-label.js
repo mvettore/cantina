@@ -22,10 +22,11 @@ const handler = async (event) => {
   "type": "Rosso|Bianco|Rosato|Spumante|Dolce|Passito",
   "region": "regione italiana o paese",
   "grape": "vitigno principale",
+  "alcohol": 14.5,
   "notes": "1-2 frasi descrittive",
   "price": null
 }
-Usa null per i campi non leggibili.`;
+Il campo "alcohol" è la gradazione alcolica in %vol (numero decimale). Usa null per i campi non leggibili.`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 24000);

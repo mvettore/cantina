@@ -376,8 +376,8 @@ async function scanLabel(base64DataUrl, base64DataUrl2 = null) {
 
     const prompt = `Sei un esperto enologo. Analizza quest${base64_2 ? "e etichette" : "a etichetta"} di vino.
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido con questi campi:
-{ "name": "...", "producer": "...", "year": 2019, "type": "Rosso|Bianco|Rosato|Spumante|Dolce|Passito", "region": "...", "grape": "...", "notes": "...", "price": null }
-Se un campo non è determinabile usa null.`;
+{ "name": "...", "producer": "...", "year": 2019, "type": "Rosso|Bianco|Rosato|Spumante|Dolce|Passito", "region": "...", "grape": "...", "alcohol": 14.5, "notes": "...", "price": null }
+Se un campo non è determinabile usa null. Il campo "alcohol" è la gradazione alcolica in %vol (numero decimale).`;
 
     const images = [
       { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
@@ -453,8 +453,8 @@ function getAgingStatus(wine) {
 const emptyWine = () => ({
   id: null, name: "", producer: "", year: new Date().getFullYear(),
   region: "", grape: "", type: "", denomination: "",
-  rating: 3, notes: "", quantity: 1, price: "", rackSlots: [], location: "",
-  photos: [], enrichment: null,
+  rating: 3, notes: "", quantity: 1, price: "", alcohol: "",
+  rackSlots: [], location: "", photos: [], enrichment: null,
 });
 const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6, house: "" });
 
@@ -907,6 +907,7 @@ export default function App() {
       grape:        info.grape        || prev.grape,
       notes:        info.notes        || prev.notes,
       price:        info.price != null ? String(info.price) : prev.price,
+      alcohol:      info.alcohol != null ? String(info.alcohol) : prev.alcohol,
       photos:       [...photos, ...(prev.photos||[]).slice(photos.length)],
     }));
     showToast(photo2 ? "✨ Etichette riconosciute!" : (cropped1 ? "✨ Etichetta riconosciuta e ritagliata!" : "✨ Etichetta riconosciuta!"));
@@ -1003,6 +1004,7 @@ export default function App() {
         region: fromWine.region || "",
         grape: fromWine.grape || "",
         denomination: fromWine.denomination || "",
+        alcohol: fromWine.alcohol || "",
         // Copia enrichment dal vino sorgente: peakFrom/peakTo sono relativi alla
         // vendemmia e quindi validi per qualsiasi annata dello stesso vino.
         // Questo evita che l'AI dia valori diversi per la stessa etichetta e
@@ -2352,6 +2354,10 @@ export default function App() {
                   <label style={labelStyle}>Prezzo (€)</label>
                   <input style={inputStyle} type="number" min="0" value={editing.price} onChange={e=>setEditing(v=>({...v,price:e.target.value}))} placeholder="es. 45"/>
                 </div>
+                <div>
+                  <label style={labelStyle}>Gradazione (%vol)</label>
+                  <input style={inputStyle} type="number" min="0" max="100" step="0.1" value={editing.alcohol||""} onChange={e=>setEditing(v=>({...v,alcohol:e.target.value}))} placeholder="es. 14.5"/>
+                </div>
 
                 {/* Shelf picker — multi-rack */}
                 <div style={{gridColumn:"1/-1",background:C.bg,borderRadius:9,padding:"16px 18px",border:`1px solid ${C.border}`}}>
@@ -2514,6 +2520,7 @@ export default function App() {
                     ["🍇", editing.grape||null],
                     ["🍾", `${editing.quantity} bt`],
                     ...(editing.price?[["💰", `€${editing.price}`]]:[]),
+                    ...(editing.alcohol?[["🔥", `${editing.alcohol}%`]]:[]),
                   ].filter(([,v])=>v).map(([icon,val])=>(
                     <span key={icon+val} style={{
                       display:"inline-flex", alignItems:"center", gap:5,
