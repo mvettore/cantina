@@ -493,7 +493,8 @@ export default function App() {
   const [pairingOpen, setPairingOpen] = useState(false);
   const [pairingDish, setPairingDish] = useState("");
   const [pairingLoading, setPairingLoading] = useState(false);
-  const [pairingResult, setPairingResult] = useState(null); // {picks:[{wineId, reason}], error?}
+  const [pairingResult, setPairingResult] = useState(null);
+  const [pairingHouse, setPairingHouse] = useState(null); // filtro casa per pairing // {picks:[{wineId, reason}], error?}
   const [cellarSummary, setCellarSummary] = useState(() => loadLocal('cellar-summary', null));
   const [summarizing, setSummarizing] = useState(false);
   const [summarizeError, setSummarizeError] = useState(null);
@@ -1224,19 +1225,23 @@ export default function App() {
     }
   };
 
-  // Food pairing inverso: chiede a Claude i 2-3 vini della cantina più adatti al piatto
+  // Food pairing inverso: chiede all'AI i vini della cantina + suggerimenti ideali
   const handlePairWine = async () => {
     const dish = pairingDish.trim();
     if (!dish) return;
     setPairingLoading(true);
     setPairingResult(null);
     try {
+      // Filtra per casa se selezionata
+      const available = activeWines
+        .filter(w => (w.quantity||0) > 0)
+        .filter(w => !pairingHouse || getWineHouse(w) === pairingHouse);
       const resp = await fetch("/.netlify/functions/pair-wine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           dish,
-          wines: activeWines.filter(w => (w.quantity||0) > 0).map(w => ({
+          wines: available.map(w => ({
             id: w.id, name: w.name, producer: w.producer, year: w.year,
             type: w.type, region: w.region, grape: w.grape,
             foodPairing: w.enrichment?.foodPairing || "",
@@ -3798,9 +3803,27 @@ export default function App() {
                 <button onClick={() => setPairingOpen(false)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 22, lineHeight: 1 }}>✕</button>
               </div>
 
+              {/* Filtro casa — dove sei adesso? */}
+              {houseList.length >= 2 && (
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 10 }}>
+                  <button onClick={() => setPairingHouse(null)} className="tab-btn" style={{
+                    color: !pairingHouse ? C.gold : C.textFaint,
+                    background: !pairingHouse ? "rgba(212,168,90,0.16)" : "none",
+                    border: !pairingHouse ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                  }}>TUTTE LE CASE</button>
+                  {houseList.map(h => (
+                    <button key={h} onClick={() => setPairingHouse(h)} className="tab-btn" style={{
+                      color: pairingHouse === h ? C.gold : C.textFaint,
+                      background: pairingHouse === h ? "rgba(212,168,90,0.16)" : "none",
+                      border: pairingHouse === h ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                    }}>🏠 {h.toUpperCase()}</button>
+                  ))}
+                </div>
+              )}
+
               <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
                 <input style={{ ...inputStyle, fontSize: 16, fontFamily: "'Cinzel', serif", letterSpacing: 0.5 }}
-                  placeholder="es. brasato al Barolo, pesce al forno, carbonara…"
+                  placeholder="es. brasato al Barolo, pesce al forno…"
                   value={pairingDish}
                   onChange={e => setPairingDish(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && !pairingLoading) handlePairWine(); }} />
@@ -3878,9 +3901,37 @@ export default function App() {
                 </div>
               )}
 
+              {/* Suggerimenti ideali (vini che NON hai in cantina) */}
+              {!pairingLoading && pairingResult && !pairingResult.error && Array.isArray(pairingResult.ideal) && pairingResult.ideal.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <div style={{ fontFamily: "'Cinzel', serif", fontSize: 11, color: C.textFaint, letterSpacing: 2, marginBottom: 10 }}>
+                    🛒 ABBINAMENTO IDEALE (DA COMPRARE)
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {pairingResult.ideal.map((ideal, idx) => (
+                      <div key={idx} style={{
+                        background: C.bg, border: `1px dashed rgba(122,186,138,0.4)`, borderRadius: 10,
+                        padding: "12px 14px",
+                      }}>
+                        <div style={{ fontFamily: "'Cinzel', serif", fontSize: 15, color: C.text, fontWeight: 700 }}>
+                          {ideal.name}
+                        </div>
+                        <div style={{ fontFamily: "'Cinzel', serif", fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                          {[ideal.grape, ideal.region, ideal.type].filter(Boolean).join(" · ")}
+                          {ideal.priceRange && <span style={{ color: C.gold, marginLeft: 8 }}>{ideal.priceRange}</span>}
+                        </div>
+                        <div style={{ fontFamily: "'EB Garamond', serif", fontSize: 13, color: C.textMuted, marginTop: 6, lineHeight: 1.4, fontStyle: "italic" }}>
+                          {ideal.reason}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {!pairingLoading && !pairingResult && (
                 <p style={{ fontSize: 12, color: C.textFaint, fontStyle: "italic", marginTop: 16 }}>
-                  Scrivi un piatto e lascia che Claude scelga dai tuoi vini quelli più adatti.
+                  Scrivi un piatto e il sommelier AI cercherà tra i tuoi vini{pairingHouse ? ` a ${pairingHouse}` : ""} e suggerirà anche abbinamenti ideali da comprare.
                 </p>
               )}
             </div>

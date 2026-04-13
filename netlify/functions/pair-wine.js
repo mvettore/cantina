@@ -1,17 +1,20 @@
 /**
  * Netlify Function: pair-wine
- * Riceve un pasto/piatto + il catalogo vini dell'utente e restituisce
- * fino a 3 suggerimenti motivati scelti tra le bottiglie disponibili.
+ * Riceve un pasto/piatto + il catalogo vini dell'utente e restituisce:
+ * - "picks": fino a 3 vini dalla cantina dell'utente
+ * - "ideal": 1-2 abbinamenti ideali con vini che l'utente NON ha
+ * Provider AI: Gemini (default, free tier) con fallback su Anthropic.
  */
+
+const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
 
 const handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: "API key non configurata" }) };
+  if (activeProvider() === "none") {
+    return { statusCode: 500, body: JSON.stringify({ error: "Nessuna API key configurata" }) };
   }
 
   let body;
@@ -24,7 +27,6 @@ const handler = async (event) => {
   const dish = (body.dish || "").trim();
   const wines = Array.isArray(body.wines) ? body.wines : [];
   if (!dish) return { statusCode: 400, body: JSON.stringify({ error: "Piatto mancante" }) };
-  if (wines.length === 0) return { statusCode: 400, body: JSON.stringify({ error: "Nessun vino in catalogo" }) };
 
   // Riassume il catalogo in forma compatta per il prompt
   const catalog = wines.slice(0, 120).map(w => ({
@@ -38,54 +40,44 @@ const handler = async (event) => {
     pairing: w.foodPairing || "",
   }));
 
+  const hasCellar = catalog.length > 0;
+
   const prompt = `Sei un sommelier esperto. L'utente vuole abbinare un vino al seguente piatto/pasto:
 
 PIATTO: ${dish}
 
-Questi sono i vini disponibili NELLA SUA CANTINA (scegli SOLO tra questi, usando gli id esatti):
+${hasCellar ? `Questi sono i vini disponibili NELLA SUA CANTINA (scegli SOLO tra questi per i "picks", usando gli id esatti):
 ${JSON.stringify(catalog, null, 2)}
 
-Seleziona al massimo 3 vini dalla lista sopra che abbinano meglio a questo piatto. Motiva ogni scelta in 1-2 frasi, basandoti sul tipo di vino, sul vitigno, sulla regione e sugli abbinamenti tipici. Se nessuno dei vini è davvero adatto, restituisci comunque le 2-3 scelte meno cattive con una nota esplicativa.
+Seleziona al massimo 3 vini dalla lista sopra che abbinano meglio a questo piatto. Motiva ogni scelta in 1-2 frasi.` : "L'utente non ha vini disponibili nella posizione attuale."}
+
+INOLTRE, suggerisci 1-2 vini IDEALI per questo piatto che l'utente potrebbe NON avere in cantina. Questi sono suggerimenti di acquisto: indica nome specifico del vino o almeno tipologia/denominazione/vitigno ideale con un range di prezzo indicativo.
 
 Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON):
 {
   "picks": [
-    { "wineId": <id numerico come nel catalogo>, "reason": "motivazione 1-2 frasi" }
+    { "wineId": <id numerico dal catalogo>, "reason": "motivazione 1-2 frasi" }
+  ],
+  "ideal": [
+    { "name": "nome vino o denominazione ideale", "type": "Rosso|Bianco|etc", "grape": "vitigno", "region": "regione", "priceRange": "€X–€Y", "reason": "perché è l'abbinamento perfetto" }
   ],
   "note": "eventuale nota generale breve, opzionale"
-}`;
+}
+${!hasCellar ? 'Il campo "picks" deve essere un array vuoto [] se non ci sono vini in cantina.' : ""}`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 24000);
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
+    const raw = await callAI({
+      prompt,
+      maxTokens: 1200,
+      temperature: 0.6,
+      jsonMode: true,
       signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: prompt }],
-      }),
     });
-
     clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const err = await response.text();
-      return { statusCode: response.status, body: JSON.stringify({ error: err }) };
-    }
-
-    const data = await response.json();
-    const raw = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
-    const clean = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
-    const parsed = JSON.parse(clean);
-
+    const parsed = parseJSONResponse(raw);
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -96,7 +88,7 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON)
     if (err.name === "AbortError") {
       return { statusCode: 504, body: JSON.stringify({ error: "Timeout" }) };
     }
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+    return { statusCode: err.status || 500, body: JSON.stringify({ error: err.message }) };
   }
 };
 
