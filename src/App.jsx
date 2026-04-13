@@ -2335,102 +2335,108 @@ export default function App() {
             <Section title="PER VITIGNO"   rows={mkRows(byGrape)}  color="#7a9aba"   filterType="grape"/>
             <Section title="PER REGIONE"   rows={mkRows(byRegion)} color="#8aba7a"   filterType="region"/>
 
-            {/* ── Timeline finestre di beva ── */}
+            {/* ── Timeline finestre di beva (formato lista, mobile-friendly) ── */}
             {(() => {
               const currentYear = new Date().getFullYear();
               const winesWithPeak = activeWines.filter(w =>
                 w.year && w.enrichment?.peakFrom != null && w.enrichment?.peakTo != null && (w.quantity||0) > 0
-              ).sort((a,b) => (a.year + a.enrichment.peakFrom) - (b.year + b.enrichment.peakFrom));
+              ).sort((a,b) => {
+                // Ordina per urgenza: prima quelli in declino/maturo, poi per anno apice
+                const urgA = getAgingStatus(a);
+                const urgB = getAgingStatus(b);
+                const rankA = urgA?.s === "Declino" ? 0 : urgA?.s === "Maturo" ? 1 : urgA?.s === "Apice" ? 2 : 3;
+                const rankB = urgB?.s === "Declino" ? 0 : urgB?.s === "Maturo" ? 1 : urgB?.s === "Apice" ? 2 : 3;
+                if (rankA !== rankB) return rankA - rankB;
+                return (a.year + a.enrichment.peakFrom) - (b.year + b.enrichment.peakFrom);
+              });
               if (winesWithPeak.length === 0) return null;
-              const minYear = Math.min(currentYear - 1, ...winesWithPeak.map(w => w.year + w.enrichment.peakFrom));
-              const maxYear = Math.max(currentYear + 1, ...winesWithPeak.map(w => {
-                const pt = w.enrichment.peakTo;
-                const pf = w.enrichment.peakFrom;
-                return w.year + pt + Math.ceil((pt - pf) / 2);
-              }));
-              const span = maxYear - minYear;
-              const pct = (yr) => ((yr - minYear) / span * 100).toFixed(1);
               return (
                 <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
                   <div style={{ padding:"14px 20px", borderBottom:`1px solid ${C.border}`, fontFamily:"'Cinzel', serif", fontSize:15, color:C.gold, letterSpacing:2 }}>
                     📅 FINESTRE DI BEVA
                   </div>
-                  <div style={{ padding:"16px 20px 20px" }}>
-                    {/* Asse anni */}
-                    <div style={{ position:"relative", height:20, marginBottom:6 }}>
-                      {Array.from({ length: Math.min(span + 1, 20) }, (_, i) => {
-                        const yr = minYear + Math.round(i * span / Math.min(span, 19));
-                        return (
-                          <span key={yr} style={{
-                            position:"absolute", left:`${pct(yr)}%`, transform:"translateX(-50%)",
-                            fontSize:10, color: yr === currentYear ? C.gold : C.textFaint,
-                            fontFamily:"'Cinzel',serif", fontWeight: yr === currentYear ? 700 : 400,
-                          }}>{yr}</span>
-                        );
-                      })}
+                  <div style={{ padding:"12px 16px 16px" }}>
+                    {/* Legenda */}
+                    <div style={{ display:"flex", gap:12, marginBottom:14, flexWrap:"wrap" }}>
+                      {[
+                        { label: "Apice", c: "#c9953a", emoji: "⭐" },
+                        { label: "Maturo", c: "#b07030", emoji: "🍂" },
+                        { label: "Declino", c: "#9a5050", emoji: "📉" },
+                        { label: "Giovane", c: "#6aaa6a", emoji: "🌱" },
+                      ].map(l => (
+                        <span key={l.label} style={{ fontSize:10, color:l.c, fontFamily:"'Cinzel',serif", letterSpacing:1 }}>
+                          {l.emoji} {l.label.toUpperCase()}
+                        </span>
+                      ))}
+                      <span style={{ fontSize:10, color:C.textFaint, fontFamily:"'Cinzel',serif", marginLeft:"auto" }}>
+                        OGGI: {currentYear}
+                      </span>
                     </div>
-                    {/* Linea "oggi" */}
-                    <div style={{ position:"relative" }}>
-                      <div style={{
-                        position:"absolute", left:`${pct(currentYear)}%`, top:0, bottom:0,
-                        width:1, background:C.gold, opacity:0.5, zIndex:1,
-                      }}/>
-                      {/* Barre per ogni vino */}
-                      <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                        {winesWithPeak.slice(0, 30).map(w => {
-                          const ag = getAgingStatus(w);
-                          const tc = typeColors[w.type] || { bar:"#888" };
-                          const peakStart = w.year + w.enrichment.peakFrom;
-                          const peakEnd = w.year + w.enrichment.peakTo;
-                          const matEnd = peakEnd + Math.ceil((w.enrichment.peakTo - w.enrichment.peakFrom) / 2);
-                          return (
-                            <div key={w.id} style={{ position:"relative", height:22, display:"flex", alignItems:"center" }}
-                              onClick={() => { setEditing({...w}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view"); }}
-                              title={`${w.name} ${w.year} · apice ${peakStart}–${peakEnd}`}>
-                              {/* Label nome (troncato) */}
-                              <span style={{
-                                position:"absolute", left:0, fontSize:9, color:C.textFaint,
-                                fontFamily:"'Cinzel',serif", overflow:"hidden", textOverflow:"ellipsis",
-                                whiteSpace:"nowrap", width:`${pct(peakStart)}%`, textAlign:"right",
-                                paddingRight:4, zIndex:2, cursor:"pointer",
-                              }}>{w.name} {w.year}</span>
-                              {/* Barra apice */}
+
+                    {/* Lista vini con barra lifecycle */}
+                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      {winesWithPeak.slice(0, 30).map(w => {
+                        const ag = getAgingStatus(w);
+                        const tc = typeColors[w.type] || { bar:"#888" };
+                        const peakStart = w.year + w.enrichment.peakFrom;
+                        const peakEnd = w.year + w.enrichment.peakTo;
+                        const matEnd = peakEnd + Math.ceil((w.enrichment.peakTo - w.enrichment.peakFrom) / 2);
+                        const age = currentYear - w.year;
+                        // Barra: proporzione della lifecycle che si è svolta
+                        const totalSpan = matEnd - w.year;
+                        const peakStartPct = totalSpan > 0 ? ((peakStart - w.year) / totalSpan * 100) : 0;
+                        const peakEndPct = totalSpan > 0 ? ((peakEnd - w.year) / totalSpan * 100) : 50;
+                        const matEndPct = 100;
+                        const nowPct = totalSpan > 0 ? Math.min(105, Math.max(0, (age / totalSpan * 100))) : 50;
+                        const emoji = ag?.s === "Giovane" ? "🌱" : ag?.s === "Apice" ? "⭐" : ag?.s === "Maturo" ? "🍂" : "📉";
+                        return (
+                          <div key={w.id}
+                            onClick={() => { setEditing({...w}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view"); }}
+                            style={{
+                              background: C.bg, border: `1px solid ${ag?.c || C.border}30`, borderRadius: 8,
+                              padding: "8px 12px", cursor: "pointer", transition: "all 0.15s",
+                            }}>
+                            {/* Riga 1: nome + stato + finestra */}
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, marginBottom:6 }}>
+                              <div style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                                fontFamily:"'Cinzel',serif", fontSize:13, color:C.text, fontWeight:600 }}>
+                                {w.name} <span style={{ fontWeight:400, color:C.textMuted }}>{w.year}</span>
+                              </div>
+                              <span style={{ flexShrink:0, fontSize:11, color:ag?.c, fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+                                {emoji} {peakStart}–{peakEnd}
+                              </span>
+                            </div>
+                            {/* Riga 2: barra lifecycle */}
+                            <div style={{ position:"relative", height:10, borderRadius:5, background:`${C.border}44`, overflow:"visible" }}>
+                              {/* Fase giovane */}
                               <div style={{
-                                position:"absolute",
-                                left:`${pct(peakStart)}%`,
-                                width:`${Math.max(1, pct(peakEnd) - pct(peakStart))}%`,
-                                height:10, borderRadius:3,
-                                background: tc.bar,
-                                opacity: ag?.s === "Apice" ? 1 : 0.6,
-                                cursor:"pointer",
+                                position:"absolute", left:0, width:`${peakStartPct}%`,
+                                height:"100%", borderRadius:"5px 0 0 5px",
+                                background:"#6aaa6a33",
                               }}/>
-                              {/* Barra maturo (più tenue) */}
+                              {/* Fase apice */}
                               <div style={{
-                                position:"absolute",
-                                left:`${pct(peakEnd)}%`,
-                                width:`${Math.max(0.5, pct(matEnd) - pct(peakEnd))}%`,
-                                height:6, borderRadius:3,
-                                background: "#b07030",
-                                opacity: 0.35,
+                                position:"absolute", left:`${peakStartPct}%`, width:`${peakEndPct - peakStartPct}%`,
+                                height:"100%",
+                                background: tc.bar, opacity:0.7, borderRadius: peakStartPct === 0 ? "5px 0 0 5px" : 0,
+                              }}/>
+                              {/* Fase maturo */}
+                              <div style={{
+                                position:"absolute", left:`${peakEndPct}%`, width:`${matEndPct - peakEndPct}%`,
+                                height:"100%", borderRadius:"0 5px 5px 0",
+                                background:"#b0703044",
+                              }}/>
+                              {/* Marker "oggi" */}
+                              <div style={{
+                                position:"absolute", left:`${Math.min(100, nowPct)}%`, top:-2,
+                                width:2, height:14, borderRadius:1,
+                                background:C.gold, transform:"translateX(-1px)",
+                                boxShadow:`0 0 4px ${C.gold}88`,
                               }}/>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div style={{ display:"flex", gap:14, marginTop:12, flexWrap:"wrap" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                        <div style={{ width:16, height:8, borderRadius:2, background:C.gold }}/>
-                        <span style={{ fontSize:11, color:C.textFaint, fontFamily:"'Cinzel',serif" }}>APICE</span>
-                      </div>
-                      <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                        <div style={{ width:16, height:5, borderRadius:2, background:"#b07030", opacity:0.35 }}/>
-                        <span style={{ fontSize:11, color:C.textFaint, fontFamily:"'Cinzel',serif" }}>MATURO</span>
-                      </div>
-                      <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                        <div style={{ width:1, height:14, background:C.gold, opacity:0.5 }}/>
-                        <span style={{ fontSize:11, color:C.textFaint, fontFamily:"'Cinzel',serif" }}>OGGI</span>
-                      </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
