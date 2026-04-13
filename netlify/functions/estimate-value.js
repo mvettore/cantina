@@ -32,12 +32,14 @@ Tipologia: ${wine.type || "—"}
 Regione: ${wine.region || "—"}
 Vitigno: ${wine.grape || "—"}
 Gradazione: ${wine.alcohol ? wine.alcohol + "%" : "—"}
+Formato: ${wine.bottleSize ? wine.bottleSize + "L" : "0.75L"}
 
 Basa la tua stima su:
 - Prezzi tipici in enoteca e online (Wine-Searcher, Tannico, Callmewine, Vivino) per questo specifico vino e annata
 - La reputazione del produttore
 - L'annata (annate eccellenti valgono di più)
 - La rarità e la disponibilità sul mercato
+- Il formato della bottiglia (i magnum 1.5L valgono tipicamente 2-3x il prezzo della bottiglia standard, i jeroboam ancora di più)
 - Se il vino è molto comune (< €15) o un "cult wine" (> €200)
 
 Se non conosci il vino specifico, stima in base a produttore, denominazione e regione simili. Se davvero non hai elementi, indicalo nella nota e dai un range ampio.

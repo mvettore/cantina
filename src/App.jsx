@@ -1092,6 +1092,7 @@ export default function App() {
           name: wine.name, producer: wine.producer, year: wine.year,
           type: wine.type, region: wine.region, grape: wine.grape,
           alcohol: wine.alcohol || null,
+          bottleSize: wine.bottleSize || "0.75",
         }),
       });
       if (!resp.ok) throw new Error(`Errore ${resp.status}`);
