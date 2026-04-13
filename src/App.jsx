@@ -2225,22 +2225,71 @@ export default function App() {
             </div>
 
             {/* KPI */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(120px,1fr))", gap:10 }}>
-              {[
-                ["🍾","Bottiglie",totalBt],
-                ["🏷","Etichette",activeWines.length],
-                ["🗄","Scaffali",racks.length],
-                ["📖","Degustazioni",log.length],
-                ["💰","Valore",`€${activeWines.reduce((s,w)=>s+w.quantity*(parseFloat(w.price)||0),0).toFixed(0)}`],
-              ].map(([icon,label,val])=>(
-                <div key={label} style={{ background:C.surface, border:`1px solid ${C.border}`,
-                  borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
-                  <div style={{ fontSize:20, marginBottom:3 }}>{icon}</div>
-                  <div style={{ fontSize:22, fontWeight:300, color:C.gold, fontFamily:"'Cinzel',serif" }}>{val}</div>
-                  <div style={{ fontSize:11, color:C.textFaint, fontFamily:"'Cinzel',serif", letterSpacing:1, marginTop:2 }}>{label.toUpperCase()}</div>
+            {(() => {
+              const purchaseValue = activeWines.reduce((s,w) => s + (w.quantity||0) * (parseFloat(w.price)||0), 0);
+              // Stima di mercato: somma marketValue per i vini che ce l'hanno,
+              // usa il prezzo d'acquisto × qty per gli altri come fallback
+              const winesWithEstimate = activeWines.filter(w => w.marketValue && !w.marketValue.error);
+              const winesWithoutEstimate = activeWines.filter(w => !w.marketValue || w.marketValue.error);
+              const estimateMin = winesWithEstimate.reduce((s,w) => s + (w.quantity||0) * (w.marketValue.min||0), 0)
+                + winesWithoutEstimate.reduce((s,w) => s + (w.quantity||0) * (parseFloat(w.price)||0), 0);
+              const estimateMax = winesWithEstimate.reduce((s,w) => s + (w.quantity||0) * (w.marketValue.max||0), 0)
+                + winesWithoutEstimate.reduce((s,w) => s + (w.quantity||0) * (parseFloat(w.price)||0), 0);
+              const hasEstimates = winesWithEstimate.length > 0;
+              const allEstimated = winesWithoutEstimate.filter(w => (w.quantity||0) > 0).length === 0;
+              return (
+              <>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(120px,1fr))", gap:10 }}>
+                {[
+                  ["🍾","Bottiglie",totalBt],
+                  ["🏷","Etichette",activeWines.length],
+                  ["🗄","Scaffali",racks.length],
+                  ["📖","Degustazioni",log.length],
+                  ["💰","Acquisto",purchaseValue > 0 ? `€${purchaseValue.toFixed(0)}` : "—"],
+                ].map(([icon,label,val])=>(
+                  <div key={label} style={{ background:C.surface, border:`1px solid ${C.border}`,
+                    borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+                    <div style={{ fontSize:20, marginBottom:3 }}>{icon}</div>
+                    <div style={{ fontSize:22, fontWeight:300, color:C.gold, fontFamily:"'Cinzel',serif" }}>{val}</div>
+                    <div style={{ fontSize:11, color:C.textFaint, fontFamily:"'Cinzel',serif", letterSpacing:1, marginTop:2 }}>{label.toUpperCase()}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Stima valore di mercato della cantina */}
+              <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
+                <div style={{ padding:"14px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ fontFamily:"'Cinzel',serif", fontSize:15, color:C.gold, letterSpacing:2 }}>💰 VALORE DI MERCATO</div>
                 </div>
-              ))}
-            </div>
+                <div style={{ padding:"16px 20px" }}>
+                  <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:36, color:C.gold, fontWeight:300, marginBottom:4 }}>
+                    €{estimateMin.toLocaleString("it-IT")}–{estimateMax.toLocaleString("it-IT")}
+                  </div>
+                  <div style={{ display:"flex", gap:14, flexWrap:"wrap", marginBottom:8 }}>
+                    <span style={{ fontSize:12, color:C.textFaint, fontFamily:"'EB Garamond',serif" }}>
+                      {winesWithEstimate.length} vini con stima AI
+                    </span>
+                    {winesWithoutEstimate.filter(w=>(w.quantity||0)>0).length > 0 && (
+                      <span style={{ fontSize:12, color:C.textFaint, fontFamily:"'EB Garamond',serif" }}>
+                        {winesWithoutEstimate.filter(w=>(w.quantity||0)>0).length} vini al prezzo d'acquisto
+                      </span>
+                    )}
+                  </div>
+                  {!allEstimated && (
+                    <p style={{ fontSize:13, color:C.textMuted, fontStyle:"italic", lineHeight:1.5, margin:"0 0 10px" }}>
+                      Per una stima più precisa, apri ogni vino e usa "💰 Stima valore di mercato". I vini senza stima usano il prezzo d'acquisto come fallback.
+                    </p>
+                  )}
+                  {allEstimated && purchaseValue > 0 && (
+                    <p style={{ fontSize:13, color:C.textMuted, fontStyle:"italic", lineHeight:1.5, margin:0 }}>
+                      Tutti i vini hanno una stima AI. Prezzo d'acquisto totale: €{purchaseValue.toFixed(0)} · {estimateMin > purchaseValue ? `Plusvalenza: +€${(estimateMin - purchaseValue).toFixed(0)}–${(estimateMax - purchaseValue).toFixed(0)}` : `Delta: €${(estimateMin - purchaseValue).toFixed(0)}–${(estimateMax - purchaseValue).toFixed(0)}`}
+                    </p>
+                  )}
+                </div>
+              </div>
+              </>
+              );
+            })()}
 
             <Section title="PER TIPOLOGIA" rows={mkRows(byType)}   color={C.gold}    filterType="type"/>
             <Section title="PER VITIGNO"   rows={mkRows(byGrape)}  color="#7a9aba"   filterType="grape"/>
