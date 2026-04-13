@@ -2335,32 +2335,23 @@ export default function App() {
             <Section title="PER VITIGNO"   rows={mkRows(byGrape)}  color="#7a9aba"   filterType="grape"/>
             <Section title="PER REGIONE"   rows={mkRows(byRegion)} color="#8aba7a"   filterType="region"/>
 
-            {/* ── Timeline finestre di beva (Gantt chart, scroll orizzontale su mobile) ── */}
+            {/* ── Timeline finestre di beva ── */}
             {(() => {
               const currentYear = new Date().getFullYear();
               const winesWithPeak = activeWines.filter(w =>
                 w.year && w.enrichment?.peakFrom != null && w.enrichment?.peakTo != null && (w.quantity||0) > 0
               ).sort((a,b) => (a.year + a.enrichment.peakFrom) - (b.year + b.enrichment.peakFrom));
               if (winesWithPeak.length === 0) return null;
-              // Scala: include anche l'anno del vino (non solo peakFrom) per non tagliare le etichette
-              const minYear = Math.min(currentYear - 2, ...winesWithPeak.map(w => Math.min(w.year, w.year + w.enrichment.peakFrom)));
-              const maxYear = Math.max(currentYear + 3, ...winesWithPeak.map(w => {
-                const pt = w.enrichment.peakTo;
-                const pf = w.enrichment.peakFrom;
-                return w.year + pt + Math.ceil((pt - pf) / 2) + 1;
-              }));
+              // Arco temporale: non prima del 2000, max 10 anni nel futuro
+              const minYear = Math.max(2000, Math.min(currentYear - 5, ...winesWithPeak.map(w => w.year + w.enrichment.peakFrom)) - 1);
+              const maxYear = currentYear + 10;
               const span = maxYear - minYear;
-              const pct = (yr) => ((yr - minYear) / span * 100);
-              // Etichette anni: ogni 2 anni per non comprimere
-              const yearStep = span > 20 ? 4 : span > 10 ? 2 : 1;
+              const pct = (yr) => Math.max(0, Math.min(100, ((yr - minYear) / span * 100))).toFixed(1);
+              // Etichette ogni 5 anni + anno corrente
               const yearLabels = [];
-              for (let yr = Math.ceil(minYear / yearStep) * yearStep; yr <= maxYear; yr += yearStep) {
-                yearLabels.push(yr);
-              }
+              for (let yr = Math.ceil(minYear / 5) * 5; yr <= maxYear; yr += 5) yearLabels.push(yr);
               if (!yearLabels.includes(currentYear)) yearLabels.push(currentYear);
               yearLabels.sort((a,b) => a - b);
-              // Larghezza minima: ~40px per anno per leggibilità
-              const chartMinWidth = Math.max(500, span * 40);
 
               return (
                 <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
@@ -2375,93 +2366,71 @@ export default function App() {
                       </span>
                     </div>
                   </div>
-                  {/* Area scrollabile orizzontalmente con colonna nomi sticky */}
-                  {(() => {
-                    const NAME_W = 120; // larghezza colonna nomi (px)
-                    return (
-                  <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch", padding:"14px 0 16px" }}>
-                    <div style={{ minWidth:chartMinWidth + NAME_W, position:"relative" }}>
-                      {/* Asse anni (offset a destra per lasciare spazio ai nomi) */}
-                      <div style={{ position:"relative", height:22, marginBottom:8, marginLeft:NAME_W, borderBottom:`1px solid ${C.border}33` }}>
-                        {yearLabels.map(yr => (
-                          <span key={yr} style={{
-                            position:"absolute", left:`${pct(yr)}%`, transform:"translateX(-50%)",
-                            fontSize: yr === currentYear ? 12 : 10,
-                            color: yr === currentYear ? C.gold : C.textFaint,
-                            fontFamily:"'Cinzel',serif",
-                            fontWeight: yr === currentYear ? 700 : 400,
-                            whiteSpace:"nowrap",
-                          }}>{yr}</span>
-                        ))}
-                      </div>
-                      {/* Righe: nome sticky + barre */}
-                      <div style={{ position:"relative" }}>
-                        {/* Linea "oggi" */}
-                        <div style={{
-                          position:"absolute", left:`calc(${NAME_W}px + ${pct(currentYear)}%)`, top:0, bottom:0,
-                          width:2, background:C.gold, opacity:0.4, zIndex:1, borderRadius:1,
-                        }}/>
-                        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                          {winesWithPeak.slice(0, 40).map(w => {
-                            const ag = getAgingStatus(w);
-                            const tc = typeColors[w.type] || { bar:"#888" };
-                            const peakStart = w.year + w.enrichment.peakFrom;
-                            const peakEnd = w.year + w.enrichment.peakTo;
-                            const matEnd = peakEnd + Math.ceil((w.enrichment.peakTo - w.enrichment.peakFrom) / 2);
-                            return (
-                              <div key={w.id} style={{ display:"flex", alignItems:"center", height:28 }}
-                                onClick={() => { setEditing({...w}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view"); }}
-                                title={`${w.name} ${w.year} · apice ${peakStart}–${peakEnd}`}>
-                                {/* Nome — sticky a sinistra */}
-                                <div style={{
-                                  position:"sticky", left:0, zIndex:3,
-                                  width:NAME_W, minWidth:NAME_W, flexShrink:0,
-                                  background: C.surface,
-                                  paddingRight:8,
-                                  display:"flex", alignItems:"center",
-                                  borderRight:`1px solid ${C.border}22`,
-                                  boxShadow:`4px 0 8px ${C.bg}cc`,
-                                }}>
-                                  <div style={{
-                                    fontSize:11, color:C.text, fontFamily:"'Cinzel',serif", fontWeight:600,
-                                    whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-                                    cursor:"pointer", width:"100%",
-                                  }}>{w.name} <span style={{fontWeight:300,color:C.textMuted,fontSize:10}}>{w.year}</span></div>
-                                </div>
-                                {/* Area barre */}
-                                <div style={{ flex:1, position:"relative", height:"100%" }}>
-                                  {/* Barra apice */}
-                                  <div style={{
-                                    position:"absolute",
-                                    left:`${pct(peakStart)}%`,
-                                    width:`${Math.max(0.8, pct(peakEnd) - pct(peakStart))}%`,
-                                    height:12, borderRadius:3,
-                                    top:"50%", transform:"translateY(-50%)",
-                                    background: tc.bar,
-                                    opacity: ag?.s === "Apice" ? 1 : ag?.s === "Giovane" ? 0.5 : 0.65,
-                                    cursor:"pointer",
-                                    boxShadow: ag?.s === "Apice" ? `0 0 6px ${tc.bar}66` : "none",
-                                  }}/>
-                                  {/* Barra maturo */}
-                                  <div style={{
-                                    position:"absolute",
-                                    left:`${pct(peakEnd)}%`,
-                                    width:`${Math.max(0.4, pct(matEnd) - pct(peakEnd))}%`,
-                                    height:6, borderRadius:3,
-                                    top:"50%", transform:"translateY(-50%)",
-                                    background: "#b07030",
-                                    opacity: 0.35,
-                                  }}/>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                  <div style={{ padding:"16px 20px 20px" }}>
+                    {/* Asse anni */}
+                    <div style={{ position:"relative", height:20, marginBottom:8 }}>
+                      {yearLabels.map(yr => (
+                        <span key={yr} style={{
+                          position:"absolute", left:`${pct(yr)}%`, transform:"translateX(-50%)",
+                          fontSize: yr === currentYear ? 12 : 10,
+                          color: yr === currentYear ? C.gold : C.textFaint,
+                          fontFamily:"'Cinzel',serif",
+                          fontWeight: yr === currentYear ? 700 : 400,
+                          whiteSpace:"nowrap",
+                        }}>{yr}</span>
+                      ))}
+                    </div>
+                    {/* Linea "oggi" + barre */}
+                    <div style={{ position:"relative" }}>
+                      <div style={{
+                        position:"absolute", left:`${pct(currentYear)}%`, top:0, bottom:0,
+                        width:2, background:C.gold, opacity:0.4, zIndex:1, borderRadius:1,
+                      }}/>
+                      <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                        {winesWithPeak.slice(0, 40).map(w => {
+                          const ag = getAgingStatus(w);
+                          const tc = typeColors[w.type] || { bar:"#888" };
+                          const peakStart = w.year + w.enrichment.peakFrom;
+                          const peakEnd = w.year + w.enrichment.peakTo;
+                          const matEnd = peakEnd + Math.ceil((w.enrichment.peakTo - w.enrichment.peakFrom) / 2);
+                          return (
+                            <div key={w.id} style={{ position:"relative", height:24, display:"flex", alignItems:"center" }}
+                              onClick={() => { setEditing({...w}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view"); }}
+                              title={`${w.name} ${w.year} · apice ${peakStart}–${peakEnd}`}>
+                              {/* Nome a sinistra della barra */}
+                              <div style={{
+                                position:"absolute", right:`${100 - pct(peakStart) + 0.5}%`,
+                                fontSize:10, color:C.text, fontFamily:"'Cinzel',serif", fontWeight:600,
+                                whiteSpace:"nowrap", cursor:"pointer", textAlign:"right",
+                                overflow:"hidden", textOverflow:"ellipsis",
+                                maxWidth:`${Math.max(5, pct(peakStart) - 1)}%`,
+                              }}>{w.name} <span style={{fontWeight:300,color:C.textMuted}}>{w.year}</span></div>
+                              {/* Barra apice */}
+                              <div style={{
+                                position:"absolute",
+                                left:`${pct(peakStart)}%`,
+                                width:`${Math.max(0.8, pct(peakEnd) - pct(peakStart))}%`,
+                                height:11, borderRadius:3,
+                                background: tc.bar,
+                                opacity: ag?.s === "Apice" ? 1 : ag?.s === "Giovane" ? 0.5 : 0.65,
+                                cursor:"pointer",
+                                boxShadow: ag?.s === "Apice" ? `0 0 6px ${tc.bar}66` : "none",
+                              }}/>
+                              {/* Barra maturo */}
+                              <div style={{
+                                position:"absolute",
+                                left:`${pct(peakEnd)}%`,
+                                width:`${Math.max(0.4, pct(matEnd) - pct(peakEnd))}%`,
+                                height:6, borderRadius:3,
+                                background: "#b07030",
+                                opacity: 0.35,
+                              }}/>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
-                    );
-                  })()}
                 </div>
               );
             })()}
