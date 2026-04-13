@@ -510,6 +510,8 @@ export default function App() {
   const [logFavOnly, setLogFavOnly] = useState(false);
   const [viewingEntry, setViewingEntry] = useState(null); // wine to drink from
   const [enriching, setEnriching] = useState(false);
+  const [estimatingValue, setEstimatingValue] = useState(false);
+  const [estimatedValue, setEstimatedValue] = useState(null); // {min, max, confidence, notes, source}
   const [enrichData, setEnrichData] = useState(null);
   const [enrichError, setEnrichError] = useState(null);
   const scanInputRef    = useRef(null);
@@ -1075,6 +1077,30 @@ export default function App() {
     // Apri il form per registrare la bevuta nello storico
     setLogEntry(makeLogEntryForWine(wine));
     setLogModal("add");
+  };
+
+  // Stima valore di mercato della bottiglia
+  const handleEstimateValue = async (wine) => {
+    setEstimatingValue(true);
+    setEstimatedValue(null);
+    try {
+      const resp = await fetch("/.netlify/functions/estimate-value", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: wine.name, producer: wine.producer, year: wine.year,
+          type: wine.type, region: wine.region, grape: wine.grape,
+          alcohol: wine.alcohol || null,
+        }),
+      });
+      if (!resp.ok) throw new Error(`Errore ${resp.status}`);
+      const data = await resp.json();
+      setEstimatedValue(data);
+    } catch (err) {
+      setEstimatedValue({ error: err.message || "Errore nella stima" });
+    } finally {
+      setEstimatingValue(false);
+    }
   };
 
   // Approfondisci: chiama Claude, salva automaticamente il risultato nella bottiglia
@@ -1806,7 +1832,7 @@ export default function App() {
                     const tc = typeColors[wine.type] || { bar: "#888" };
                     return (
                       <div key={wine.id}
-                        onClick={() => { setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view"); }}
+                        onClick={() => { setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view"); }}
                         style={{
                           background: C.bg, border: `1px solid ${aging?.c || C.border}`, borderRadius: 8,
                           padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10,
@@ -1870,7 +1896,7 @@ export default function App() {
                   }}
                     onClick={() => {
                       if (isGroup) { setVerticaleOpen(group); return; }
-                      setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view");
+                      setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view");
                     }}>
                     <div style={{ height: 3, background: `linear-gradient(90deg, ${tc.bar} 0%, ${tc.bar}dd 100%)` }} />
 
@@ -2522,6 +2548,7 @@ export default function App() {
                             setEditing({...w});
                             setEnrichData(null);
                             setEnrichError(null);
+                            setEstimatedValue(null);
                           }
                         }} style={{
                           background: isCurrent ? "rgba(212,168,90,0.2)" : C.bg,
@@ -2579,6 +2606,67 @@ export default function App() {
                       </span>
                     );
                   })}
+                </div>
+
+                {/* Stima valore di mercato */}
+                <div style={{marginBottom:14}}>
+                  {!estimatedValue && !estimatingValue && (
+                    <button onClick={()=>handleEstimateValue(editing)} style={{
+                      background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 9,
+                      padding: "10px 16px", cursor: "pointer", width: "100%",
+                      color: C.textMuted, fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1.5,
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      transition: "all 0.15s",
+                    }}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}}>
+                      💰 STIMA VALORE DI MERCATO
+                    </button>
+                  )}
+                  {estimatingValue && (
+                    <div style={{background:C.bg, border:`1px solid ${C.border}`, borderRadius:9, padding:"16px", textAlign:"center"}}>
+                      <div className="spinner" style={{margin:"0 auto 10px",width:22,height:22}}/>
+                      <p style={{fontSize:12,color:C.textFaint,fontFamily:"'Cinzel',serif",letterSpacing:1}}>STIMA IN CORSO…</p>
+                    </div>
+                  )}
+                  {estimatedValue && !estimatedValue.error && (
+                    <div style={{background:C.bg, border:`1px solid rgba(212,168,90,0.4)`, borderRadius:10, padding:"14px 16px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                        <span style={{fontFamily:"'Cinzel',serif",fontSize:11,color:C.gold,letterSpacing:2,fontWeight:700}}>💰 VALORE INDICATIVO</span>
+                        <span style={{
+                          fontSize:10, fontFamily:"'Cinzel',serif", letterSpacing:1,
+                          color: estimatedValue.confidence==="alta"?"#6aaa6a":estimatedValue.confidence==="media"?C.gold:"#c07070",
+                          background: estimatedValue.confidence==="alta"?"rgba(106,170,106,0.15)":estimatedValue.confidence==="media"?"rgba(212,168,90,0.15)":"rgba(192,112,112,0.15)",
+                          border: `1px solid ${estimatedValue.confidence==="alta"?"rgba(106,170,106,0.4)":estimatedValue.confidence==="media"?"rgba(212,168,90,0.4)":"rgba(192,112,112,0.4)"}`,
+                          borderRadius:10, padding:"2px 8px",
+                        }}>
+                          {estimatedValue.confidence==="alta"?"AFFIDABILE":estimatedValue.confidence==="media"?"INDICATIVO":"APPROSSIMATIVO"}
+                        </span>
+                      </div>
+                      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:32,color:C.gold,fontWeight:300,marginBottom:6}}>
+                        €{estimatedValue.min}–{estimatedValue.max}
+                      </div>
+                      {estimatedValue.source && (
+                        <p style={{fontSize:12,color:C.textFaint,fontStyle:"italic",margin:"0 0 6px",lineHeight:1.4}}>{estimatedValue.source}</p>
+                      )}
+                      {estimatedValue.notes && (
+                        <p style={{fontSize:14,color:C.textMuted,fontFamily:"'EB Garamond',serif",lineHeight:1.55,margin:0}}>{estimatedValue.notes}</p>
+                      )}
+                      <button onClick={()=>handleEstimateValue(editing)} style={{
+                        background:"none",border:"none",color:C.textFaint,cursor:"pointer",
+                        fontSize:11,fontFamily:"'Cinzel',serif",letterSpacing:1,marginTop:8,padding:0,
+                      }}>🔄 RISTIMA</button>
+                    </div>
+                  )}
+                  {estimatedValue && estimatedValue.error && (
+                    <div style={{background:"rgba(154,80,80,0.1)", border:"1px solid rgba(154,80,80,0.3)", borderRadius:9, padding:"12px 14px", color:"#d08080", fontSize:13}}>
+                      ⚠ {estimatedValue.error}
+                      <button onClick={()=>handleEstimateValue(editing)} style={{
+                        background:"none",border:"none",color:C.gold,cursor:"pointer",
+                        fontSize:12,fontFamily:"'Cinzel',serif",letterSpacing:1,marginLeft:10,
+                      }}>RIPROVA</button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Data aggiunta */}
@@ -3086,7 +3174,7 @@ export default function App() {
                     const tc = typeColors[wine.type] || { bar: "#888" };
                     return (
                       <div key={wine.id}
-                        onClick={() => { setTonightOpen(false); setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view"); }}
+                        onClick={() => { setTonightOpen(false); setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view"); }}
                         style={{
                           background: C.surface2, border: `1px solid ${aging?.c || C.border}`, borderRadius: 10,
                           padding: "12px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
@@ -3236,7 +3324,7 @@ export default function App() {
                                 setVerticaleOpen({ key: verticaleKey(wine), wines: group });
                               } else {
                                 setSearchModalOpen(false);
-                                setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view");
+                                setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view");
                               }
                             }}
                             style={{
@@ -3514,7 +3602,7 @@ export default function App() {
                       const tc = typeColors[wine.type] || { bar: "#888" };
                       return (
                         <div key={wine.id}
-                          onClick={() => { setPairingOpen(false); setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view"); }}
+                          onClick={() => { setPairingOpen(false); setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view"); }}
                           style={{
                             background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10,
                             padding: "12px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
@@ -3586,7 +3674,7 @@ export default function App() {
                     <div key={w.id}
                       onClick={() => {
                         setVerticaleOpen(null);
-                        setEditing({...w}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setModal("view");
+                        setEditing({...w}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view");
                       }}
                       style={{
                         background: C.surface2, border: `1px solid ${ag?.c || C.border}`, borderRadius: 8,
