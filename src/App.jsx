@@ -115,8 +115,9 @@ function loadWinesLocal(fallback) {
 
 // Upload di una foto su Supabase Storage tramite function proxy.
 // Accetta sia un data URL base64 completo che base64 puro.
-// Ritorna l'URL pubblico da salvare in wine.photos[].
-async function uploadPhotoToStorage(wineId, index, base64DataUrl) {
+// `folder` opzionale sovrascrive wineId come prefisso del path su Storage
+// (es. "tasting/123456" per foto degustazione).
+async function uploadPhotoToStorage(wineId, index, base64DataUrl, folder) {
   const parts = base64DataUrl.split(",");
   const base64 = parts.length > 1 ? parts[1] : base64DataUrl;
   let mediaType = "image/jpeg";
@@ -124,10 +125,12 @@ async function uploadPhotoToStorage(wineId, index, base64DataUrl) {
     const m = parts[0].match(/^data:([^;]+);/);
     if (m) mediaType = m[1];
   }
+  const payload = { index, base64, mediaType };
+  if (folder) payload.folder = folder; else payload.wineId = wineId;
   const resp = await fetch("/.netlify/functions/upload-photo", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ wineId, index, base64, mediaType }),
+    body: JSON.stringify(payload),
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
@@ -557,7 +560,7 @@ export default function App() {
           setSyncing(false);
           // Migra comunque eventuali foto base64 legacy in background
           if (loadedWines.length > 0) {
-            setTimeout(() => migrateLegacyPhotos(loadedWines), 2500);
+            setTimeout(() => { migrateLegacyPhotos(loadedWines); migrateLogPhotos(); }, 2500);
           }
           return;
         }
@@ -596,7 +599,7 @@ export default function App() {
           });
         }
         // Migra foto base64 legacy → Supabase Storage in background
-        setTimeout(() => migrateLegacyPhotos(loadedWines), 2500);
+        setTimeout(() => { migrateLegacyPhotos(loadedWines); migrateLogPhotos(); }, 2500);
       }
     });
   }, []);
@@ -656,6 +659,38 @@ export default function App() {
     if (succeeded > 0) {
       showToast(`✨ Foto caricate su cloud: ${succeeded}`);
     }
+  };
+
+  // Migrazione foto degustazione base64 → Supabase Storage
+  const migrateLogPhotos = async () => {
+    const entries = log.filter(e => (e.tastingPhotos || []).some(isPhotoBase64));
+    if (entries.length === 0) return;
+    console.log(`[migration] ${entries.length} voci log con foto base64 da caricare`);
+    let succeeded = 0;
+    const updates = new Map();
+    for (const entry of entries) {
+      const newPhotos = [];
+      for (let i = 0; i < (entry.tastingPhotos || []).length; i++) {
+        const p = entry.tastingPhotos[i];
+        if (isPhotoURL(p)) { newPhotos.push(p); continue; }
+        if (isPhotoBase64(p)) {
+          try {
+            const url = await uploadPhotoToStorage(null, i, p, `tasting/${entry.id}`);
+            newPhotos.push(url);
+            succeeded++;
+          } catch (err) {
+            console.error(`[migration] log ${entry.id}/${i}: ${err.message}`);
+            newPhotos.push(p);
+          }
+        }
+      }
+      updates.set(entry.id, newPhotos);
+    }
+    if (updates.size > 0) {
+      const newLog = log.map(e => updates.has(e.id) ? { ...e, tastingPhotos: updates.get(e.id) } : e);
+      saveLog(newLog);
+    }
+    if (succeeded > 0) showToast(`✨ Foto degustazione caricate: ${succeeded}`);
   };
 
   const doCloudRefresh = () => {
@@ -737,7 +772,14 @@ export default function App() {
     cloudSave({ wines: deduped }); // data.js lato server filtra comunque base64
   };
   const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY,  r); cloudSave({ racks: r }); };
-  const saveLog   = (l) => { setLog(l);   saveLocal(LOG_KEY,   l); cloudSave({ log:   l }); };
+  const saveLog   = (l) => {
+    setLog(l);
+    saveLocal(LOG_KEY, l);
+    // Filtra foto base64 prima del cloud sync (come per i vini)
+    cloudSave({ log: l.map(e => (e.tastingPhotos || []).some(isPhotoBase64)
+      ? { ...e, tastingPhotos: e.tastingPhotos.filter(isPhotoURL) }
+      : e) });
+  };
   const saveName  = (n) => { setCantinaName(n); saveLocal('cantina-name', n); };
   const showToast = (msg) => { setToast(msg); setUndoState(null); setTimeout(() => setToast(null), 3000); };
   useEffect(() => { _onCloudSaveError = showToast; return () => { _onCloudSaveError = null; }; }, []);
@@ -4463,12 +4505,33 @@ export default function App() {
                     showUndoToast("Voce eliminata", () => saveLog([removed, ...log.filter(l => l.id !== removed.id)]));
                   }}>ELIMINA</button>
                 )}
-                <button className="btn-gold" onClick={() => {
+                <button className="btn-gold" onClick={async () => {
+                  // Upload foto degustazione base64 su Supabase Storage
+                  let entry = logEntry;
+                  const hasBase64 = (entry.tastingPhotos || []).some(isPhotoBase64);
+                  if (hasBase64) {
+                    showToast("📷 Caricamento foto…");
+                    const uploaded = [];
+                    for (let i = 0; i < (entry.tastingPhotos || []).length; i++) {
+                      const p = entry.tastingPhotos[i];
+                      if (isPhotoURL(p)) { uploaded.push(p); continue; }
+                      if (isPhotoBase64(p)) {
+                        try {
+                          const url = await uploadPhotoToStorage(null, i, p, `tasting/${entry.id}`);
+                          uploaded.push(url);
+                        } catch (err) {
+                          console.error(`[tasting-upload] fallito ${entry.id}/${i}: ${err.message}`);
+                          uploaded.push(p); // mantieni base64 come fallback
+                        }
+                      }
+                    }
+                    entry = { ...entry, tastingPhotos: uploaded };
+                  }
                   if (logModal === "edit") {
-                    saveLog(log.map(l => l.id === logEntry.id ? logEntry : l));
+                    saveLog(log.map(l => l.id === entry.id ? entry : l));
                     showToast("✏ Voce aggiornata");
                   } else {
-                    saveLog([logEntry, ...log]);
+                    saveLog([entry, ...log]);
                     // Applica la modifica alla cantina ora che è confermato
                     if (pendingDrink) {
                       const { wine, newQty, newSlots } = pendingDrink;

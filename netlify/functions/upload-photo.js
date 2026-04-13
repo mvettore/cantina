@@ -79,9 +79,11 @@ const handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Body non valido" }) };
   }
 
-  const { wineId, index, base64, mediaType } = body;
-  if (wineId == null || index == null || !base64) {
-    return { statusCode: 400, body: JSON.stringify({ error: "Campi mancanti: wineId, index, base64" }) };
+  const { wineId, folder, index, base64, mediaType } = body;
+  // folder sovrascrive wineId come prefisso del path (es. "tasting/123456")
+  const pathPrefix = folder || (wineId != null ? String(wineId) : null);
+  if (!pathPrefix || index == null || !base64) {
+    return { statusCode: 400, body: JSON.stringify({ error: "Campi mancanti: wineId/folder, index, base64" }) };
   }
 
   // Assicura che il bucket esista prima di fare upload
@@ -100,7 +102,7 @@ const handler = async (event) => {
   // Path con timestamp: evita cache stale del browser se re-upload la stessa posizione,
   // e garantisce unicità anche se lo stesso wineId+index viene riusato.
   const timestamp = Date.now();
-  const path = `${wineId}/${timestamp}-${index}.${ext}`;
+  const path = `${pathPrefix}/${timestamp}-${index}.${ext}`;
 
   console.log(`[upload-photo] uploading ${path} (${buffer.length} bytes, ${mime})`);
 
