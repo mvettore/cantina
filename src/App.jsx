@@ -453,7 +453,7 @@ function getAgingStatus(wine) {
 const emptyWine = () => ({
   id: null, name: "", producer: "", year: new Date().getFullYear(),
   region: "", grape: "", type: "", denomination: "",
-  rating: 3, notes: "", quantity: 1, price: "", alcohol: "",
+  rating: 3, notes: "", quantity: 1, price: "", alcohol: "", bottleSize: "0.75",
   rackSlots: [], location: "", photos: [], enrichment: null,
 });
 const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6, house: "" });
@@ -1007,6 +1007,7 @@ export default function App() {
         grape: fromWine.grape || "",
         denomination: fromWine.denomination || "",
         alcohol: fromWine.alcohol || "",
+        bottleSize: fromWine.bottleSize || "0.75",
         // Copia enrichment dal vino sorgente: peakFrom/peakTo sono relativi alla
         // vendemmia e quindi validi per qualsiasi annata dello stesso vino.
         // Questo evita che l'AI dia valori diversi per la stessa etichetta e
@@ -1095,7 +1096,12 @@ export default function App() {
       });
       if (!resp.ok) throw new Error(`Errore ${resp.status}`);
       const data = await resp.json();
-      setEstimatedValue(data);
+      const valueData = { ...data, estimatedAt: new Date().toISOString() };
+      setEstimatedValue(valueData);
+      // Salva automaticamente nel vino senza bisogno di "Modifica"
+      const updated = { ...wine, marketValue: valueData, lastModified: Date.now() };
+      saveWines(wines.map(w => w.id === wine.id ? updated : w));
+      setEditing(updated);
     } catch (err) {
       setEstimatedValue({ error: err.message || "Errore nella stima" });
     } finally {
@@ -2384,6 +2390,18 @@ export default function App() {
                   <label style={labelStyle}>Gradazione (%vol)</label>
                   <input style={inputStyle} type="number" min="0" max="100" step="0.1" value={editing.alcohol||""} onChange={e=>setEditing(v=>({...v,alcohol:e.target.value}))} placeholder="es. 14.5"/>
                 </div>
+                <div>
+                  <label style={labelStyle}>Formato (L)</label>
+                  <select style={inputStyle} value={editing.bottleSize||"0.75"} onChange={e=>setEditing(v=>({...v,bottleSize:e.target.value}))}>
+                    <option value="0.375">0,375 L (mezza)</option>
+                    <option value="0.5">0,5 L</option>
+                    <option value="0.75">0,75 L (standard)</option>
+                    <option value="1">1 L</option>
+                    <option value="1.5">1,5 L (magnum)</option>
+                    <option value="3">3 L (jeroboam)</option>
+                    <option value="5">5 L</option>
+                  </select>
+                </div>
 
                 {/* Shelf picker — multi-rack */}
                 <div style={{gridColumn:"1/-1",background:C.bg,borderRadius:9,padding:"16px 18px",border:`1px solid ${C.border}`}}>
@@ -2582,6 +2600,7 @@ export default function App() {
                     ["🍾", `${editing.quantity} bt`],
                     ...(editing.price?[["💰", `€${editing.price}`]]:[]),
                     ...(editing.alcohol?[["🔥", `${editing.alcohol}%`]]:[]),
+                    ...(editing.bottleSize && editing.bottleSize !== "0.75" ? [["📐", `${editing.bottleSize}L`]] : []),
                   ].filter(([,v])=>v).map(([icon,val])=>(
                     <span key={icon+val} style={{
                       display:"inline-flex", alignItems:"center", gap:5,
@@ -2609,8 +2628,12 @@ export default function App() {
                 </div>
 
                 {/* Stima valore di mercato */}
+                {(() => {
+                  // Usa il valore salvato nel vino se presente, altrimenti quello in-memory
+                  const val = estimatedValue || editing.marketValue || null;
+                  return (
                 <div style={{marginBottom:14}}>
-                  {!estimatedValue && !estimatingValue && (
+                  {!val && !estimatingValue && (
                     <button onClick={()=>handleEstimateValue(editing)} style={{
                       background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 9,
                       padding: "10px 16px", cursor: "pointer", width: "100%",
@@ -2629,28 +2652,35 @@ export default function App() {
                       <p style={{fontSize:12,color:C.textFaint,fontFamily:"'Cinzel',serif",letterSpacing:1}}>STIMA IN CORSO…</p>
                     </div>
                   )}
-                  {estimatedValue && !estimatedValue.error && (
+                  {val && !val.error && (
                     <div style={{background:C.bg, border:`1px solid rgba(212,168,90,0.4)`, borderRadius:10, padding:"14px 16px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                         <span style={{fontFamily:"'Cinzel',serif",fontSize:11,color:C.gold,letterSpacing:2,fontWeight:700}}>💰 VALORE INDICATIVO</span>
-                        <span style={{
-                          fontSize:10, fontFamily:"'Cinzel',serif", letterSpacing:1,
-                          color: estimatedValue.confidence==="alta"?"#6aaa6a":estimatedValue.confidence==="media"?C.gold:"#c07070",
-                          background: estimatedValue.confidence==="alta"?"rgba(106,170,106,0.15)":estimatedValue.confidence==="media"?"rgba(212,168,90,0.15)":"rgba(192,112,112,0.15)",
-                          border: `1px solid ${estimatedValue.confidence==="alta"?"rgba(106,170,106,0.4)":estimatedValue.confidence==="media"?"rgba(212,168,90,0.4)":"rgba(192,112,112,0.4)"}`,
-                          borderRadius:10, padding:"2px 8px",
-                        }}>
-                          {estimatedValue.confidence==="alta"?"AFFIDABILE":estimatedValue.confidence==="media"?"INDICATIVO":"APPROSSIMATIVO"}
-                        </span>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          {val.estimatedAt && (
+                            <span style={{fontSize:9,color:C.textFaint,fontFamily:"'Cinzel',serif",letterSpacing:0.5}}>
+                              {new Date(val.estimatedAt).toLocaleDateString("it-IT",{day:"2-digit",month:"short",year:"numeric"})}
+                            </span>
+                          )}
+                          <span style={{
+                            fontSize:10, fontFamily:"'Cinzel',serif", letterSpacing:1,
+                            color: val.confidence==="alta"?"#6aaa6a":val.confidence==="media"?C.gold:"#c07070",
+                            background: val.confidence==="alta"?"rgba(106,170,106,0.15)":val.confidence==="media"?"rgba(212,168,90,0.15)":"rgba(192,112,112,0.15)",
+                            border: `1px solid ${val.confidence==="alta"?"rgba(106,170,106,0.4)":val.confidence==="media"?"rgba(212,168,90,0.4)":"rgba(192,112,112,0.4)"}`,
+                            borderRadius:10, padding:"2px 8px",
+                          }}>
+                            {val.confidence==="alta"?"AFFIDABILE":val.confidence==="media"?"INDICATIVO":"APPROSSIMATIVO"}
+                          </span>
+                        </div>
                       </div>
                       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:32,color:C.gold,fontWeight:300,marginBottom:6}}>
-                        €{estimatedValue.min}–{estimatedValue.max}
+                        €{val.min}–{val.max}
                       </div>
-                      {estimatedValue.source && (
-                        <p style={{fontSize:12,color:C.textFaint,fontStyle:"italic",margin:"0 0 6px",lineHeight:1.4}}>{estimatedValue.source}</p>
+                      {val.source && (
+                        <p style={{fontSize:12,color:C.textFaint,fontStyle:"italic",margin:"0 0 6px",lineHeight:1.4}}>{val.source}</p>
                       )}
-                      {estimatedValue.notes && (
-                        <p style={{fontSize:14,color:C.textMuted,fontFamily:"'EB Garamond',serif",lineHeight:1.55,margin:0}}>{estimatedValue.notes}</p>
+                      {val.notes && (
+                        <p style={{fontSize:14,color:C.textMuted,fontFamily:"'EB Garamond',serif",lineHeight:1.55,margin:0}}>{val.notes}</p>
                       )}
                       <button onClick={()=>handleEstimateValue(editing)} style={{
                         background:"none",border:"none",color:C.textFaint,cursor:"pointer",
@@ -2658,9 +2688,9 @@ export default function App() {
                       }}>🔄 RISTIMA</button>
                     </div>
                   )}
-                  {estimatedValue && estimatedValue.error && (
+                  {val && val.error && (
                     <div style={{background:"rgba(154,80,80,0.1)", border:"1px solid rgba(154,80,80,0.3)", borderRadius:9, padding:"12px 14px", color:"#d08080", fontSize:13}}>
-                      ⚠ {estimatedValue.error}
+                      ⚠ {val.error}
                       <button onClick={()=>handleEstimateValue(editing)} style={{
                         background:"none",border:"none",color:C.gold,cursor:"pointer",
                         fontSize:12,fontFamily:"'Cinzel',serif",letterSpacing:1,marginLeft:10,
@@ -2668,6 +2698,8 @@ export default function App() {
                     </div>
                   )}
                 </div>
+                  );
+                })()}
 
                 {/* Data aggiunta */}
                 {editing.addedAt && (
