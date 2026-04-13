@@ -2375,11 +2375,14 @@ export default function App() {
                       </span>
                     </div>
                   </div>
-                  {/* Area scrollabile orizzontalmente */}
+                  {/* Area scrollabile orizzontalmente con colonna nomi sticky */}
+                  {(() => {
+                    const NAME_W = 120; // larghezza colonna nomi (px)
+                    return (
                   <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch", padding:"14px 0 16px" }}>
-                    <div style={{ minWidth:chartMinWidth, padding:"0 20px" }}>
-                      {/* Asse anni */}
-                      <div style={{ position:"relative", height:22, marginBottom:8, borderBottom:`1px solid ${C.border}33` }}>
+                    <div style={{ minWidth:chartMinWidth + NAME_W, position:"relative" }}>
+                      {/* Asse anni (offset a destra per lasciare spazio ai nomi) */}
+                      <div style={{ position:"relative", height:22, marginBottom:8, marginLeft:NAME_W, borderBottom:`1px solid ${C.border}33` }}>
                         {yearLabels.map(yr => (
                           <span key={yr} style={{
                             position:"absolute", left:`${pct(yr)}%`, transform:"translateX(-50%)",
@@ -2391,13 +2394,14 @@ export default function App() {
                           }}>{yr}</span>
                         ))}
                       </div>
-                      {/* Linea "oggi" + barre */}
+                      {/* Righe: nome sticky + barre */}
                       <div style={{ position:"relative" }}>
+                        {/* Linea "oggi" */}
                         <div style={{
-                          position:"absolute", left:`${pct(currentYear)}%`, top:0, bottom:0,
+                          position:"absolute", left:`calc(${NAME_W}px + ${pct(currentYear)}%)`, top:0, bottom:0,
                           width:2, background:C.gold, opacity:0.4, zIndex:1, borderRadius:1,
                         }}/>
-                        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                           {winesWithPeak.slice(0, 40).map(w => {
                             const ag = getAgingStatus(w);
                             const tc = typeColors[w.type] || { bar:"#888" };
@@ -2405,37 +2409,50 @@ export default function App() {
                             const peakEnd = w.year + w.enrichment.peakTo;
                             const matEnd = peakEnd + Math.ceil((w.enrichment.peakTo - w.enrichment.peakFrom) / 2);
                             return (
-                              <div key={w.id} style={{ position:"relative", height:28, display:"flex", alignItems:"center" }}
+                              <div key={w.id} style={{ display:"flex", alignItems:"center", height:28 }}
                                 onClick={() => { setEditing({...w}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view"); }}
                                 title={`${w.name} ${w.year} · apice ${peakStart}–${peakEnd}`}>
-                                {/* Nome a sinistra della barra */}
+                                {/* Nome — sticky a sinistra */}
                                 <div style={{
-                                  position:"absolute", right:`${100 - pct(peakStart) + 0.5}%`,
-                                  fontSize:11, color:C.text, fontFamily:"'Cinzel',serif", fontWeight:600,
-                                  whiteSpace:"nowrap", cursor:"pointer", textAlign:"right",
-                                  overflow:"hidden", textOverflow:"ellipsis",
-                                  maxWidth:`${pct(peakStart) - 1}%`,
-                                }}>{w.name} <span style={{fontWeight:300,color:C.textMuted}}>{w.year}</span></div>
-                                {/* Barra apice */}
-                                <div style={{
-                                  position:"absolute",
-                                  left:`${pct(peakStart)}%`,
-                                  width:`${Math.max(0.8, pct(peakEnd) - pct(peakStart))}%`,
-                                  height:12, borderRadius:3,
-                                  background: tc.bar,
-                                  opacity: ag?.s === "Apice" ? 1 : ag?.s === "Giovane" ? 0.5 : 0.65,
-                                  cursor:"pointer",
-                                  boxShadow: ag?.s === "Apice" ? `0 0 6px ${tc.bar}66` : "none",
-                                }}/>
-                                {/* Barra maturo */}
-                                <div style={{
-                                  position:"absolute",
-                                  left:`${pct(peakEnd)}%`,
-                                  width:`${Math.max(0.4, pct(matEnd) - pct(peakEnd))}%`,
-                                  height:6, borderRadius:3,
-                                  background: "#b07030",
-                                  opacity: 0.35,
-                                }}/>
+                                  position:"sticky", left:0, zIndex:3,
+                                  width:NAME_W, minWidth:NAME_W, flexShrink:0,
+                                  background: C.surface,
+                                  paddingRight:8,
+                                  display:"flex", alignItems:"center",
+                                  borderRight:`1px solid ${C.border}22`,
+                                  boxShadow:`4px 0 8px ${C.bg}cc`,
+                                }}>
+                                  <div style={{
+                                    fontSize:11, color:C.text, fontFamily:"'Cinzel',serif", fontWeight:600,
+                                    whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                                    cursor:"pointer", width:"100%",
+                                  }}>{w.name} <span style={{fontWeight:300,color:C.textMuted,fontSize:10}}>{w.year}</span></div>
+                                </div>
+                                {/* Area barre */}
+                                <div style={{ flex:1, position:"relative", height:"100%" }}>
+                                  {/* Barra apice */}
+                                  <div style={{
+                                    position:"absolute",
+                                    left:`${pct(peakStart)}%`,
+                                    width:`${Math.max(0.8, pct(peakEnd) - pct(peakStart))}%`,
+                                    height:12, borderRadius:3,
+                                    top:"50%", transform:"translateY(-50%)",
+                                    background: tc.bar,
+                                    opacity: ag?.s === "Apice" ? 1 : ag?.s === "Giovane" ? 0.5 : 0.65,
+                                    cursor:"pointer",
+                                    boxShadow: ag?.s === "Apice" ? `0 0 6px ${tc.bar}66` : "none",
+                                  }}/>
+                                  {/* Barra maturo */}
+                                  <div style={{
+                                    position:"absolute",
+                                    left:`${pct(peakEnd)}%`,
+                                    width:`${Math.max(0.4, pct(matEnd) - pct(peakEnd))}%`,
+                                    height:6, borderRadius:3,
+                                    top:"50%", transform:"translateY(-50%)",
+                                    background: "#b07030",
+                                    opacity: 0.35,
+                                  }}/>
+                                </div>
                               </div>
                             );
                           })}
@@ -2443,6 +2460,8 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                    );
+                  })()}
                 </div>
               );
             })()}
