@@ -470,6 +470,7 @@ export default function App() {
   const [filterAging, setFilterAging] = useState("Tutti");
   const [filterUnracked, setFilterUnracked] = useState(false);
   const [filterUrgent, setFilterUrgent] = useState(false); // Maturo + Declino
+  const [filterHouse, setFilterHouse] = useState(null); // filtro per casa
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [sortBy,  setSortBy]  = useState("name");
@@ -834,6 +835,7 @@ export default function App() {
     .filter(w => filterAging === "Tutti" || getAgingStatus(w)?.s === filterAging)
     .filter(w => !filterUrgent || ["Maturo","Declino"].includes(getAgingStatus(w)?.s))
     .filter(w => !filterUnracked || ((w.rackSlots||[]).reduce((sum, s) => sum + (s.positions||[]).length, 0) < (w.quantity || 0)))
+    .filter(w => !filterHouse || getWineHouse(w) === filterHouse)
     .filter(w => {
       const q = search.toLowerCase();
       // Costruisce array di tutti i campi testuali ricercabili
@@ -1709,6 +1711,37 @@ export default function App() {
                     <span style={{ fontSize: 16, opacity: 0.5 }}>›</span>
                   </button>
 
+                  {/* Export backup */}
+                  <button onClick={() => {
+                    setMenuOpen(false);
+                    const backup = {
+                      exportedAt: new Date().toISOString(),
+                      wines: wines.map(({ photos, ...w }) => ({ ...w, photos: (photos||[]).filter(p => typeof p === "string" && p.startsWith("http")) })),
+                      racks,
+                      log,
+                    };
+                    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a"); a.href = url;
+                    a.download = `vinario-backup-${new Date().toISOString().split("T")[0]}.json`;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    showToast("📦 Backup scaricato");
+                  }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12, width: "100%",
+                      background: "transparent", border: "1px solid transparent",
+                      borderRadius: 7, padding: "11px 13px", cursor: "pointer",
+                      color: C.textMuted,
+                      fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1.5,
+                      textAlign: "left", marginTop: 2, transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,149,58,0.07)"; e.currentTarget.style.color = C.gold; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textMuted; }}>
+                    <span style={{ fontSize: 16 }}>📦</span>
+                    <span style={{ flex: 1 }}>ESPORTA BACKUP</span>
+                  </button>
+
                   {/* Sync manuale */}
                   <button onClick={handleManualSync}
                     style={{
@@ -1747,6 +1780,7 @@ export default function App() {
           filterAging !== "Tutti",
           filterUnracked,
           filterUrgent,
+          !!filterHouse,
         ].filter(Boolean).length;
         const hasSearch = !!search.trim();
         const showChipBar = hasSearch || activeFiltersCount > 0;
@@ -1770,7 +1804,7 @@ export default function App() {
             {activeFiltersCount > 0 && (
               <span onClick={() => {
                 setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null);
-                setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(false);
+                setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(false); setFilterHouse(null);
               }} style={{
                 fontSize: 11, color: C.gold, fontFamily: "'Cinzel', serif", letterSpacing: 1,
                 background: "rgba(212,168,90,0.12)", border: "1px solid rgba(212,168,90,0.35)",
@@ -1783,6 +1817,7 @@ export default function App() {
                   filterAging !== "Tutti" ? filterAging : null,
                   filterUrgent ? "Urgenti" : null,
                   filterUnracked ? "Senza scaffale" : null,
+                  filterHouse ? `🏠 ${filterHouse}` : null,
                 ].filter(Boolean).join(" · ")} ✕
               </span>
             )}
@@ -2294,6 +2329,108 @@ export default function App() {
             <Section title="PER TIPOLOGIA" rows={mkRows(byType)}   color={C.gold}    filterType="type"/>
             <Section title="PER VITIGNO"   rows={mkRows(byGrape)}  color="#7a9aba"   filterType="grape"/>
             <Section title="PER REGIONE"   rows={mkRows(byRegion)} color="#8aba7a"   filterType="region"/>
+
+            {/* ── Timeline finestre di beva ── */}
+            {(() => {
+              const currentYear = new Date().getFullYear();
+              const winesWithPeak = activeWines.filter(w =>
+                w.year && w.enrichment?.peakFrom != null && w.enrichment?.peakTo != null && (w.quantity||0) > 0
+              ).sort((a,b) => (a.year + a.enrichment.peakFrom) - (b.year + b.enrichment.peakFrom));
+              if (winesWithPeak.length === 0) return null;
+              const minYear = Math.min(currentYear - 1, ...winesWithPeak.map(w => w.year + w.enrichment.peakFrom));
+              const maxYear = Math.max(currentYear + 1, ...winesWithPeak.map(w => {
+                const pt = w.enrichment.peakTo;
+                const pf = w.enrichment.peakFrom;
+                return w.year + pt + Math.ceil((pt - pf) / 2);
+              }));
+              const span = maxYear - minYear;
+              const pct = (yr) => ((yr - minYear) / span * 100).toFixed(1);
+              return (
+                <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
+                  <div style={{ padding:"14px 20px", borderBottom:`1px solid ${C.border}`, fontFamily:"'Cinzel', serif", fontSize:15, color:C.gold, letterSpacing:2 }}>
+                    📅 FINESTRE DI BEVA
+                  </div>
+                  <div style={{ padding:"16px 20px 20px" }}>
+                    {/* Asse anni */}
+                    <div style={{ position:"relative", height:20, marginBottom:6 }}>
+                      {Array.from({ length: Math.min(span + 1, 20) }, (_, i) => {
+                        const yr = minYear + Math.round(i * span / Math.min(span, 19));
+                        return (
+                          <span key={yr} style={{
+                            position:"absolute", left:`${pct(yr)}%`, transform:"translateX(-50%)",
+                            fontSize:10, color: yr === currentYear ? C.gold : C.textFaint,
+                            fontFamily:"'Cinzel',serif", fontWeight: yr === currentYear ? 700 : 400,
+                          }}>{yr}</span>
+                        );
+                      })}
+                    </div>
+                    {/* Linea "oggi" */}
+                    <div style={{ position:"relative" }}>
+                      <div style={{
+                        position:"absolute", left:`${pct(currentYear)}%`, top:0, bottom:0,
+                        width:1, background:C.gold, opacity:0.5, zIndex:1,
+                      }}/>
+                      {/* Barre per ogni vino */}
+                      <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                        {winesWithPeak.slice(0, 30).map(w => {
+                          const ag = getAgingStatus(w);
+                          const tc = typeColors[w.type] || { bar:"#888" };
+                          const peakStart = w.year + w.enrichment.peakFrom;
+                          const peakEnd = w.year + w.enrichment.peakTo;
+                          const matEnd = peakEnd + Math.ceil((w.enrichment.peakTo - w.enrichment.peakFrom) / 2);
+                          return (
+                            <div key={w.id} style={{ position:"relative", height:22, display:"flex", alignItems:"center" }}
+                              onClick={() => { setEditing({...w}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view"); }}
+                              title={`${w.name} ${w.year} · apice ${peakStart}–${peakEnd}`}>
+                              {/* Label nome (troncato) */}
+                              <span style={{
+                                position:"absolute", left:0, fontSize:9, color:C.textFaint,
+                                fontFamily:"'Cinzel',serif", overflow:"hidden", textOverflow:"ellipsis",
+                                whiteSpace:"nowrap", width:`${pct(peakStart)}%`, textAlign:"right",
+                                paddingRight:4, zIndex:2, cursor:"pointer",
+                              }}>{w.name} {w.year}</span>
+                              {/* Barra apice */}
+                              <div style={{
+                                position:"absolute",
+                                left:`${pct(peakStart)}%`,
+                                width:`${Math.max(1, pct(peakEnd) - pct(peakStart))}%`,
+                                height:10, borderRadius:3,
+                                background: tc.bar,
+                                opacity: ag?.s === "Apice" ? 1 : 0.6,
+                                cursor:"pointer",
+                              }}/>
+                              {/* Barra maturo (più tenue) */}
+                              <div style={{
+                                position:"absolute",
+                                left:`${pct(peakEnd)}%`,
+                                width:`${Math.max(0.5, pct(matEnd) - pct(peakEnd))}%`,
+                                height:6, borderRadius:3,
+                                background: "#b07030",
+                                opacity: 0.35,
+                              }}/>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:14, marginTop:12, flexWrap:"wrap" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                        <div style={{ width:16, height:8, borderRadius:2, background:C.gold }}/>
+                        <span style={{ fontSize:11, color:C.textFaint, fontFamily:"'Cinzel',serif" }}>APICE</span>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                        <div style={{ width:16, height:5, borderRadius:2, background:"#b07030", opacity:0.35 }}/>
+                        <span style={{ fontSize:11, color:C.textFaint, fontFamily:"'Cinzel',serif" }}>MATURO</span>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                        <div style={{ width:1, height:14, background:C.gold, opacity:0.5 }}/>
+                        <span style={{ fontSize:11, color:C.textFaint, fontFamily:"'Cinzel',serif" }}>OGGI</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div></div>
         );
       })()}
@@ -3463,6 +3600,7 @@ export default function App() {
           filterAging !== "Tutti",
           filterUnracked,
           filterUrgent,
+          !!filterHouse,
         ].filter(Boolean).length;
         return (
           <div className="modal-overlay" onClick={() => setFiltersOpen(false)}>
@@ -3567,6 +3705,27 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Casa / Posizione */}
+                {houseList.length > 0 && (
+                  <div style={sectionStyle}>
+                    <span style={labelH}>CASA</span>
+                    <div style={pillRow}>
+                      <button className="tab-btn" onClick={() => setFilterHouse(null)} style={{
+                        color: !filterHouse ? C.gold : C.textFaint,
+                        background: !filterHouse ? "rgba(212,168,90,0.16)" : "none",
+                        border: !filterHouse ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                      }}>TUTTE</button>
+                      {houseList.map(h => (
+                        <button key={h} className="tab-btn" onClick={() => setFilterHouse(filterHouse === h ? null : h)} style={{
+                          color: filterHouse === h ? C.gold : C.textFaint,
+                          background: filterHouse === h ? "rgba(212,168,90,0.16)" : "none",
+                          border: filterHouse === h ? `1px solid rgba(212,168,90,0.45)` : `1px solid ${C.border}`,
+                        }}>🏠 {h.toUpperCase()}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Ordinamento */}
                 <div style={sectionStyle}>
                   <span style={labelH}>ORDINA PER</span>
@@ -3603,7 +3762,7 @@ export default function App() {
               }}>
                 <button onClick={() => {
                   setFilterType("Tutti"); setFilterGrape(null); setFilterRegion(null);
-                  setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(false);
+                  setFilterAging("Tutti"); setFilterUnracked(false); setFilterUrgent(false); setFilterHouse(null);
                 }} disabled={activeCount === 0} style={{
                   background: "transparent", border: `1px solid ${C.border}`, borderRadius: 9,
                   color: activeCount === 0 ? C.textFaint : C.textMuted,
@@ -3808,14 +3967,39 @@ export default function App() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO DEGUSTAZIONI</h2>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {/* Log rapido — vino bevuto fuori, non in cantina */}
+              <button onClick={() => {
+                setLogEntry({
+                  id: Date.now(),
+                  wineId: null, // nessun vino in catalogo
+                  wineName: "", wineProducer: "", wineYear: "", wineType: "",
+                  wineGrape: "", wineRegion: "", winePhotos: [], tastingPhotos: [],
+                  date: new Date().toISOString().split("T")[0],
+                  occasion: "", companions: "",
+                  quick_aromi: 0, quick_struttura: 0, quick_persistenza: 0,
+                  rating: 0,
+                  vista_limpidezza: "", vista_colore: "", vista_intensita_colore: "",
+                  olfatto_intensita: "", olfatto_qualita: "", olfatto_descrizione: "",
+                  gusto_corpo: "", gusto_acidita: "", gusto_tannini: "",
+                  gusto_persistenza: "", gusto_equilibrio: "",
+                  notes: "", wineEnrichment: null,
+                });
+                setLogModal("add");
+              }} style={{
+                background: "linear-gradient(135deg, #3a1a5a, #7a3a9a)",
+                border: "1px solid rgba(201,149,58,0.4)",
+                borderRadius: 8, padding: "6px 12px", cursor: "pointer",
+                color: "#f0d0ff",
+                fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1, fontWeight: 700,
+              }}>📝 REGISTRA</button>
               <button onClick={() => setLogFavOnly(v => !v)} style={{
                 background: logFavOnly ? "rgba(201,149,58,0.18)" : C.surface2,
                 border: `1px solid ${logFavOnly ? "rgba(201,149,58,0.5)" : C.border}`,
                 borderRadius: 8, padding: "6px 12px", cursor: "pointer",
                 color: logFavOnly ? C.gold : C.textFaint,
-                fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1,
+                fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1,
               }}>★ PREFERITI</button>
-              <span style={{ fontSize: 14, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length===1?"bt":"bt"}</span>
+              <span style={{ fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length}bt</span>
             </div>
           </div>
           {/* Search bar */}
@@ -3932,19 +4116,57 @@ export default function App() {
               <div style={{ padding: "14px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:11, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:2, marginBottom:4 }}>
-                    {logModal === "add" ? "🍷 REGISTRA DEGUSTAZIONE" : "✏ MODIFICA VOCE"}
+                    {logEntry.wineId == null && logModal === "add" ? "📝 LOG RAPIDO" : logModal === "add" ? "🍷 REGISTRA DEGUSTAZIONE" : "✏ MODIFICA VOCE"}
                   </div>
-                  <div style={{ fontFamily:"'Cinzel',serif", fontSize:20, fontWeight:700, color:C.text, lineHeight:1.2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{logEntry.wineName}</div>
-                  <div style={{ display:"flex", gap:8, marginTop:4, flexWrap:"wrap" }}>
-                    {logEntry.wineYear && <span style={{ fontFamily:"'Cinzel',serif", fontSize:16, color:C.gold, fontWeight:300 }}>{logEntry.wineYear}</span>}
-                    {logEntry.wineType && <span style={{ fontFamily:"'Cinzel',serif", fontSize:14, color:C.textMuted }}>{logEntry.wineType}</span>}
-                    {logEntry.wineProducer && <span style={{ fontFamily:"'Cinzel',serif", fontSize:14, color:C.textMuted }}>· {logEntry.wineProducer}</span>}
-                  </div>
+                  {logEntry.wineId == null ? (
+                    <div style={{ fontSize:12, color:C.textFaint, fontStyle:"italic" }}>Vino bevuto fuori dalla cantina</div>
+                  ) : (
+                    <>
+                      <div style={{ fontFamily:"'Cinzel',serif", fontSize:20, fontWeight:700, color:C.text, lineHeight:1.2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{logEntry.wineName}</div>
+                      <div style={{ display:"flex", gap:8, marginTop:4, flexWrap:"wrap" }}>
+                        {logEntry.wineYear && <span style={{ fontFamily:"'Cinzel',serif", fontSize:16, color:C.gold, fontWeight:300 }}>{logEntry.wineYear}</span>}
+                        {logEntry.wineType && <span style={{ fontFamily:"'Cinzel',serif", fontSize:14, color:C.textMuted }}>{logEntry.wineType}</span>}
+                        {logEntry.wineProducer && <span style={{ fontFamily:"'Cinzel',serif", fontSize:14, color:C.textMuted }}>· {logEntry.wineProducer}</span>}
+                      </div>
+                    </>
+                  )}
                 </div>
                 <button onClick={() => setLogModal(null)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 20, flexShrink:0, paddingLeft:12 }}>✕</button>
               </div>
             </div>
             <div style={{ padding: "16px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+              {/* Campi vino editabili per log rapido (wineId null) */}
+              {logEntry.wineId == null && (
+                <div style={{ background: C.bg, borderRadius: 9, padding: "14px 16px", border: `1px solid ${C.border}` }}>
+                  <p style={{ ...labelStyle, marginBottom: 10, color: C.gold }}>🍷 VINO</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div style={{ gridColumn: "1/-1" }}>
+                      <label style={labelStyle}>Nome vino *</label>
+                      <input style={inputStyle} value={logEntry.wineName} onChange={e => setLogEntry(v => ({ ...v, wineName: e.target.value }))} placeholder="es. Barolo, Amarone, Chianti…" />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Produttore</label>
+                      <input style={inputStyle} value={logEntry.wineProducer||""} onChange={e => setLogEntry(v => ({ ...v, wineProducer: e.target.value }))} placeholder="es. Giacomo Conterno" />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Annata</label>
+                      <input style={inputStyle} type="number" value={logEntry.wineYear||""} onChange={e => setLogEntry(v => ({ ...v, wineYear: e.target.value ? parseInt(e.target.value) : "" }))} placeholder="es. 2018" />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Tipologia</label>
+                      <select style={inputStyle} value={logEntry.wineType||""} onChange={e => setLogEntry(v => ({ ...v, wineType: e.target.value }))}>
+                        <option value="">—</option>
+                        {WINE_TYPES.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Vitigno</label>
+                      <input style={inputStyle} value={logEntry.wineGrape||""} onChange={e => setLogEntry(v => ({ ...v, wineGrape: e.target.value }))} placeholder="es. Nebbiolo" />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Contesto */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
