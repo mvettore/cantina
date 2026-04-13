@@ -22,11 +22,14 @@ const handler = async (event) => {
   "type": "Rosso|Bianco|Rosato|Spumante|Dolce|Passito",
   "region": "regione italiana o paese",
   "grape": "vitigno principale",
+  "denomination": "denominazione e tipologia completa",
   "alcohol": 14.5,
   "notes": "1-2 frasi descrittive",
   "price": null
 }
-Il campo "alcohol" è la gradazione alcolica in %vol (numero decimale). Usa null per i campi non leggibili.`;
+Il campo "alcohol" è la gradazione alcolica in %vol (numero decimale).
+Il campo "denomination" è la denominazione ufficiale e la tipologia del vino, ad esempio "Barolo DOCG", "Barbera d'Asti Superiore DOCG", "Chianti Classico Riserva DOCG", "Langhe Nebbiolo DOC", "Prosecco di Valdobbiadene Superiore DOCG Brut". Includi sempre la sigla (DOCG, DOC, IGT) se presente sull'etichetta, e la tipologia (Riserva, Superiore, Gran Selezione, Brut, ecc.) quando indicata.
+Usa null per i campi non leggibili.`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 24000);
