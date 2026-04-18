@@ -2181,13 +2181,6 @@ export default function App() {
                               💶 €{wine.price}
                             </span>
                           )}
-                          {wine.rating>0 && (
-                            <span style={{ fontSize:12, color:"#e0c070", fontFamily:"'Cinzel',serif", fontWeight:700,
-                              background:"rgba(224,192,112,0.1)", border:`1px solid rgba(224,192,112,0.3)`,
-                              borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>
-                              {"★".repeat(wine.rating)}{"☆".repeat(Math.max(0,5-wine.rating))}
-                            </span>
-                          )}
                         </div>
                         {/* Verticale */}
                         {isGroup && (
@@ -2337,32 +2330,31 @@ export default function App() {
                             <p style={{ fontSize:16, color:C.textMuted, lineHeight:1.6, fontFamily:"Georgia,serif", margin:0, fontStyle:"italic" }}>{wine.notes}</p>
                           </div>
                         )}
-                        {/* Azioni */}
-                        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:10 }}>
-                          <button
-                            onClick={() => {
-                              if (isGroup) { setVerticaleOpen(group); return; }
-                              setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view");
-                            }}
-                            style={{
-                              background:"linear-gradient(135deg, #8a6828, #d4a85a 50%, #8a6828)",
-                              color:"#1a0800", border:"none", borderRadius:8,
-                              padding:"10px 20px", cursor:"pointer",
-                              fontFamily:"'Cinzel',serif", fontSize:12, letterSpacing:1.5, fontWeight:700,
-                            }}>
-                            {isGroup ? "📚 Apri verticale" : "📖 Apri scheda"}
-                          </button>
-                        </div>
-                        {/* Numero di pagina stile rivista */}
+                        {/* Piede pagina stile rivista: tipo · link modifica · paginazione */}
                         <div style={{
                           marginTop: 28, paddingTop: 14,
                           borderTop: `1px solid ${C.gold}22`,
-                          display: "flex", justifyContent: "space-between", alignItems: "center",
+                          display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
                           fontFamily: "'Cinzel', serif", fontSize: 10, color: C.textFaint,
                           letterSpacing: 3, textTransform: "uppercase",
                         }}>
                           <span>❦ {(wine.type || "").toUpperCase()}</span>
-                          <span>{gIdx + 1} / {filteredGrouped.length}</span>
+                          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                            {isGroup ? (
+                              <button onClick={() => setVerticaleOpen(group)}
+                                style={{ background:"none", border:"none", color: C.gold, fontFamily:"'Cinzel',serif",
+                                  fontSize: 10, letterSpacing: 3, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
+                                altre annate ›
+                              </button>
+                            ) : (
+                              <button onClick={() => { setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view"); }}
+                                style={{ background:"none", border:"none", color: C.textFaint, fontFamily:"'Cinzel',serif",
+                                  fontSize: 10, letterSpacing: 3, textTransform:"uppercase", cursor:"pointer", padding:0 }}>
+                                ✎ modifica
+                              </button>
+                            )}
+                            <span>{gIdx + 1} / {filteredGrouped.length}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
