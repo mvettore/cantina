@@ -519,6 +519,10 @@ export default function App() {
   const [estimatedValue, setEstimatedValue] = useState(null); // {min, max, confidence, notes, source}
   const [enrichData, setEnrichData] = useState(null);
   const [enrichError, setEnrichError] = useState(null);
+  const [producerEnrichingId, setProducerEnrichingId] = useState(null); // wine.id in fetch
+  const [producerError, setProducerError] = useState(null); // { wineId, msg }
+  const [magazineLetter, setMagazineLetter] = useState(null);
+  const magazineRef = useRef(null);
   const scanInputRef    = useRef(null);
   const secondPhotoRef  = useRef(null);
   const addPhotoRef     = useRef(null);
@@ -1187,6 +1191,49 @@ export default function App() {
       setEnrichError("Non sono riuscito a recuperare le informazioni. Riprova.");
     } finally {
       setEnriching(false);
+    }
+  };
+
+  // Scarica la scheda ufficiale dal sito del produttore (magazine view)
+  const handleEnrichProducer = async (wine) => {
+    setProducerEnrichingId(wine.id);
+    setProducerError(null);
+    try {
+      const resp = await fetch("/.netlify/functions/enrich-producer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: wine.name, producer: wine.producer, year: wine.year,
+          denomination: wine.denomination, region: wine.region, type: wine.type,
+        }),
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error || `Errore ${resp.status}`);
+      }
+      const data = await resp.json();
+      const producerSheet = { ...data, fetchedAt: new Date().toISOString() };
+      setWines(current => {
+        const newList = current.map(w => {
+          if (w.id !== wine.id) return w;
+          return {
+            ...w,
+            enrichment: { ...(w.enrichment || {}), producerSheet },
+            lastModified: Date.now(),
+          };
+        });
+        setTimeout(() => {
+          saveLocal(STORAGE_KEY, newList.map(({ photos: _, ...w }) => w));
+          cloudSave({ wines: newList });
+        }, 0);
+        return newList;
+      });
+      if (data.found) showToast("Scheda ufficiale scaricata");
+      else showToast("Nessuna pagina ufficiale trovata sul sito produttore");
+    } catch (err) {
+      setProducerError({ wineId: wine.id, msg: err.message || "Errore sconosciuto" });
+    } finally {
+      setProducerEnrichingId(null);
     }
   };
 
@@ -1871,9 +1918,9 @@ export default function App() {
           </div>
         )}
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px", paddingBottom: 100 }}>
-          {/* ── Tonight section: banner con bottiglie da stappare oggi ── */}
-          {tonightPicks.length > 0 && !showChipBar && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+          {/* ── Tonight banner: compatto in magazine mode, visibile solo senza filtri ── */}
+          {false && tonightPicks.length > 0 && !showChipBar && (
             <div style={{
               background: `linear-gradient(180deg, ${C.surface} 0%, ${C.surface2} 100%)`,
               border: `1px solid ${C.border}`, borderRadius: 12,
@@ -1950,12 +1997,31 @@ export default function App() {
           )}
 
           {filtered.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "80px 20px", color: C.textFaint }}>
+            <div style={{ textAlign: "center", padding: "80px 20px", color: C.textFaint, flex: 1 }}>
               <div style={{ fontSize: 48, marginBottom: 14, opacity: 0.4 }}>🍷</div>
               <p style={{ fontFamily: "'Cinzel', serif", letterSpacing: 2, fontSize: 15 }}>{activeWines.length===0?"LA CANTINA È VUOTA":"NESSUN RISULTATO"}</p>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 18 }}>
+            <div style={{ position: "relative", flex: 1, overflow: "hidden", minHeight: 0, display: "flex" }}>
+              <div ref={magazineRef}
+                onScroll={e => {
+                  const el = e.currentTarget;
+                  const idx = Math.round(el.scrollLeft / el.clientWidth);
+                  const g = filteredGrouped[idx];
+                  if (!g) return;
+                  const L = ((g.wines[0].name || "").trim()[0] || "").toUpperCase();
+                  if (L && L !== magazineLetter) setMagazineLetter(L);
+                }}
+                style={{
+                  flex: 1,
+                  overflowX: "auto",
+                  overflowY: "hidden",
+                  display: "flex",
+                  scrollSnapType: "x mandatory",
+                  WebkitOverflowScrolling: "touch",
+                  scrollBehavior: "smooth",
+                  height: "100%",
+                }}>
               {filteredGrouped.map(group => {
                 const wine = group.wines[0]; // rappresentativa = più recente
                 const isGroup = group.wines.length > 1;
@@ -1973,139 +2039,349 @@ export default function App() {
                 const urgent = ag?.s === "Declino" || ag?.s === "Maturo";
                 const urgentBorder = ag?.s === "Declino" ? "#9a5050" : "#b07030";
                 const urgentWidth  = ag?.s === "Maturo" ? "2px" : "1px";
+                const en = wine.enrichment || {};
+                const ps = en.producerSheet;
+                const isFetchingProducer = producerEnrichingId === wine.id;
+                const firstPhoto = (wine.photos || [])[0];
                 return (
-                  <div key={isGroup ? group.key : wine.id} className="wine-card" style={{
-                    background: `linear-gradient(180deg, ${C.surface} 0%, ${C.surface2} 100%)`,
-                    border: urgent ? `${urgentWidth} solid ${urgentBorder}` : `1px solid ${C.border}`,
-                    borderRadius: 12, overflow: "hidden", cursor: "pointer",
-                    boxShadow: urgent
-                      ? `0 4px 18px ${urgentBorder}3a, 0 0 0 1px ${urgentBorder}22 inset`
-                      : "0 4px 16px rgba(0,0,0,0.3)",
+                  <article key={isGroup ? group.key : wine.id} style={{
+                    flex: "0 0 100%",
+                    width: "100%",
+                    height: "100%",
+                    scrollSnapAlign: "start",
+                    scrollSnapStop: "always",
+                    overflow: "hidden",
                     position: "relative",
-                  }}
-                    onClick={() => {
-                      if (isGroup) { setVerticaleOpen(group); return; }
-                      setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view");
-                    }}>
-                    <div style={{ height: 3, background: `linear-gradient(90deg, ${tc.bar} 0%, ${tc.bar}dd 100%)` }} />
-
-                    <div style={{display:"flex",minHeight:0}}>
-                      {/* Foto verticale */}
-                      {(wine.photos||[])[0] && (
-                        <div onClick={e=>{e.stopPropagation();setLightboxPhoto((wine.photos||[])[0]);}}
-                          style={{flexShrink:0,width:56,cursor:"zoom-in",overflow:"hidden",
-                            position:"relative",borderRight:`1px solid ${C.border}`}}>
-                          <img src={(wine.photos||[])[0]} alt={wine.name}
-                            style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                        </div>
-                      )}
-                      <div style={{flex:1,minWidth:0,padding:"9px 12px 9px",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
-
-                        {/* Blocco top: NOME + denominazione + bt */}
-                        <div>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
-                            <FitText text={wine.name} maxSize={20} minSize={12}
-                              style={{fontFamily:"'Cinzel',serif",fontWeight:700,color:C.text,lineHeight:1.2,flex:1,minWidth:0}} />
-                            <span style={{
-                              background:groupTotalBt===0?"rgba(180,60,60,0.25)":groupTotalBt<=2?"rgba(180,150,60,0.25)":"rgba(60,150,60,0.2)",
-                              color:groupTotalBt===0?"#d07070":groupTotalBt<=2?"#c0b040":"#70c070",
-                              padding:"1px 8px",borderRadius:20,fontSize:16,flexShrink:0,
-                              fontFamily:"'Cinzel',serif",fontWeight:700,
-                            }}>{groupTotalBt}bt</span>
+                    background: `linear-gradient(180deg, ${C.surface} 0%, ${C.surface2} 100%)`,
+                    borderRight: `1px solid ${C.border}`,
+                  }}>
+                    <div style={{ height: 4, background: `linear-gradient(90deg, ${tc.bar} 0%, ${tc.bar}dd 100%)` }} />
+                    <div style={{ height: "calc(100% - 4px)", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 0 90px" }}>
+                      {/* Hero: foto grande o placeholder colorato */}
+                      <div
+                        onClick={firstPhoto ? () => setLightboxPhoto(firstPhoto) : undefined}
+                        style={{
+                          position: "relative",
+                          height: firstPhoto ? 280 : 120,
+                          overflow: "hidden",
+                          background: firstPhoto ? "transparent" : `linear-gradient(135deg, ${tc.badge}dd, ${tc.bar}66)`,
+                          borderBottom: `1px solid ${C.border}`,
+                          cursor: firstPhoto ? "zoom-in" : "default",
+                        }}>
+                        {firstPhoto ? (
+                          <img src={firstPhoto} alt={wine.name}
+                            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}/>
+                        ) : (
+                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56, opacity: 0.3 }}>🍷</div>
+                        )}
+                        <div style={{
+                          position: "absolute", top: 12, right: 48,
+                          background: "rgba(20,10,15,0.75)",
+                          border: `1px solid ${C.gold}66`,
+                          color: groupTotalBt===0?"#d07070":groupTotalBt<=2?"#e0c070":"#a0e0a0",
+                          padding: "4px 12px", borderRadius: 20, fontSize: 14,
+                          fontFamily: "'Cinzel', serif", fontWeight: 700, letterSpacing: 1,
+                          backdropFilter: "blur(6px)",
+                        }}>{groupTotalBt}bt</div>
+                        {wine.type && (
+                          <div style={{
+                            position: "absolute", bottom: 12, left: 14,
+                            background: "rgba(20,10,15,0.78)",
+                            border: `1px solid ${tc.bar}`,
+                            color: tc.text,
+                            padding: "3px 11px", borderRadius: 14, fontSize: 11,
+                            fontFamily: "'Cinzel', serif", fontWeight: 700, letterSpacing: 1.5,
+                            backdropFilter: "blur(6px)",
+                          }}>{wine.type.toUpperCase()}</div>
+                        )}
+                      </div>
+                      {/* Corpo della scheda */}
+                      <div style={{ maxWidth: 760, margin: "0 auto", padding: "22px 42px 22px 22px" }}>
+                        <h2 style={{
+                          fontFamily: "'Cormorant Garamond', 'Cinzel', serif",
+                          fontSize: "clamp(26px, 5.5vw, 40px)",
+                          color: C.text, fontWeight: 700, lineHeight: 1.12,
+                          margin: 0, letterSpacing: 0.5,
+                        }}>{wine.name}</h2>
+                        {wine.denomination && (
+                          <div style={{ fontFamily: "'Cinzel', serif", fontSize: 12, color: C.gold, letterSpacing: 2, marginTop: 6, textTransform: "uppercase" }}>
+                            {wine.denomination}
                           </div>
-                          <div style={{fontFamily:"'Cinzel',serif",fontSize:13,color:C.textMuted,fontWeight:400,marginTop:2,
-                            minHeight:"1.3em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                            {wine.denomination||""}
-                          </div>
+                        )}
+                        <div style={{ fontFamily: "'EB Garamond', Georgia, serif", fontSize: 17, color: C.textMuted, marginTop: 10, fontStyle: "italic", lineHeight: 1.4 }}>
+                          {[wine.producer, isGroup ? `${groupYearsMin}–${groupYearsMax}` : wine.year].filter(Boolean).join(" · ")}
+                          {wine.region ? ` · ${wine.region}` : ""}
+                          {wine.grape ? ` · ${wine.grape}` : ""}
                         </div>
-
-                        {/* Blocco mid: produttore · anno/e (+ prezzo) */}
-                        <div>
-                          <p style={{fontFamily:"'Cinzel',serif",fontSize:16,
-                            color:C.text,margin:0,lineHeight:1.3,
-                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                            {isGroup
-                              ? [wine.producer, `${groupYearsMin}–${groupYearsMax}`].filter(Boolean).join(" · ")
-                              : [wine.producer, wine.year].filter(Boolean).join(" · ")
+                        {/* Chips: invecchiamento + rack + prezzo + rating */}
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 14 }}>
+                          {(()=>{const ag=getAgingStatus(wine);if(!ag)return null;
+                            const age=new Date().getFullYear()-wine.year;
+                            const pf=wine.enrichment?.peakFrom, pt=wine.enrichment?.peakTo;
+                            const label = (pf!=null&&pt!=null) ? `${wine.year+pf}–${wine.year+pt}` : `${age}a`;
+                            return (
+                              <span style={{ fontSize: 12, color: ag.c, fontFamily: "'Cinzel', serif", fontWeight: 700,
+                                background: `${ag.c}12`, border: `1px solid ${ag.c}35`,
+                                borderRadius: 20, padding: "3px 10px" }}>
+                                {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {ag.s} · {label}
+                              </span>
+                            );
+                          })()}
+                          {(()=>{
+                            const slotsWithPos=(wine.rackSlots||[]).filter(s=>(s.positions||[]).length>0);
+                            if(!slotsWithPos.length){
+                              if(wine.location){
+                                return(
+                                  <span style={{ fontSize:12, color:C.gold, fontFamily:"'Cinzel',serif",
+                                    background:"rgba(212,168,90,0.08)", border:`1px dashed rgba(212,168,90,0.4)`,
+                                    borderRadius:20, padding:"3px 10px", fontWeight:600 }}>
+                                    📍 {wine.location}
+                                  </span>
+                                );
+                              }
+                              return null;
                             }
-                          </p>
+                            const first=slotsWithPos[0];
+                            const sr=racks.find(r=>r.id===first.rackId);
+                            if(!sr) return null;
+                            const pos=first.positions;
+                            const posLabel=pos.length>1?`${pos[0]} +${pos.length-1}`:pos[0];
+                            const extraSlots=slotsWithPos.length-1;
+                            const abbr=sr.name.split(/\s+/).map(w=>w.length<=2?w.toUpperCase():w[0].toUpperCase()).join("");
+                            return(
+                              <span style={{ fontSize:12, color:C.gold, fontFamily:"'Cinzel',serif",
+                                background:"rgba(201,149,58,0.1)", border:`1px solid rgba(201,149,58,0.2)`,
+                                borderRadius:20, padding:"3px 10px", fontWeight:600 }}>
+                                🗄 {abbr} {posLabel}{extraSlots>0?` +${extraSlots}`:""}
+                              </span>
+                            );
+                          })()}
                           {!isGroup && wine.price && (
-                            <p style={{fontFamily:"'Cinzel',serif",fontSize:14,color:C.textMuted,margin:"2px 0 0"}}>€{wine.price}</p>
+                            <span style={{ fontSize:12, color:C.textMuted, fontFamily:"'Cinzel',serif",
+                              background:C.bg, border:`1px solid ${C.border}`,
+                              borderRadius:20, padding:"3px 10px", fontWeight:600 }}>
+                              💶 €{wine.price}
+                            </span>
+                          )}
+                          {wine.rating>0 && (
+                            <span style={{ fontSize:12, color:"#e0c070", fontFamily:"'Cinzel',serif", fontWeight:700,
+                              background:"rgba(224,192,112,0.1)", border:`1px solid rgba(224,192,112,0.3)`,
+                              borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>
+                              {"★".repeat(wine.rating)}{"☆".repeat(Math.max(0,5-wine.rating))}
+                            </span>
                           )}
                         </div>
-
-                        {/* Blocco bottom: se gruppo → chip per ogni annata; altrimenti → scaffale + invecchiamento singolo */}
-                        {isGroup ? (
-                          <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+                        {/* Verticale */}
+                        {isGroup && (
+                          <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginTop:12 }}>
                             {group.wines.map(w => {
                               const wag = getAgingStatus(w);
                               const wc = wag?.c || C.border;
                               const emo = wag?.s === "Giovane" ? "🌱" : wag?.s === "Apice" ? "⭐" : wag?.s === "Maturo" ? "🍂" : wag?.s === "Declino" ? "📉" : "";
                               return (
-                                <span key={w.id} style={{
-                                  fontSize: 11, color: wc, fontFamily: "'Cinzel', serif", fontWeight: 700,
-                                  background: `${wc}12`, border: `1px solid ${wc}45`,
-                                  borderRadius: 14, padding: "2px 7px", whiteSpace: "nowrap",
-                                }}>
+                                <span key={w.id} onClick={(e)=>{ e.stopPropagation(); setVerticaleOpen(group); }}
+                                  style={{ fontSize:11, color:wc, fontFamily:"'Cinzel',serif", fontWeight:700,
+                                    background:`${wc}12`, border:`1px solid ${wc}45`,
+                                    borderRadius:14, padding:"2px 7px", whiteSpace:"nowrap", cursor:"pointer" }}>
                                   {w.year} · {w.quantity || 0}bt {emo}
                                 </span>
                               );
                             })}
                           </div>
-                        ) : ((wine.rackSlots||[]).some(s=>(s.positions||[]).length>0) || wine.location || getAgingStatus(wine)) && (
-                          <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
-                            {(()=>{
-                              const slotsWithPos=(wine.rackSlots||[]).filter(s=>(s.positions||[]).length>0);
-                              if(!slotsWithPos.length){
-                                // Nessuno scaffale: mostra la location se presente
-                                if(wine.location){
-                                  return(
-                                    <span style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
-                                      background:"rgba(212,168,90,0.08)",border:`1px dashed rgba(212,168,90,0.4)`,
-                                      borderRadius:20,padding:"2px 8px",fontWeight:600}}>
-                                      📍 {wine.location}
-                                    </span>
-                                  );
-                                }
-                                return null;
-                              }
-                              const first=slotsWithPos[0];
-                              const sr=racks.find(r=>r.id===first.rackId);
-                              if(!sr) return null;
-                              const pos=first.positions;
-                              const posLabel=pos.length>1?`${pos[0]} +${pos.length-1}`:pos[0];
-                              const extraSlots=slotsWithPos.length-1;
-                              const abbr=sr.name.split(/\s+/).map(w=>w.length<=2?w.toUpperCase():w[0].toUpperCase()).join("");
-                              return(
-                                <span style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",
-                                  background:"rgba(201,149,58,0.1)",border:`1px solid rgba(201,149,58,0.2)`,
-                                  borderRadius:20,padding:"2px 8px",fontWeight:600}}>
-                                  🗄 {abbr} {posLabel}{extraSlots>0?` +${extraSlots}`:""}
-                                </span>
-                              );
-                            })()}
-                            {(()=>{const ag=getAgingStatus(wine);if(!ag)return null;
-                              const age=new Date().getFullYear()-wine.year;
-                              const pf=wine.enrichment?.peakFrom, pt=wine.enrichment?.peakTo;
-                              const label = (pf!=null&&pt!=null)
-                                ? `${wine.year+pf}–${wine.year+pt}`
-                                : `${age}a`;
-                              return(
-                                <span style={{fontSize:12,color:ag.c,fontFamily:"'Cinzel',serif",fontWeight:700,
-                                  background:`${ag.c}12`,border:`1px solid ${ag.c}35`,
-                                  borderRadius:20,padding:"2px 8px"}}>
-                                  {ag.s==="Giovane"?"🌱":ag.s==="Apice"?"⭐":ag.s==="Maturo"?"🍂":"📉"} {label}
-                                </span>
-                              );
-                            })()}
+                        )}
+                        {/* Divisore */}
+                        <div style={{ height:1, background:`linear-gradient(90deg, transparent, ${C.gold}33, transparent)`, margin:"22px 0 18px" }}/>
+                        {/* Sezioni enrichment */}
+                        {(() => {
+                          const sections = [
+                            ["🍇 Il Vitigno", en.grapeProfile],
+                            ["👃 Sentori & Degustazione", en.tastingNotes],
+                            ["🌍 Territorio & Denominazione", en.territory],
+                            ["⏳ Invecchiamento", en.aging],
+                            ["🍽 Abbinamenti", en.foodPairing],
+                            ["💡 Curiosità", en.curiosity],
+                          ].filter(([,v]) => v);
+                          if (sections.length === 0) return (
+                            <p style={{ fontFamily:"Georgia,serif", fontSize:15, color:C.textFaint, fontStyle:"italic", margin:"0 0 18px" }}>
+                              Analisi non ancora generata. Apri la scheda per creare quella del sommelier.
+                            </p>
+                          );
+                          return (
+                            <div style={{ display:"flex", flexDirection:"column", gap:16, marginBottom:20 }}>
+                              {sections.map(([label, text]) => (
+                                <div key={label}>
+                                  <div style={{ fontSize:12, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:2, marginBottom:5, fontWeight:700 }}>
+                                    {label}
+                                  </div>
+                                  <p style={{ fontSize:17, color:C.textMuted, lineHeight:1.7, fontFamily:"Georgia, 'Times New Roman', serif", margin:0 }}>
+                                    {text}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                        {/* Scheda ufficiale produttore */}
+                        <div style={{ background: C.bg, border: `1px solid ${C.gold}33`, borderRadius: 10, padding: "14px 16px", marginTop: 8, marginBottom: 16 }}>
+                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10, gap:10, flexWrap:"wrap" }}>
+                            <div style={{ fontSize:12, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:2, fontWeight:700 }}>
+                              🏛 SCHEDA UFFICIALE
+                            </div>
+                            <button
+                              onClick={() => handleEnrichProducer(wine)}
+                              disabled={isFetchingProducer}
+                              style={{
+                                background: isFetchingProducer ? "rgba(201,149,58,0.1)" : "linear-gradient(135deg, #a07828, #c9953a)",
+                                color: isFetchingProducer ? C.gold : "#1a0800",
+                                border: isFetchingProducer ? `1px solid ${C.gold}` : "none",
+                                borderRadius: 7, padding: "7px 14px",
+                                cursor: isFetchingProducer ? "not-allowed" : "pointer",
+                                fontFamily: "'Cinzel', serif", fontSize: 11, letterSpacing: 1, fontWeight: 700,
+                                display: "flex", alignItems: "center", gap: 6,
+                              }}>
+                              {isFetchingProducer
+                                ? <><div style={{width:12,height:12,border:"2px solid rgba(201,149,58,0.3)",borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/> Cerco…</>
+                                : ps ? "🔄 Aggiorna" : "🌐 Cerca sul sito produttore"}
+                            </button>
+                          </div>
+                          {producerError?.wineId === wine.id && (
+                            <p style={{ fontSize:12, color:"#c07070", margin:"0 0 8px" }}>{producerError.msg}</p>
+                          )}
+                          {ps && ps.found === false && (
+                            <p style={{ fontSize:14, color:C.textFaint, fontStyle:"italic", margin:0 }}>
+                              Nessuna pagina ufficiale trovata. {ps.sourceNote}
+                            </p>
+                          )}
+                          {ps && ps.found && (
+                            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                              {ps.description && (
+                                <p style={{ fontSize:16, color:C.text, lineHeight:1.65, fontFamily:"Georgia,serif", margin:0 }}>
+                                  {ps.description}
+                                </p>
+                              )}
+                              {ps.tastingNotes && (
+                                <div>
+                                  <div style={{ fontSize:11, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:1.5, fontWeight:700, marginBottom:3 }}>NOTE DEL PRODUTTORE</div>
+                                  <p style={{ fontSize:15, color:C.textMuted, lineHeight:1.65, fontFamily:"Georgia,serif", margin:0 }}>{ps.tastingNotes}</p>
+                                </div>
+                              )}
+                              {ps.technicalSheet && (
+                                <div>
+                                  <div style={{ fontSize:11, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:1.5, fontWeight:700, marginBottom:3 }}>SCHEDA TECNICA</div>
+                                  <p style={{ fontSize:15, color:C.textMuted, lineHeight:1.6, fontFamily:"Georgia,serif", margin:0 }}>{ps.technicalSheet}</p>
+                                </div>
+                              )}
+                              {ps.foodPairing && (
+                                <div>
+                                  <div style={{ fontSize:11, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:1.5, fontWeight:700, marginBottom:3 }}>ABBINAMENTI</div>
+                                  <p style={{ fontSize:15, color:C.textMuted, lineHeight:1.6, fontFamily:"Georgia,serif", margin:0 }}>{ps.foodPairing}</p>
+                                </div>
+                              )}
+                              {ps.awards && (
+                                <div>
+                                  <div style={{ fontSize:11, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:1.5, fontWeight:700, marginBottom:3 }}>RICONOSCIMENTI</div>
+                                  <p style={{ fontSize:15, color:C.textMuted, lineHeight:1.6, fontFamily:"Georgia,serif", margin:0 }}>{ps.awards}</p>
+                                </div>
+                              )}
+                              <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", marginTop:4 }}>
+                                {ps.wineUrl && (
+                                  <a href={ps.wineUrl} target="_blank" rel="noopener noreferrer"
+                                    style={{ fontSize:12, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:1, textDecoration:"none", border:`1px solid ${C.gold}55`, padding:"4px 10px", borderRadius:6 }}>
+                                    ↗ Pagina del vino
+                                  </a>
+                                )}
+                                {ps.producerUrl && !ps.wineUrl && (
+                                  <a href={ps.producerUrl} target="_blank" rel="noopener noreferrer"
+                                    style={{ fontSize:12, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:1, textDecoration:"none", border:`1px solid ${C.gold}55`, padding:"4px 10px", borderRadius:6 }}>
+                                    ↗ Sito produttore
+                                  </a>
+                                )}
+                                {ps.sourceNote && (
+                                  <span style={{ fontSize:11, color:C.textFaint, fontStyle:"italic" }}>{ps.sourceNote}</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          {!ps && !isFetchingProducer && !(producerError?.wineId === wine.id) && (
+                            <p style={{ fontSize:13, color:C.textFaint, fontStyle:"italic", margin:0 }}>
+                              Scarica la scheda tecnica direttamente dal sito del produttore.
+                            </p>
+                          )}
+                        </div>
+                        {/* Note personali */}
+                        {wine.notes && (
+                          <div style={{ borderLeft:`2px solid ${C.gold}55`, paddingLeft:14, margin:"0 0 18px" }}>
+                            <div style={{ fontSize:11, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:2, fontWeight:700, marginBottom:4 }}>NOTE PERSONALI</div>
+                            <p style={{ fontSize:16, color:C.textMuted, lineHeight:1.6, fontFamily:"Georgia,serif", margin:0, fontStyle:"italic" }}>{wine.notes}</p>
                           </div>
                         )}
-
+                        {/* Azioni */}
+                        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:10 }}>
+                          <button
+                            onClick={() => {
+                              if (isGroup) { setVerticaleOpen(group); return; }
+                              setEditing({...wine}); setViewFromPos(null); setEnrichData(null); setEnrichError(null); setEstimatedValue(null); setModal("view");
+                            }}
+                            style={{
+                              background:"linear-gradient(135deg, #8a6828, #d4a85a 50%, #8a6828)",
+                              color:"#1a0800", border:"none", borderRadius:8,
+                              padding:"10px 20px", cursor:"pointer",
+                              fontFamily:"'Cinzel',serif", fontSize:12, letterSpacing:1.5, fontWeight:700,
+                            }}>
+                            {isGroup ? "📚 Apri verticale" : "📖 Apri scheda"}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </article>
                 );
               })}
+              </div>
+              {/* Indice alfabetico verticale sulla destra */}
+              {(() => {
+                const letters = Array.from(new Set(filteredGrouped.map(g => ((g.wines[0].name || "").trim()[0] || "").toUpperCase()).filter(Boolean))).sort();
+                if (letters.length <= 1) return null;
+                return (
+                  <div style={{
+                    position: "absolute", right: 6, top: "50%",
+                    transform: "translateY(-50%)",
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    gap: 0, padding: "8px 4px",
+                    background: "rgba(24,11,16,0.62)",
+                    border: `1px solid ${C.gold}22`,
+                    borderRadius: 10,
+                    backdropFilter: "blur(6px)",
+                    maxHeight: "min(78vh, 520px)",
+                    overflowY: "auto",
+                    zIndex: 5,
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                  }}>
+                    {letters.map(L => (
+                      <button key={L}
+                        onClick={() => {
+                          if (!magazineRef.current) return;
+                          const idx = filteredGrouped.findIndex(g => ((g.wines[0].name || "").trim()[0] || "").toUpperCase() === L);
+                          if (idx < 0) return;
+                          const w = magazineRef.current.clientWidth;
+                          magazineRef.current.scrollTo({ left: idx * w, behavior: "smooth" });
+                          setMagazineLetter(L);
+                        }}
+                        style={{
+                          background: "none", border: "none",
+                          fontFamily: "'Cinzel', serif",
+                          fontSize: 10, lineHeight: 1.25,
+                          fontWeight: 700,
+                          color: magazineLetter === L ? C.gold : C.textFaint,
+                          padding: "2px 5px", margin: 0,
+                          cursor: "pointer",
+                          letterSpacing: 0.5,
+                          transition: "color 0.15s",
+                        }}>{L}</button>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

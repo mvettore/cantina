@@ -9,6 +9,12 @@
 [functions."enrich-wine"]
   timeout = 26
 
+[functions."upload-photo"]
+  timeout = 26
+
+[functions."enrich-producer"]
+  timeout = 26
+
 [functions."search-wine-url"]
   timeout = 26
 
