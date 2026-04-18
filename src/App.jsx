@@ -1593,6 +1593,48 @@ export default function App() {
           .modal-box { border-radius: 20px 20px 0 0 !important; max-height: 95svh !important; }
           .mobile-header-title { font-size: 18px !important; }
         }
+
+        /* Magazine view — layout a colonna singola (mobile) o spread su schermi larghi */
+        .mag-sheet {
+          display: grid;
+          grid-template-columns: 1fr;
+          grid-template-rows: auto 1fr;
+          height: 100%;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .mag-hero { height: min(48vh, 420px); }
+        .mag-body {
+          padding: 22px 44px 22px 22px;
+          max-width: 760px;
+          margin: 0 auto;
+          width: 100%;
+        }
+        @media (min-width: 900px) {
+          .mag-sheet {
+            grid-template-columns: 42% 1fr;
+            grid-template-rows: 1fr;
+            overflow: hidden;
+          }
+          .mag-hero {
+            height: 100%;
+            max-height: none;
+            border-right: 1px solid ${C.gold}22;
+            border-bottom: none !important;
+          }
+          .mag-body {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 48px 56px 60px 56px;
+            max-width: none;
+            margin: 0;
+          }
+          .mag-body-inner { max-width: 640px; }
+        }
+        @media (min-width: 1400px) {
+          .mag-body { padding: 64px 80px; }
+          .mag-body-inner { max-width: 720px; margin: 0 auto; }
+        }
         @keyframes spin { to { transform: rotate(360deg); } }
         .rack-card { background: ${C.surface2}; border: 1px solid ${C.border}; border-radius: 12px; overflow: hidden; }
         .action-btn { flex: 1; background: none; border: none; cursor: pointer; padding: 10px; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px; transition: color 0.15s, background 0.15s; }
@@ -2072,19 +2114,19 @@ export default function App() {
                     borderRight: `1px solid ${C.border}`,
                   }}>
                     <div style={{ height: 4, background: `linear-gradient(90deg, ${tc.bar} 0%, ${tc.bar}dd 100%)` }} />
-                    <div style={{ height: "calc(100% - 4px)", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 0 90px" }}>
+                    <div className="mag-sheet" style={{ height: "calc(100% - 4px)", paddingBottom: 0 }}>
                       {/* Hero: foto intera in cornice scura (contain, no crop) */}
-                      <div
+                      <div className="mag-hero"
                         onClick={firstPhoto ? () => setLightboxPhoto(firstPhoto) : undefined}
                         style={{
                           position: "relative",
-                          height: firstPhoto ? "min(48vh, 420px)" : 120,
                           overflow: "hidden",
                           background: firstPhoto
                             ? `radial-gradient(ellipse at 50% 30%, ${tc.badge}33 0%, ${C.bg} 70%)`
                             : `linear-gradient(135deg, ${tc.badge}dd, ${tc.bar}66)`,
                           borderBottom: `1px solid ${C.gold}22`,
                           cursor: firstPhoto ? "zoom-in" : "default",
+                          ...(firstPhoto ? {} : { height: 120 }),
                         }}>
                         {firstPhoto ? (
                           <img src={firstPhoto} alt={wine.name} loading="lazy" decoding="async"
@@ -2114,12 +2156,13 @@ export default function App() {
                         )}
                       </div>
                       {/* Corpo della scheda */}
-                      <div style={{ maxWidth: 760, margin: "0 auto", padding: "22px 42px 22px 22px" }}>
+                      <div className="mag-body">
+                      <div className="mag-body-inner">
                         <h2 style={{
-                          fontFamily: "'Cormorant Garamond', 'Cinzel', serif",
-                          fontSize: "clamp(26px, 5.5vw, 40px)",
-                          color: C.text, fontWeight: 700, lineHeight: 1.12,
-                          margin: 0, letterSpacing: 0.5,
+                          fontFamily: "'Cinzel', serif",
+                          fontSize: "clamp(24px, 3.5vw, 34px)",
+                          color: C.text, fontWeight: 700, lineHeight: 1.18,
+                          margin: 0, letterSpacing: 1,
                         }}>{wine.name}</h2>
                         {wine.denomination && (
                           <div style={{ fontFamily: "'Cinzel', serif", fontSize: 12, color: C.gold, letterSpacing: 2, marginTop: 6, textTransform: "uppercase" }}>
@@ -2356,6 +2399,7 @@ export default function App() {
                             <span>{gIdx + 1} / {filteredGrouped.length}</span>
                           </div>
                         </div>
+                      </div>
                       </div>
                     </div>
                   </article>
