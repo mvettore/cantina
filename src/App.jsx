@@ -522,6 +522,7 @@ export default function App() {
   const [producerEnrichingId, setProducerEnrichingId] = useState(null); // wine.id in fetch
   const [producerError, setProducerError] = useState(null); // { wineId, msg }
   const [magazineLetter, setMagazineLetter] = useState(null);
+  const [magazineIdx, setMagazineIdx] = useState(0);
   const magazineRef = useRef(null);
   const scanInputRef    = useRef(null);
   const secondPhotoRef  = useRef(null);
@@ -2007,6 +2008,7 @@ export default function App() {
                 onScroll={e => {
                   const el = e.currentTarget;
                   const idx = Math.round(el.scrollLeft / el.clientWidth);
+                  setMagazineIdx(prev => prev === idx ? prev : idx);
                   const g = filteredGrouped[idx];
                   if (!g) return;
                   const L = ((g.wines[0].name || "").trim()[0] || "").toUpperCase();
@@ -2022,7 +2024,21 @@ export default function App() {
                   scrollBehavior: "smooth",
                   height: "100%",
                 }}>
-              {filteredGrouped.map(group => {
+              {filteredGrouped.map((group, gIdx) => {
+                const inView = Math.abs(gIdx - magazineIdx) <= 2;
+                if (!inView) {
+                  return (
+                    <article key={group.wines.length > 1 ? group.key : group.wines[0].id}
+                      style={{
+                        flex: "0 0 100%",
+                        width: "100%",
+                        height: "100%",
+                        scrollSnapAlign: "start",
+                        overflow: "hidden",
+                        background: C.surface,
+                      }}/>
+                  );
+                }
                 const wine = group.wines[0]; // rappresentativa = più recente
                 const isGroup = group.wines.length > 1;
                 const groupTotalBt = group.wines.reduce((s,w) => s + (w.quantity || 0), 0);
@@ -2069,7 +2085,7 @@ export default function App() {
                           cursor: firstPhoto ? "zoom-in" : "default",
                         }}>
                         {firstPhoto ? (
-                          <img src={firstPhoto} alt={wine.name}
+                          <img src={firstPhoto} alt={wine.name} loading="lazy" decoding="async"
                             style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}/>
                         ) : (
                           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56, opacity: 0.3 }}>🍷</div>
@@ -2081,7 +2097,7 @@ export default function App() {
                           color: groupTotalBt===0?"#d07070":groupTotalBt<=2?"#e0c070":"#a0e0a0",
                           padding: "4px 12px", borderRadius: 20, fontSize: 14,
                           fontFamily: "'Cinzel', serif", fontWeight: 700, letterSpacing: 1,
-                          backdropFilter: "blur(6px)",
+                          backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
                         }}>{groupTotalBt}bt</div>
                         {wine.type && (
                           <div style={{
@@ -2091,7 +2107,7 @@ export default function App() {
                             color: tc.text,
                             padding: "3px 11px", borderRadius: 14, fontSize: 11,
                             fontFamily: "'Cinzel', serif", fontWeight: 700, letterSpacing: 1.5,
-                            backdropFilter: "blur(6px)",
+                            backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
                           }}>{wine.type.toUpperCase()}</div>
                         )}
                       </div>
@@ -2351,6 +2367,7 @@ export default function App() {
                     border: `1px solid ${C.gold}22`,
                     borderRadius: 10,
                     backdropFilter: "blur(6px)",
+                    WebkitBackdropFilter: "blur(6px)",
                     maxHeight: "min(78vh, 520px)",
                     overflowY: "auto",
                     zIndex: 5,
