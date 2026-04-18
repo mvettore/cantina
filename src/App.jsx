@@ -2073,20 +2073,22 @@ export default function App() {
                   }}>
                     <div style={{ height: 4, background: `linear-gradient(90deg, ${tc.bar} 0%, ${tc.bar}dd 100%)` }} />
                     <div style={{ height: "calc(100% - 4px)", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 0 90px" }}>
-                      {/* Hero: foto grande o placeholder colorato */}
+                      {/* Hero: foto intera in cornice scura (contain, no crop) */}
                       <div
                         onClick={firstPhoto ? () => setLightboxPhoto(firstPhoto) : undefined}
                         style={{
                           position: "relative",
-                          height: firstPhoto ? 280 : 120,
+                          height: firstPhoto ? "min(48vh, 420px)" : 120,
                           overflow: "hidden",
-                          background: firstPhoto ? "transparent" : `linear-gradient(135deg, ${tc.badge}dd, ${tc.bar}66)`,
-                          borderBottom: `1px solid ${C.border}`,
+                          background: firstPhoto
+                            ? `radial-gradient(ellipse at 50% 30%, ${tc.badge}33 0%, ${C.bg} 70%)`
+                            : `linear-gradient(135deg, ${tc.badge}dd, ${tc.bar}66)`,
+                          borderBottom: `1px solid ${C.gold}22`,
                           cursor: firstPhoto ? "zoom-in" : "default",
                         }}>
                         {firstPhoto ? (
                           <img src={firstPhoto} alt={wine.name} loading="lazy" decoding="async"
-                            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}/>
+                            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", padding: 14, filter: "drop-shadow(0 6px 22px rgba(0,0,0,0.55))" }}/>
                         ) : (
                           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56, opacity: 0.3 }}>🍷</div>
                         )}
@@ -2205,8 +2207,12 @@ export default function App() {
                             })}
                           </div>
                         )}
-                        {/* Divisore */}
-                        <div style={{ height:1, background:`linear-gradient(90deg, transparent, ${C.gold}33, transparent)`, margin:"22px 0 18px" }}/>
+                        {/* Divisore ornamentale */}
+                        <div style={{ display:"flex", alignItems:"center", gap:14, margin:"22px 0 18px" }}>
+                          <div style={{ flex:1, height:1, background:`linear-gradient(90deg, transparent, ${C.gold}55)` }}/>
+                          <span style={{ color: C.gold, fontSize: 16, opacity: 0.8, letterSpacing: 4 }}>❦</span>
+                          <div style={{ flex:1, height:1, background:`linear-gradient(90deg, ${C.gold}55, transparent)` }}/>
+                        </div>
                         {/* Sezioni enrichment */}
                         {(() => {
                           const sections = [
@@ -2346,6 +2352,17 @@ export default function App() {
                             }}>
                             {isGroup ? "📚 Apri verticale" : "📖 Apri scheda"}
                           </button>
+                        </div>
+                        {/* Numero di pagina stile rivista */}
+                        <div style={{
+                          marginTop: 28, paddingTop: 14,
+                          borderTop: `1px solid ${C.gold}22`,
+                          display: "flex", justifyContent: "space-between", alignItems: "center",
+                          fontFamily: "'Cinzel', serif", fontSize: 10, color: C.textFaint,
+                          letterSpacing: 3, textTransform: "uppercase",
+                        }}>
+                          <span>❦ {(wine.type || "").toUpperCase()}</span>
+                          <span>{gIdx + 1} / {filteredGrouped.length}</span>
                         </div>
                       </div>
                     </div>
@@ -3413,6 +3430,94 @@ export default function App() {
                       {!displayData && !enriching && !enrichError && (
                         <p style={{fontSize:13,color:C.textFaint,fontStyle:"italic"}}>
                           Clicca "Analizza" per ricevere informazioni approfondite su vitigno, sentori, territorio e abbinamenti. L'analisi viene salvata automaticamente.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* ── SCHEDA UFFICIALE PRODUTTORE ── */}
+                {(() => {
+                  const ps = editing.enrichment?.producerSheet;
+                  const isFetchingProducer = producerEnrichingId === editing.id;
+                  const hasProducerError = producerError?.wineId === editing.id;
+                  return (
+                    <div style={{background:C.bg,borderRadius:9,padding:"10px 14px",marginBottom:10,border:`1px solid ${C.gold}33`}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom: (ps||isFetchingProducer||hasProducerError) ? 12 : 0, gap:10, flexWrap:"wrap"}}>
+                        <div>
+                          <div style={{fontSize:13,color:C.gold,letterSpacing:1.5,fontFamily:"'Cinzel', serif", fontWeight:700}}>
+                            🏛 SCHEDA UFFICIALE
+                          </div>
+                          {ps?.fetchedAt && (
+                            <div style={{fontSize:12,color:C.textFaint,marginTop:3,fontStyle:"italic"}}>
+                              Dal sito produttore · {new Date(ps.fetchedAt).toLocaleDateString("it-IT",{day:"2-digit",month:"long",year:"numeric"})}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={()=>handleEnrichProducer(editing)} disabled={isFetchingProducer}
+                          style={{
+                            background: isFetchingProducer ? "rgba(201,149,58,0.1)" : "linear-gradient(135deg, #a07828, #c9953a)",
+                            color: isFetchingProducer ? C.gold : "#1a0800",
+                            border: isFetchingProducer ? `1px solid ${C.gold}` : "none",
+                            borderRadius:7, padding:"8px 16px", cursor: isFetchingProducer ? "not-allowed" : "pointer",
+                            fontFamily:"'Cinzel', serif", fontSize:12, letterSpacing:1.5, fontWeight:700,
+                            display:"flex", alignItems:"center", gap:8,
+                          }}>
+                          {isFetchingProducer
+                            ? <><div style={{width:14,height:14,border:"2px solid rgba(201,149,58,0.3)",borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/> Cerco…</>
+                            : ps ? "🔄 Aggiorna" : "🌐 Cerca sul sito"}
+                        </button>
+                      </div>
+                      {hasProducerError && (
+                        <p style={{fontSize:13,color:"#c07070",margin:"0 0 8px"}}>{producerError.msg}</p>
+                      )}
+                      {ps && ps.found === false && (
+                        <p style={{fontSize:14,color:C.textFaint,fontStyle:"italic",margin:0}}>
+                          Nessuna pagina ufficiale trovata. {ps.sourceNote}
+                        </p>
+                      )}
+                      {ps && ps.found && (
+                        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                          {ps.description && (
+                            <p style={{fontSize:17,color:C.textMuted,lineHeight:1.7,fontFamily:"Georgia,'Times New Roman',serif",margin:0}}>
+                              {ps.description}
+                            </p>
+                          )}
+                          {[
+                            ["NOTE DEL PRODUTTORE", ps.tastingNotes],
+                            ["SCHEDA TECNICA", ps.technicalSheet],
+                            ["ABBINAMENTI", ps.foodPairing],
+                            ["RICONOSCIMENTI", ps.awards],
+                          ].filter(([,v]) => v).map(([label, text]) => (
+                            <div key={label}>
+                              <div style={{fontSize:13,color:C.gold,fontFamily:"'Cinzel', serif",letterSpacing:1,marginBottom:3,fontWeight:700}}>
+                                {label}
+                              </div>
+                              <p style={{fontSize:17,color:C.textMuted,lineHeight:1.7,fontFamily:"Georgia, 'Times New Roman', serif",margin:0}}>{text}</p>
+                            </div>
+                          ))}
+                          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+                            {ps.wineUrl && (
+                              <a href={ps.wineUrl} target="_blank" rel="noopener noreferrer"
+                                style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",letterSpacing:1,textDecoration:"none",border:`1px solid ${C.gold}55`,padding:"4px 10px",borderRadius:6}}>
+                                ↗ Pagina del vino
+                              </a>
+                            )}
+                            {ps.producerUrl && !ps.wineUrl && (
+                              <a href={ps.producerUrl} target="_blank" rel="noopener noreferrer"
+                                style={{fontSize:12,color:C.gold,fontFamily:"'Cinzel',serif",letterSpacing:1,textDecoration:"none",border:`1px solid ${C.gold}55`,padding:"4px 10px",borderRadius:6}}>
+                                ↗ Sito produttore
+                              </a>
+                            )}
+                            {ps.sourceNote && (
+                              <span style={{fontSize:12,color:C.textFaint,fontStyle:"italic"}}>{ps.sourceNote}</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {!ps && !isFetchingProducer && !hasProducerError && (
+                        <p style={{fontSize:13,color:C.textFaint,fontStyle:"italic"}}>
+                          Scarica la descrizione e la scheda tecnica direttamente dal sito del produttore.
                         </p>
                       )}
                     </div>
