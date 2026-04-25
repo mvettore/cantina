@@ -523,6 +523,9 @@ export default function App() {
   const secondPhotoRef  = useRef(null);
   const addPhotoRef     = useRef(null);
   const tastingPhotoRef = useRef(null);
+  const logScanRef      = useRef(null);
+  const [logScanning, setLogScanning] = useState(false);
+  const [logScanError, setLogScanError] = useState(null);
   const [firstPhotoData, setFirstPhotoData] = useState(null); // {scanDataUrl, hiResDataUrl}
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 99) + 1);
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
@@ -1011,6 +1014,36 @@ export default function App() {
     }
   };
 
+  // ── Scansione etichetta per log rapido ──
+  const handleLogScanFile = async (file) => {
+    if (!file) return;
+    setLogScanError(null);
+    setLogScanning(true);
+    try {
+      const scanDataUrl  = await resizeImage(file, 700, 0.82);
+      const hiResDataUrl = await resizeImage(file, 1800, 0.93);
+      const info = await scanLabel(scanDataUrl);
+      const cropped = await autoCropLabel(hiResDataUrl);
+      const photo = cropped || hiResDataUrl;
+      setLogEntry(prev => ({
+        ...prev,
+        wineName:     info.name     || prev.wineName,
+        wineProducer: info.producer || prev.wineProducer,
+        wineYear:     info.year     || prev.wineYear,
+        wineType:     WINE_TYPES.includes(info.type) ? info.type : prev.wineType,
+        wineGrape:    info.grape    || prev.wineGrape,
+        wineRegion:   info.region   || prev.wineRegion,
+        winePhotos:   [photo, ...(prev.winePhotos||[])],
+      }));
+      showToast(cropped ? "✨ Etichetta riconosciuta e ritagliata!" : "✨ Etichetta riconosciuta!");
+    } catch (err) {
+      console.error(err);
+      setLogScanError("Non sono riuscito a leggere l'etichetta. Riprova con una foto più nitida.");
+    } finally {
+      setLogScanning(false);
+    }
+  };
+
   // Aggiunge una foto extra (retro, dettaglio) senza riconoscimento OCR
   const handleAddPhoto = async (file) => {
     if (!file) return;
@@ -1385,7 +1418,7 @@ export default function App() {
     showUndoToast(`Scaffale "${rack.name}" eliminato`, () => { saveRacks(prevRacks); saveWines(prevWines); });
   };
 
-  const getWineAtPosition = (rackId, pos) => wines.find(w => (w.rackSlots||[]).some(s => s.rackId === rackId && (s.positions||[]).includes(pos)));
+  const getWineAtPosition = (rackId, pos) => activeWines.find(w => (w.rackSlots||[]).some(s => s.rackId === rackId && (s.positions||[]).includes(pos)));
 
   // v2 palette: deep wine & champagne — più elegante, meno "rustico marrone"
   const C = {
@@ -1428,7 +1461,7 @@ export default function App() {
           {Array.from({ length: rack.cols }, (_, c) => {
             const pos = `${ROW_LABELS[r]}${c + 1}`;
             const isThis = (highlightPositions||[]).includes(pos);
-            const occupant = wines.find(w => (w.rackSlots||[]).some(s => s.rackId === rack.id && (s.positions||[]).includes(pos)));
+            const occupant = activeWines.find(w => (w.rackSlots||[]).some(s => s.rackId === rack.id && (s.positions||[]).includes(pos)));
             const isOther = occupant && occupant.id !== editing?.id;
             const otc = isOther ? typeColors[occupant.type] : null;
             return (
@@ -2134,7 +2167,7 @@ export default function App() {
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
             {racks.map(rack => {
-              const occPositions = wines.flatMap(w => (w.rackSlots||[]).filter(s => s.rackId === rack.id).flatMap(s => s.positions||[]));
+              const occPositions = activeWines.flatMap(w => (w.rackSlots||[]).filter(s => s.rackId === rack.id).flatMap(s => s.positions||[]));
               return (
                 <div key={rack.id} className="rack-card">
                   <div style={{ padding: "17px 22px 14px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -2178,7 +2211,7 @@ export default function App() {
                         })}
                       </div>
                     ))}
-                    {occPositions.length>0&&(()=>{const occWines=wines.filter(w=>(w.rackSlots||[]).some(s=>s.rackId===rack.id&&(s.positions||[]).length>0));return(
+                    {occPositions.length>0&&(()=>{const occWines=activeWines.filter(w=>(w.rackSlots||[]).some(s=>s.rackId===rack.id&&(s.positions||[]).length>0));return(
                       <div style={{marginTop:14,display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}}>
                         <span style={{fontSize:15,color:C.textFaint,fontFamily:"'Cinzel', serif",letterSpacing:1}}>LEGENDA:</span>
                         {[...new Set(occWines.map(w=>w.type))].map(type=>{const c=typeColors[type];return(
@@ -3340,7 +3373,7 @@ export default function App() {
                           {Array.from({ length: rack.cols }, (_, c) => {
                             const pos = `${ROW_LABELS[r]}${c + 1}`;
                             const isThis = positions.includes(pos);
-                            const otherWine = !isThis && wines.find(w => (w.rackSlots||[]).some(s => s.rackId === rack.id && (s.positions||[]).includes(pos)));
+                            const otherWine = !isThis && activeWines.find(w => (w.rackSlots||[]).some(s => s.rackId === rack.id && (s.positions||[]).includes(pos)));
                             const otc = otherWine ? typeColors[otherWine.type] : null;
                             return (
                               <div key={c}
@@ -4075,6 +4108,7 @@ export default function App() {
                   gusto_persistenza: "", gusto_equilibrio: "",
                   notes: "", wineEnrichment: null,
                 });
+                setLogScanning(false); setLogScanError(null);
                 setLogModal("add");
               }} style={{
                 background: "linear-gradient(135deg, #3a1a5a, #7a3a9a)",
@@ -4137,11 +4171,11 @@ export default function App() {
                   onClick={() => { setLogEntry(entry); setLogModal("edit"); }}
                   style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", display: "flex", gap: 0 }}
                   className="wine-card">
-                  {((entry.winePhotos||[])[0] || entry.winePhoto) && (
-                    <div style={{ width: 72, flexShrink: 0, overflow: "hidden", background: "#000" }}>
-                      <img src={(entry.winePhotos||[])[0] || entry.winePhoto} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} alt={entry.wineName} />
-                    </div>
-                  )}
+                  <div style={{ width: 72, height: 88, flexShrink: 0, overflow: "hidden", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {((entry.winePhotos||[])[0] || entry.winePhoto)
+                      ? <img src={(entry.winePhotos||[])[0] || entry.winePhoto} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} alt={entry.wineName} loading="lazy" />
+                      : <span style={{ fontSize: 28, opacity: 0.3 }}>🍷</span>}
+                  </div>
                   <div style={{ flex: 1, minWidth: 0, padding: "12px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                       <div>
@@ -4231,6 +4265,16 @@ export default function App() {
               {logEntry.wineId == null && (
                 <div style={{ background: C.bg, borderRadius: 9, padding: "14px 16px", border: `1px solid ${C.border}` }}>
                   <p style={{ ...labelStyle, marginBottom: 10, color: C.gold }}>🍷 VINO</p>
+                  {/* Scansione etichetta */}
+                  <input ref={logScanRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleLogScanFile(f); e.target.value = ""; }} />
+                  <button className="btn-scan" disabled={logScanning} onClick={() => logScanRef.current?.click()}
+                    style={{ width: "100%", marginBottom: 12, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    {logScanning
+                      ? <><span className="spin" style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>⏳</span><span>Sto leggendo l'etichetta…</span></>
+                      : <><span style={{ fontSize: 16 }}>📷</span><span>Fotografa etichetta</span></>}
+                  </button>
+                  {logScanError && <p style={{ fontSize: 13, color: "#c07070", marginBottom: 10, textAlign: "center" }}>{logScanError}</p>}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div style={{ gridColumn: "1/-1" }}>
                       <label style={labelStyle}>Nome vino *</label>
