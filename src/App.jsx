@@ -501,12 +501,10 @@ export default function App() {
     if (localStorage.getItem('cantina-photo-supabase-idb') === 'done') return;
     (async () => {
       const existingMap = await idbLoadAllPhotos();
-      // Raccoglie URL Supabase da localStorage (wine objects potrebbero ancora averli)
       let rawWines = [];
       try { const s = localStorage.getItem(STORAGE_KEY); if (s) rawWines = JSON.parse(s); } catch {}
       const toMigrate = [];
       for (const wine of rawWines) {
-        // Salta se IDB ha già foto valide per questo vino
         if ((existingMap[wine.id] || []).filter(isValidPhoto).length > 0) continue;
         const urls = new Set();
         (wine.photos || []).filter(p => typeof p === 'string' && p.includes('supabase.co')).forEach(u => urls.add(u));
@@ -541,6 +539,7 @@ export default function App() {
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   // Ri-analizza i vini con analisi scaduta (>6 mesi) al primo avvio
   useEffect(() => {
