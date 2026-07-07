@@ -443,6 +443,80 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Migrazione una-tantum: scarica le foto da Supabase Storage e le salva come base64 locale.
+  // Da eseguire mentre Supabase è ancora accessibile; dopo, l'app è completamente offline.
+  useEffect(() => {
+    if (localStorage.getItem('cantina-photo-migration-v1') === 'done') return;
+
+    (async () => {
+      // Legge i vini grezzi da localStorage (prima del filtro isValidPhoto)
+      let rawWines = [];
+      try { const s = localStorage.getItem(STORAGE_KEY); if (s) rawWines = JSON.parse(s); } catch {}
+
+      const toMigrate = [];
+      for (const wine of rawWines) {
+        // Salta se la chiave separata ha già foto valide (non-Supabase)
+        try {
+          const sep = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
+          if (sep) {
+            const valid = JSON.parse(sep).filter(isValidPhoto);
+            if (valid.length > 0) continue;
+          }
+        } catch {}
+        // Raccoglie URL Supabase dal main key e dalla chiave separata
+        const urls = new Set();
+        (wine.photos || []).filter(p => typeof p === 'string' && p.includes('supabase.co')).forEach(u => urls.add(u));
+        try {
+          const sep = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
+          if (sep) JSON.parse(sep).filter(p => typeof p === 'string' && p.includes('supabase.co')).forEach(u => urls.add(u));
+        } catch {}
+        if (urls.size > 0) toMigrate.push({ id: wine.id, urls: [...urls] });
+      }
+
+      if (toMigrate.length === 0) {
+        localStorage.setItem('cantina-photo-migration-v1', 'done');
+        return;
+      }
+
+      showToast(`📷 Salvataggio ${toMigrate.length} foto in locale…`);
+
+      let migrated = 0;
+      for (const { id, urls } of toMigrate) {
+        const base64s = [];
+        for (const url of urls) {
+          try {
+            const resp = await fetch(url);
+            if (!resp.ok) continue;
+            const blob = await resp.blob();
+            const b64 = await new Promise((res, rej) => {
+              const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob);
+            });
+            base64s.push(b64);
+          } catch {}
+        }
+        if (base64s.length > 0) { saveWinePhotos(id, base64s); migrated++; }
+      }
+
+      localStorage.setItem('cantina-photo-migration-v1', 'done');
+
+      if (migrated > 0) {
+        // Aggiorna lo stato React per mostrare le foto scaricate senza ricaricare la pagina
+        setWines(current => current.map(wine => {
+          try {
+            const raw = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
+            if (raw) {
+              const photos = JSON.parse(raw).filter(isValidPhoto);
+              if (photos.length > 0) return { ...wine, photos };
+            }
+          } catch {}
+          return wine;
+        }));
+        showToast(`✅ ${migrated} foto salvate in locale`);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Ri-analizza i vini con analisi scaduta (>6 mesi) al primo avvio
   useEffect(() => {
     const sixMonthsAgo = new Date();
