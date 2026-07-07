@@ -421,6 +421,17 @@ export default function App() {
     } catch {}
   }, []);
 
+  // Migrazione una-tantum: se i vini hanno foto inline nel main storage (formato pre-refactor),
+  // salvale nelle chiavi separate prima che qualsiasi save le perda.
+  useEffect(() => {
+    wines.forEach(wine => {
+      if ((wine.photos || []).length > 0) {
+        saveWinePhotos(wine.id, wine.photos);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Ri-analizza i vini con analisi scaduta (>6 mesi) al primo avvio
   useEffect(() => {
     const sixMonthsAgo = new Date();
@@ -1012,16 +1023,14 @@ export default function App() {
       if (!resp.ok) return;
       const data = await resp.json();
       const enrichment = { ...data, enrichedAt: new Date().toISOString() };
-      setWines(current => {
-        // Usa il vino aggiornato da current, non l'oggetto stale passato ad autoEnrich
-        const currentWine = current.find(w => w.id === wine.id);
-        if (!currentWine) return current;
-        const updated = { ...currentWine, enrichment, lastModified: Date.now() };
-        const newList = current.map(w => w.id === wine.id ? updated : w);
-        saveWinePhotos(updated.id, updated.photos || []);
-        saveLocal(STORAGE_KEY, newList.map(({ photos: _, ...w }) => w));
-        return newList;
-      });
+      // Usa latestWinesRef per evitare stale closure e poi chiama saveWines
+      // che salva le foto di TUTTI i vini prima di strippare dal main key.
+      const currentWines = latestWinesRef.current;
+      const currentWine = currentWines.find(w => w.id === wine.id);
+      if (!currentWine) return;
+      const updated = { ...currentWine, enrichment, lastModified: Date.now() };
+      const newList = currentWines.map(w => w.id === wine.id ? updated : w);
+      saveWines(newList);
       showToast(`✨ Analisi di "${wine.name}" completata`);
     } catch { /* silenzioso */ }
   };
