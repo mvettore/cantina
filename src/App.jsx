@@ -101,16 +101,26 @@ function saveWinePhotos(wineId, photos) {
   } catch {}
 }
 
-// Carica foto dalla chiave localStorage separata (cantina-photo-{id})
-// se il vino non ha già foto nel suo array (caricamento da locale o legacy).
+// Le URL di Supabase Storage sono permanentemente non disponibili (account sospeso).
+function isValidPhoto(p) {
+  return typeof p === 'string' && p.length > 0 && !p.includes('supabase.co');
+}
+
+// Carica foto dalla chiave localStorage separata (cantina-photo-{id}).
+// Filtra URL Supabase non più validi; usa base64 inline come fallback legacy.
 function loadWinePhotos(wines) {
   return wines.map(wine => {
-    if ((wine.photos || []).length > 0) return wine;
+    // Controlla prima la chiave separata (formato corrente)
     try {
       const raw = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
-      if (raw) return { ...wine, photos: JSON.parse(raw) };
+      if (raw) {
+        const stored = JSON.parse(raw).filter(isValidPhoto);
+        if (stored.length > 0) return { ...wine, photos: stored };
+      }
     } catch {}
-    return wine;
+    // Fallback: foto inline (formato legacy pre-refactor), escluse URL Supabase
+    const inlinePhotos = (wine.photos || []).filter(isValidPhoto);
+    return { ...wine, photos: inlinePhotos };
   });
 }
 function loadWinesLocal(fallback) {
@@ -421,12 +431,13 @@ export default function App() {
     } catch {}
   }, []);
 
-  // Migrazione una-tantum: se i vini hanno foto inline nel main storage (formato pre-refactor),
+  // Migrazione una-tantum: se i vini hanno foto base64 inline (formato pre-refactor),
   // salvale nelle chiavi separate prima che qualsiasi save le perda.
   useEffect(() => {
     wines.forEach(wine => {
-      if ((wine.photos || []).length > 0) {
-        saveWinePhotos(wine.id, wine.photos);
+      const validPhotos = (wine.photos || []).filter(isValidPhoto);
+      if (validPhotos.length > 0) {
+        saveWinePhotos(wine.id, validPhotos);
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
