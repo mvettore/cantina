@@ -1542,11 +1542,13 @@ export default function App() {
                   </button>
 
                   {/* Export backup */}
-                  <button onClick={() => {
+                  <button onClick={async () => {
                     setMenuOpen(false);
+                    showToast("📦 Preparazione backup…");
+                    const photoMap = await idbLoadAllPhotos();
                     const backup = {
                       exportedAt: new Date().toISOString(),
-                      wines: wines.map(({ photos, ...w }) => ({ ...w, photos: (photos||[]).filter(p => typeof p === "string" && p.startsWith("http")) })),
+                      wines: wines.map(w => ({ ...w, photos: (photoMap[w.id] || []).filter(isValidPhoto) })),
                       racks,
                       log,
                     };
