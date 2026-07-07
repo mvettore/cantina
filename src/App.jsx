@@ -45,9 +45,6 @@ const INITIAL_RACKS = [
   { id: 1, name: "Scaffale 1", rows: 4, cols: 6 },
   { id: 2, name: "Scaffale 2", rows: 3, cols: 8 },
 ];
-// Stato iniziale vuoto: se il cloud sync fallisce, l'utente vede una cantina vuota
-// (segnale chiaro che c'è un problema) invece di finti dati demo che potrebbero
-// essere inavvertitamente pushati su Supabase sovrascrivendo la cantina reale.
 const INITIAL_WINES = [];
 
 // Migrazione dati vecchi
@@ -90,54 +87,44 @@ function saveLocal(key, val) {
   }
 }
 
-// ── Foto separate: ogni vino ha la propria chiave, indipendente dai metadati ──
-// ── Foto: helpers per distinguere URL (Supabase Storage) da base64 legacy ──
+// ── Foto: salvate in chiavi localStorage separate per ottimizzare lo spazio ──
 const PHOTO_KEY_PREFIX = "cantina-photo-";
-const isPhotoURL = (p) => typeof p === "string" && (p.startsWith("http://") || p.startsWith("https://"));
-const isPhotoBase64 = (p) => typeof p === "string" && p.startsWith("data:");
 
-// Carica foto legacy dalle chiavi localStorage separate (cantina-photo-{id}) SOLO
-// se il vino non ha già foto nel suo array. Questo preserva i nuovi URL Supabase
-// senza reintrodurre base64 legacy.
+// Salva le foto di un vino in una chiave localStorage dedicata
+function saveWinePhotos(wineId, photos) {
+  try {
+    if (photos && photos.length > 0) {
+      localStorage.setItem(PHOTO_KEY_PREFIX + wineId, JSON.stringify(photos));
+    } else {
+      localStorage.removeItem(PHOTO_KEY_PREFIX + wineId);
+    }
+  } catch {}
+}
+
+// Le URL di Supabase Storage sono permanentemente non disponibili (account sospeso).
+function isValidPhoto(p) {
+  return typeof p === 'string' && p.length > 0 && !p.includes('supabase.co');
+}
+
+// Carica foto dalla chiave localStorage separata (cantina-photo-{id}).
+// Filtra URL Supabase non più validi; usa base64 inline come fallback legacy.
 function loadWinePhotos(wines) {
   return wines.map(wine => {
-    if ((wine.photos || []).length > 0) return wine; // già con foto (URL o base64 recente)
+    // Controlla prima la chiave separata (formato corrente)
     try {
       const raw = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
-      if (raw) return { ...wine, photos: JSON.parse(raw) };
+      if (raw) {
+        const stored = JSON.parse(raw).filter(isValidPhoto);
+        if (stored.length > 0) return { ...wine, photos: stored };
+      }
     } catch {}
-    return wine;
+    // Fallback: foto inline (formato legacy pre-refactor), escluse URL Supabase
+    const inlinePhotos = (wine.photos || []).filter(isValidPhoto);
+    return { ...wine, photos: inlinePhotos };
   });
 }
 function loadWinesLocal(fallback) {
   return loadWinePhotos(loadLocal(STORAGE_KEY, fallback));
-}
-
-// Upload di una foto su Supabase Storage tramite function proxy.
-// Accetta sia un data URL base64 completo che base64 puro.
-// `folder` opzionale sovrascrive wineId come prefisso del path su Storage
-// (es. "tasting/123456" per foto degustazione).
-async function uploadPhotoToStorage(wineId, index, base64DataUrl, folder) {
-  const parts = base64DataUrl.split(",");
-  const base64 = parts.length > 1 ? parts[1] : base64DataUrl;
-  let mediaType = "image/jpeg";
-  if (parts.length > 1) {
-    const m = parts[0].match(/^data:([^;]+);/);
-    if (m) mediaType = m[1];
-  }
-  const payload = { index, base64, mediaType };
-  if (folder) payload.folder = folder; else payload.wineId = wineId;
-  const resp = await fetch("/.netlify/functions/upload-photo", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `Upload HTTP ${resp.status}`);
-  }
-  const data = await resp.json();
-  return data.url;
 }
 
 // ── Backup automatico degli ultimi 5 snapshot vini ──
@@ -154,101 +141,6 @@ function saveWinesBackup(wines) {
   } catch {}
 }
 
-// ── Merge vini: last-write-wins su lastModified, cloud aggiunge nuovi vini ──
-// Le foto vengono sempre preservate dal dispositivo che le ha, indipendentemente
-// da chi "vince" sugli altri campi (es. Mac aggiorna quantità ma non ha foto).
-function mergeWines(localWines, cloudWines) {
-  const cloudMap = new Map(cloudWines.map(w => [w.id, w]));
-  const merged = localWines.map(lw => {
-    const cw = cloudMap.get(lw.id);
-    if (!cw) return lw;
-    const winner = (cw.lastModified || 0) > (lw.lastModified || 0) ? cw : lw;
-    const loser  = winner === cw ? lw : cw;
-    // Foto: usa quelle del winner se ne ha, altrimenti quelle del loser
-    const photos = (winner.photos?.length > 0) ? winner.photos : (loser.photos || []);
-    return { ...winner, photos };
-  });
-  const localIds = new Set(localWines.map(w => w.id));
-  cloudWines.forEach(cw => { if (!localIds.has(cw.id)) merged.push(cw); });
-  return merged;
-}
-
-// ── Cloud sync via Netlify Function ──
-const IS_NETLIFY = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
-
-// Chiave localStorage per l'ETag del cloud sync
-const ETAG_KEY = "cantina-cloud-etag";
-
-async function cloudLoad() {
-  if (!IS_NETLIFY) return null;
-  try {
-    const savedEtag = loadLocal(ETAG_KEY, null);
-    const headers = {};
-    if (savedEtag) headers["If-None-Match"] = savedEtag;
-
-    const r = await fetch("/.netlify/functions/data", { headers });
-
-    // 304 Not Modified: contenuto invariato, salta parsing/merge
-    if (r.status === 304) {
-      return { notModified: true };
-    }
-
-    if (!r.ok) return null;
-
-    // Salva il nuovo ETag per il prossimo sync differenziale
-    const newEtag = r.headers.get("etag") || r.headers.get("ETag");
-    if (newEtag) saveLocal(ETAG_KEY, newEtag);
-
-    return await r.json(); // { wines, racks, log }
-  } catch { return null; }
-}
-
-// Debounced cloudSave: raggruppa salvataggi rapidi, vince sempre l'ultimo payload per chiave
-let _cloudSaveTimer = null;
-let _cloudSavePending = {};
-let _onCloudSaveError = null; // callback registrata dal componente
-
-function cloudSave(payload) {
-  if (!IS_NETLIFY) return;
-  _cloudSavePending = { ..._cloudSavePending, ...payload };
-  clearTimeout(_cloudSaveTimer);
-  _cloudSaveTimer = setTimeout(async () => {
-    const toSave = _cloudSavePending;
-    _cloudSavePending = {};
-    const body = JSON.stringify(toSave);
-    try {
-      const r = await fetch("/.netlify/functions/data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    } catch {
-      // Se fallisce (es. payload troppo grande da base64 legacy), riprova
-      // mantenendo solo gli URL (Supabase Storage). Base64 vengono strippati.
-      try {
-        const fallback = { ...toSave };
-        if (fallback.wines) {
-          fallback.wines = fallback.wines.map(w => ({
-            ...w,
-            photos: (w.photos || []).filter(
-              p => typeof p === "string" && (p.startsWith("http://") || p.startsWith("https://"))
-            ),
-          }));
-        }
-        const r2 = await fetch("/.netlify/functions/data", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(fallback),
-        });
-        if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
-        _onCloudSaveError?.("⚠️ Alcune foto non sincronizzate — dati salvati");
-      } catch {
-        _onCloudSaveError?.("❌ Salvataggio cloud fallito — i dati sono al sicuro in locale");
-      }
-    }
-  }, 500);
-}
 
 const typeColors = {
   "Rosso":    { bar: "#c0102a", badge: "#6a2020", text: "#fcd8d8" }, // rubino
@@ -464,7 +356,6 @@ const emptyRack = () => ({ id: null, name: "", rows: 4, cols: 6, house: "" });
 export default function App() {
   const [wines,   setWines]   = useState(() => migrateWines(loadWinesLocal(INITIAL_WINES)));
   const [racks,   setRacks]   = useState(() => loadLocal(RACKS_KEY, INITIAL_RACKS));
-  const [syncing, setSyncing] = useState(IS_NETLIFY); // true while loading from cloud
   const [view,    setView]    = useState("catalog"); // "catalog" | "racks" | "stats"
   const [search,  setSearch]  = useState("");
   const [filterType, setFilterType] = useState("Tutti");
@@ -505,7 +396,6 @@ export default function App() {
   const [cantinaName, setCantinaName] = useState(() => loadLocal('cantina-name', 'CANTINA VETTORELLO'));
   const [editingName, setEditingName] = useState(false);
   const [viewFromPos, setViewFromPos] = useState(null); // posizione rack che ha aperto il modal view
-  const [lastSync, setLastSync] = useState(() => loadLocal('cantina-last-sync', null));
   const [pendingDrink, setPendingDrink] = useState(null); // {wine, newQty, newSlots}
   const [log, setLog] = useState(() => loadLocal(LOG_KEY, []));
   const [logModal, setLogModal] = useState(null); // wine being logged
@@ -531,7 +421,6 @@ export default function App() {
   const nextRackId = useRef(Math.max(...racks.map(r => r.id), 99) + 1);
   const latestWinesRef = useRef(wines); // sempre aggiornato con l'ultimo stato React
 
-  // Tiene latestWinesRef sempre aggiornato — usato da doCloudRefresh per il re-upload
   useEffect(() => { latestWinesRef.current = wines; }, [wines]);
 
   // Pulizia una-tantum: rimuovi i backup con foto che riempivano il localStorage
@@ -542,219 +431,106 @@ export default function App() {
     } catch {}
   }, []);
 
-  // Carica dal cloud al primo avvio, poi ri-analizza i vini con analisi scaduta (>6 mesi)
+  // Migrazione una-tantum: se i vini hanno foto base64 inline (formato pre-refactor),
+  // salvale nelle chiavi separate prima che qualsiasi save le perda.
   useEffect(() => {
-    if (!IS_NETLIFY) return;
-    cloudLoad().then(data => {
-      let loadedWines = null;
-      if (data) {
-        // Registra timestamp ultimo sync riuscito
-        const now = Date.now();
-        setLastSync(now);
-        saveLocal('cantina-last-sync', now);
-
-        // 304 Not Modified: il cloud non ha nulla di nuovo, usa solo localStorage
-        if (data.notModified) {
-          const localWines = loadWinesLocal([]);
-          loadedWines = localWines;
-          latestWinesRef.current = localWines;
-          setWines(localWines);
-          console.log("[cloudLoad] 304: stato invariato, uso localStorage");
-          setSyncing(false);
-          // Migra comunque eventuali foto base64 legacy in background
-          if (loadedWines.length > 0) {
-            setTimeout(() => { migrateLegacyPhotos(loadedWines); migrateLogPhotos(); }, 2500);
-          }
-          return;
-        }
-
-        if (data.wines) {
-          const cloudWines = migrateWines(data.wines);
-          const localWines = loadWinesLocal([]);
-          loadedWines = mergeWines(localWines, cloudWines);
-          latestWinesRef.current = loadedWines;
-          setWines(loadedWines);
-          // Persiste solo URL Supabase, le foto base64 restano in memoria
-          // fino a quando vengono caricate su Storage (migrazione asincrona)
-          saveLocal(STORAGE_KEY, loadedWines.map(w => ({
-            ...w,
-            photos: (w.photos || []).filter(isPhotoURL),
-          })));
-          cloudSave({ wines: loadedWines });
-          const maxId = Math.max(...loadedWines.map(w => w.id), 99);
-          if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
-        }
-        if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
-        if (data.log)   { setLog(data.log);    saveLocal(LOG_KEY, data.log); }
-      }
-      setSyncing(false);
-      // Ri-analizza i vini con analisi scaduta (>6 mesi)
-      if (loadedWines) {
-        const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-        const stale = loadedWines.filter(w =>
-          w.enrichment?.enrichedAt && new Date(w.enrichment.enrichedAt) < sixMonthsAgo
-        );
-        if (stale.length > 0) {
-          showToast(`🔄 Aggiornamento analisi per ${stale.length} vino/i…`);
-          stale.forEach((wine, i) => {
-            setTimeout(() => autoEnrich(wine), i * 3000); // 3s di gap tra una e l'altra
-          });
-        }
-        // Migra foto base64 legacy → Supabase Storage in background
-        setTimeout(() => { migrateLegacyPhotos(loadedWines); migrateLogPhotos(); }, 2500);
+    wines.forEach(wine => {
+      const validPhotos = (wine.photos || []).filter(isValidPhoto);
+      if (validPhotos.length > 0) {
+        saveWinePhotos(wine.id, validPhotos);
       }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Migrazione one-shot: se ci sono foto base64 nelle chiavi localStorage legacy
-  // (cantina-photo-{id}), le carica su Supabase Storage e aggiorna wine.photos
-  // con gli URL. Viene eseguita in background dopo il primo cloud sync.
-  const migrateLegacyPhotos = async (wineList) => {
-    const needsMigration = wineList.filter(
-      w => (w.photos || []).some(isPhotoBase64)
-    );
-    if (needsMigration.length === 0) return;
+  // Migrazione una-tantum: scarica le foto da Supabase Storage e le salva come base64 locale.
+  // Da eseguire mentre Supabase è ancora accessibile; dopo, l'app è completamente offline.
+  useEffect(() => {
+    if (localStorage.getItem('cantina-photo-migration-v1') === 'done') return;
 
-    console.log(`[migration] ${needsMigration.length} vini con foto base64 legacy da caricare`);
-    showToast(`📷 Migrazione foto cloud: ${needsMigration.length} vini…`);
+    (async () => {
+      // Legge i vini grezzi da localStorage (prima del filtro isValidPhoto)
+      let rawWines = [];
+      try { const s = localStorage.getItem(STORAGE_KEY); if (s) rawWines = JSON.parse(s); } catch {}
 
-    const updates = new Map();
-    let succeeded = 0;
-    for (const wine of needsMigration) {
-      const newPhotos = [];
-      for (let i = 0; i < (wine.photos || []).length; i++) {
-        const p = wine.photos[i];
-        if (isPhotoURL(p)) {
-          newPhotos.push(p);
-        } else if (isPhotoBase64(p)) {
-          try {
-            const url = await uploadPhotoToStorage(wine.id, i, p);
-            newPhotos.push(url);
-            succeeded++;
-            console.log(`[migration] ${wine.id}/${i} → ${url.split("/").pop()}`);
-          } catch (err) {
-            console.error(`[migration] fallito ${wine.id}/${i}: ${err.message}`);
-            newPhotos.push(p); // mantiene base64, riproverà al prossimo avvio
+      const toMigrate = [];
+      for (const wine of rawWines) {
+        // Salta se la chiave separata ha già foto valide (non-Supabase)
+        try {
+          const sep = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
+          if (sep) {
+            const valid = JSON.parse(sep).filter(isValidPhoto);
+            if (valid.length > 0) continue;
           }
-        }
+        } catch {}
+        // Raccoglie URL Supabase dal main key e dalla chiave separata
+        const urls = new Set();
+        (wine.photos || []).filter(p => typeof p === 'string' && p.includes('supabase.co')).forEach(u => urls.add(u));
+        try {
+          const sep = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
+          if (sep) JSON.parse(sep).filter(p => typeof p === 'string' && p.includes('supabase.co')).forEach(u => urls.add(u));
+        } catch {}
+        if (urls.size > 0) toMigrate.push({ id: wine.id, urls: [...urls] });
       }
-      updates.set(wine.id, newPhotos);
-    }
 
-    if (updates.size === 0) return;
-
-    setWines(current => {
-      const newList = current.map(w =>
-        updates.has(w.id)
-          ? { ...w, photos: updates.get(w.id), lastModified: Date.now() }
-          : w
-      );
-      // Persiste solo URL in localStorage
-      saveLocal(STORAGE_KEY, newList.map(w => ({
-        ...w,
-        photos: (w.photos || []).filter(isPhotoURL),
-      })));
-      cloudSave({ wines: newList });
-      return newList;
-    });
-
-    if (succeeded > 0) {
-      showToast(`✨ Foto caricate su cloud: ${succeeded}`);
-    }
-  };
-
-  // Migrazione foto degustazione base64 → Supabase Storage
-  const migrateLogPhotos = async () => {
-    const entries = log.filter(e => (e.tastingPhotos || []).some(isPhotoBase64));
-    if (entries.length === 0) return;
-    console.log(`[migration] ${entries.length} voci log con foto base64 da caricare`);
-    let succeeded = 0;
-    const updates = new Map();
-    for (const entry of entries) {
-      const newPhotos = [];
-      for (let i = 0; i < (entry.tastingPhotos || []).length; i++) {
-        const p = entry.tastingPhotos[i];
-        if (isPhotoURL(p)) { newPhotos.push(p); continue; }
-        if (isPhotoBase64(p)) {
-          try {
-            const url = await uploadPhotoToStorage(null, i, p, `tasting/${entry.id}`);
-            newPhotos.push(url);
-            succeeded++;
-          } catch (err) {
-            console.error(`[migration] log ${entry.id}/${i}: ${err.message}`);
-            newPhotos.push(p);
-          }
-        }
-      }
-      updates.set(entry.id, newPhotos);
-    }
-    if (updates.size > 0) {
-      const newLog = log.map(e => updates.has(e.id) ? { ...e, tastingPhotos: updates.get(e.id) } : e);
-      saveLog(newLog);
-    }
-    if (succeeded > 0) showToast(`✨ Foto degustazione caricate: ${succeeded}`);
-  };
-
-  const doCloudRefresh = () => {
-    if (!IS_NETLIFY) return Promise.resolve();
-    return cloudLoad().then(data => {
-      if (!data) return;
-      const now = Date.now();
-      setLastSync(now);
-      saveLocal('cantina-last-sync', now);
-      // 304: nessun cambiamento dal cloud, non serve toccare lo stato
-      if (data.notModified) {
-        console.log("[doCloudRefresh] 304: stato invariato");
+      if (toMigrate.length === 0) {
+        localStorage.setItem('cantina-photo-migration-v1', 'done');
         return;
       }
-      if (data.wines) {
-        const cloudWines = migrateWines(data.wines);
-        // Usa React state (current) come base locale — più affidabile di localStorage
-        // perché localStorage può fallire silenziosamente per quota piena
-        setWines(current => {
-          const merged = mergeWines(current, cloudWines);
-          // Fallback legacy: ri-legge foto da chiavi separate cantina-photo-{id}
-          // se (e solo se) il vino non ne ha già nel suo array
-          const mergedWithPhotos = loadWinePhotos(merged);
-          const maxId = Math.max(...mergedWithPhotos.map(w => w.id), 99);
-          if (nextWineId.current <= maxId) nextWineId.current = maxId + 1;
-          saveLocal(STORAGE_KEY, mergedWithPhotos.map(w => ({
-            ...w,
-            photos: (w.photos || []).filter(isPhotoURL),
-          })));
-          return mergedWithPhotos;
-        });
-        // Usa React state (via ref) — più affidabile di localStorage che può fallire per quota
-        setTimeout(() => { cloudSave({ wines: latestWinesRef.current }); }, 0);
-      }
-      if (data.racks) { setRacks(data.racks); saveLocal(RACKS_KEY, data.racks); }
-      if (data.log)   { setLog(data.log);     saveLocal(LOG_KEY, data.log); }
-    });
-  };
 
-  // Ri-sincronizza dal cloud quando l'app torna in foreground (es. da background su iOS)
-  useEffect(() => {
-    if (!IS_NETLIFY) return;
-    const handleVisibility = () => { if (document.visibilityState === 'visible') doCloudRefresh(); };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
+      showToast(`📷 Salvataggio ${toMigrate.length} foto in locale…`);
+
+      let migrated = 0;
+      for (const { id, urls } of toMigrate) {
+        const base64s = [];
+        for (const url of urls) {
+          try {
+            const resp = await fetch(url);
+            if (!resp.ok) continue;
+            const blob = await resp.blob();
+            const b64 = await new Promise((res, rej) => {
+              const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob);
+            });
+            base64s.push(b64);
+          } catch {}
+        }
+        if (base64s.length > 0) { saveWinePhotos(id, base64s); migrated++; }
+      }
+
+      localStorage.setItem('cantina-photo-migration-v1', 'done');
+
+      if (migrated > 0) {
+        // Aggiorna lo stato React per mostrare le foto scaricate senza ricaricare la pagina
+        setWines(current => current.map(wine => {
+          try {
+            const raw = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
+            if (raw) {
+              const photos = JSON.parse(raw).filter(isValidPhoto);
+              if (photos.length > 0) return { ...wine, photos };
+            }
+          } catch {}
+          return wine;
+        }));
+        showToast(`✅ ${migrated} foto salvate in locale`);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync manuale dal menu (ex pull-to-refresh)
-  const handleManualSync = async () => {
-    setMenuOpen(false);
-    showToast("🔄 Sincronizzazione…");
-    try {
-      await doCloudRefresh();
-      const now = Date.now();
-      setLastSync(now);
-      saveLocal('cantina-last-sync', now);
-      showToast("✓ Sincronizzato");
-    } catch {
-      showToast("❌ Sync fallito");
+  // Ri-analizza i vini con analisi scaduta (>6 mesi) al primo avvio
+  useEffect(() => {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const stale = wines.filter(w =>
+      w.enrichment?.enrichedAt && new Date(w.enrichment.enrichedAt) < sixMonthsAgo
+    );
+    if (stale.length > 0) {
+      showToast(`🔄 Aggiornamento analisi per ${stale.length} vino/i…`);
+      stale.forEach((wine, i) => {
+        setTimeout(() => autoEnrich(wine, wines), i * 3000);
+      });
     }
-  };
+  }, []);
 
   const saveWines = (w) => {
     const seen = new Set();
@@ -766,26 +542,14 @@ export default function App() {
     saveWinesBackup(deduped);
     latestWinesRef.current = deduped;
     setWines(deduped);
-    // Persiste solo URL (Supabase Storage): base64 temporanei restano in memoria
-    // fino all'upload, cosi localStorage non si riempie e il cloud non si bloata.
-    saveLocal(STORAGE_KEY, deduped.map(wine => ({
-      ...wine,
-      photos: (wine.photos || []).filter(isPhotoURL),
-    })));
-    cloudSave({ wines: deduped }); // data.js lato server filtra comunque base64
+    // Salva foto in chiavi separate per ottimizzare lo spazio localStorage
+    deduped.forEach(wine => saveWinePhotos(wine.id, wine.photos || []));
+    saveLocal(STORAGE_KEY, deduped.map(wine => ({ ...wine, photos: [] })));
   };
-  const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY,  r); cloudSave({ racks: r }); };
-  const saveLog   = (l) => {
-    setLog(l);
-    saveLocal(LOG_KEY, l);
-    // Filtra foto base64 prima del cloud sync (come per i vini)
-    cloudSave({ log: l.map(e => (e.tastingPhotos || []).some(isPhotoBase64)
-      ? { ...e, tastingPhotos: e.tastingPhotos.filter(isPhotoURL) }
-      : e) });
-  };
+  const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY, r); };
+  const saveLog   = (l) => { setLog(l); saveLocal(LOG_KEY, l); };
   const saveName  = (n) => { setCantinaName(n); saveLocal('cantina-name', n); };
   const showToast = (msg) => { setToast(msg); setUndoState(null); setTimeout(() => setToast(null), 3000); };
-  useEffect(() => { _onCloudSaveError = showToast; return () => { _onCloudSaveError = null; }; }, []);
   const showUndoToast = (msg, restore) => {
     setToast(msg);
     setUndoState({ restore });
@@ -1048,7 +812,7 @@ export default function App() {
   const handleAddPhoto = async (file) => {
     if (!file) return;
     try {
-      // 800px/0.80 per le foto display: ~80-150KB base64, compatibile con localStorage e cloudSave
+      // 800px/0.80 per le foto display: ~80-150KB base64, compatibile con localStorage
       const photo = await resizeImage(file, 800, 0.80);
       setEditing(prev => ({ ...prev, photos: [...(prev.photos||[]), photo] }));
     } catch (err) {
@@ -1208,12 +972,8 @@ export default function App() {
       setEnrichData(enrichment);
       // Salva automaticamente l'analisi nella bottiglia
       const updated = { ...wine, enrichment, lastModified: Date.now() };
-      setWines(current => {
-        const newList = current.map(w => w.id === wine.id ? updated : w);
-        saveLocal(STORAGE_KEY, newList.map(({ photos: _, ...w }) => w));
-        cloudSave({ wines: newList });
-        return newList;
-      });
+      const newList = wines.map(w => w.id === wine.id ? updated : w);
+      saveWines(newList);
       setEditing(updated);
       showToast("Analisi salvata nella scheda");
     } catch (err) {
@@ -1223,32 +983,6 @@ export default function App() {
     }
   };
 
-  // Carica su Supabase Storage eventuali foto base64 presenti in editing.photos[],
-  // sostituendole con gli URL pubblici. URL già presenti vengono mantenuti.
-  // Ritorna l'array photos[] con solo URL (o il base64 originale se l'upload è fallito).
-  const uploadPendingPhotos = async (wineId, photos) => {
-    const result = [];
-    let failed = 0;
-    for (let i = 0; i < (photos || []).length; i++) {
-      const p = photos[i];
-      if (isPhotoURL(p)) {
-        result.push(p); // già caricata
-      } else if (isPhotoBase64(p)) {
-        try {
-          const url = await uploadPhotoToStorage(wineId, i, p);
-          result.push(url);
-        } catch (err) {
-          console.error(`[upload] fallito per wine ${wineId}/${i}: ${err.message}`);
-          result.push(p); // mantieni il base64 in memoria, riproveremo al prossimo save
-          failed++;
-        }
-      } else {
-        // Forma inattesa (null, undefined, oggetto): ignora
-      }
-    }
-    return { photos: result, failed };
-  };
-
   const handleSaveWine = async () => {
     if (!editing.name.trim()) return;
     if (!editing.type) { showToast("Seleziona una tipologia"); return; }
@@ -1256,34 +990,28 @@ export default function App() {
 
     const isAdd = modal === "add";
     const wineId = isAdd ? nextWineId.current : editing.id;
-
-    // Se ci sono foto base64 da caricare, mostra il toast di upload
-    const needsUpload = (editing.photos || []).some(isPhotoBase64);
-    if (needsUpload) showToast("📷 Caricamento foto…");
-
-    const { photos: uploadedPhotos, failed } = await uploadPendingPhotos(wineId, editing.photos);
-    const uploadSuffix = failed > 0 ? ` (${failed} foto non caricate)` : "";
+    const currentPhotos = editing.photos || [];
 
     if (isAdd) {
       nextWineId.current = wineId + 1;
-      const wine = { ...editing, id: wineId, photos: uploadedPhotos, addedAt: Date.now(), lastModified: Date.now() };
+      const wine = { ...editing, id: wineId, photos: currentPhotos, addedAt: Date.now(), lastModified: Date.now() };
       const newList = [...wines.filter(w => w.id !== wine.id), wine];
       saveWines(newList);
       setModal(null);
       // Salta autoEnrich se il vino ha già un enrichment (es. copiato da addNewVintage):
       // peakFrom/peakTo sono relativi alla vendemmia e validi per qualsiasi annata.
       if (wine.enrichment) {
-        showToast(`"${wine.name}" aggiunto${uploadSuffix}`);
+        showToast(`"${wine.name}" aggiunto`);
       } else {
-        showToast(`"${wine.name}" aggiunto${uploadSuffix} — analisi in corso…`);
+        showToast(`"${wine.name}" aggiunto — analisi in corso…`);
         setTimeout(() => autoEnrich(wine), 500);
       }
     } else {
       const original = wines.find(w => w.id === editing.id);
       const qtyDelta = (original?.quantity || 0) - (editing.quantity || 0);
-      const updated = { ...editing, photos: uploadedPhotos, lastModified: Date.now() };
+      const updated = { ...editing, photos: currentPhotos, lastModified: Date.now() };
       saveWines(wines.map(w => w.id === editing.id ? updated : w));
-      showToast(`"${editing.name}" aggiornato${uploadSuffix}`);
+      showToast(`"${editing.name}" aggiornato`);
       setModal(null);
       // Auto-log: se la quantità è stata decrementata manualmente, proponi lo storico
       if (qtyDelta > 0) {
@@ -1380,16 +1108,14 @@ export default function App() {
       if (!resp.ok) return;
       const data = await resp.json();
       const enrichment = { ...data, enrichedAt: new Date().toISOString() };
-      setWines(current => {
-        // Usa il vino aggiornato da current, non l'oggetto stale passato ad autoEnrich
-        const currentWine = current.find(w => w.id === wine.id);
-        if (!currentWine) return current;
-        const updated = { ...currentWine, enrichment, lastModified: Date.now() };
-        const newList = current.map(w => w.id === wine.id ? updated : w);
-        saveLocal(STORAGE_KEY, newList.map(({ photos: _, ...w }) => w));
-        cloudSave({ wines: newList });
-        return newList;
-      });
+      // Usa latestWinesRef per evitare stale closure e poi chiama saveWines
+      // che salva le foto di TUTTI i vini prima di strippare dal main key.
+      const currentWines = latestWinesRef.current;
+      const currentWine = currentWines.find(w => w.id === wine.id);
+      if (!currentWine) return;
+      const updated = { ...currentWine, enrichment, lastModified: Date.now() };
+      const newList = currentWines.map(w => w.id === wine.id ? updated : w);
+      saveWines(newList);
       showToast(`✨ Analisi di "${wine.name}" completata`);
     } catch { /* silenzioso */ }
   };
@@ -1822,28 +1548,6 @@ export default function App() {
                     <span style={{ flex: 1 }}>ESPORTA BACKUP</span>
                   </button>
 
-                  {/* Sync manuale */}
-                  <button onClick={handleManualSync}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 12, width: "100%",
-                      background: "transparent", border: "1px solid transparent",
-                      borderRadius: 7, padding: "11px 13px", cursor: "pointer",
-                      color: C.textMuted,
-                      fontFamily: "'Cinzel', serif", fontSize: 13, letterSpacing: 1.5,
-                      textAlign: "left", marginTop: 2, transition: "all 0.15s",
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,149,58,0.07)"; e.currentTarget.style.color = C.gold; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textMuted; }}>
-                    <span style={{ fontSize: 16 }}>🔄</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div>SINCRONIZZA</div>
-                      {lastSync && (
-                        <div style={{ fontSize: 10, color: C.textFaint, fontFamily: "'EB Garamond', serif", fontStyle: "italic", letterSpacing: 0, marginTop: 2 }}>
-                          Ultimo: {new Date(lastSync).toLocaleDateString("it-IT", { day: "2-digit", month: "short" })} · {new Date(lastSync).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                        </div>
-                      )}
-                    </div>
-                  </button>
                 </div>
               </>
             )}
@@ -4550,27 +4254,7 @@ export default function App() {
                   }}>ELIMINA</button>
                 )}
                 <button className="btn-gold" onClick={async () => {
-                  // Upload foto degustazione base64 su Supabase Storage
-                  let entry = logEntry;
-                  const hasBase64 = (entry.tastingPhotos || []).some(isPhotoBase64);
-                  if (hasBase64) {
-                    showToast("📷 Caricamento foto…");
-                    const uploaded = [];
-                    for (let i = 0; i < (entry.tastingPhotos || []).length; i++) {
-                      const p = entry.tastingPhotos[i];
-                      if (isPhotoURL(p)) { uploaded.push(p); continue; }
-                      if (isPhotoBase64(p)) {
-                        try {
-                          const url = await uploadPhotoToStorage(null, i, p, `tasting/${entry.id}`);
-                          uploaded.push(url);
-                        } catch (err) {
-                          console.error(`[tasting-upload] fallito ${entry.id}/${i}: ${err.message}`);
-                          uploaded.push(p); // mantieni base64 come fallback
-                        }
-                      }
-                    }
-                    entry = { ...entry, tastingPhotos: uploaded };
-                  }
+                  const entry = logEntry;
                   if (logModal === "edit") {
                     saveLog(log.map(l => l.id === entry.id ? entry : l));
                     showToast("✏ Voce aggiornata");
@@ -4636,27 +4320,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Syncing overlay — mostrato solo al primo caricamento dal cloud */}
-      {syncing&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(24,11,16,0.94)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:400,backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)"}}>
-          {/* Wordmark di caricamento */}
-          <div style={{
-            fontFamily: "'Cormorant Garamond', serif",
-            fontSize: 44, fontWeight: 300, letterSpacing: 14,
-            background: `linear-gradient(180deg, ${C.goldLight}, ${C.gold} 60%, #8a6828)`,
-            WebkitBackgroundClip: "text", backgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            paddingLeft: 14, marginBottom: 6,
-          }}>Vinario</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
-            <div style={{ height: 1, width: 60, background: `linear-gradient(90deg, transparent, ${C.gold})` }}/>
-            <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.goldLight }}/>
-            <div style={{ height: 1, width: 60, background: `linear-gradient(90deg, ${C.gold}, transparent)` }}/>
-          </div>
-          <div style={{width:40,height:40,border:`2px solid ${C.gold}33`,borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.9s linear infinite",marginBottom:16}}/>
-          <p style={{fontFamily:"'Cinzel', serif",color:C.gold,fontSize:11,letterSpacing:3,opacity:0.8}}>SINCRONIZZAZIONE</p>
-        </div>
-      )}
       {/* ── FAB AGGIUNGI VINO — visibile SOLO sul catalogo e solo se nessun overlay e' aperto ── */}
       {(() => {
         const anyOverlayOpen = !!(
