@@ -12,14 +12,6 @@
 [functions."search-wine-url"]
   timeout = 26
 
-[functions."keep-alive"]
-  schedule = "0 9 */3 * *"
-
-[[redirects]]
-  from = "/api/data"
-  to = "/.netlify/functions/data"
-  status = 200
-
 [[redirects]]
   from = "/*"
   to = "/index.html"
