@@ -87,44 +87,58 @@ function saveLocal(key, val) {
   }
 }
 
-// ── Foto: salvate in chiavi localStorage separate per ottimizzare lo spazio ──
-const PHOTO_KEY_PREFIX = "cantina-photo-";
-
-// Salva le foto di un vino in una chiave localStorage dedicata
-function saveWinePhotos(wineId, photos) {
-  try {
-    if (photos && photos.length > 0) {
-      localStorage.setItem(PHOTO_KEY_PREFIX + wineId, JSON.stringify(photos));
-    } else {
-      localStorage.removeItem(PHOTO_KEY_PREFIX + wineId);
-    }
-  } catch {}
-}
+const PHOTO_KEY_PREFIX = "cantina-photo-"; // usato solo per migrazione legacy da localStorage
 
 // Le URL di Supabase Storage sono permanentemente non disponibili (account sospeso).
 function isValidPhoto(p) {
   return typeof p === 'string' && p.length > 0 && !p.includes('supabase.co');
 }
 
-// Carica foto dalla chiave localStorage separata (cantina-photo-{id}).
-// Filtra URL Supabase non più validi; usa base64 inline come fallback legacy.
-function loadWinePhotos(wines) {
-  return wines.map(wine => {
-    // Controlla prima la chiave separata (formato corrente)
-    try {
-      const raw = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
-      if (raw) {
-        const stored = JSON.parse(raw).filter(isValidPhoto);
-        if (stored.length > 0) return { ...wine, photos: stored };
-      }
-    } catch {}
-    // Fallback: foto inline (formato legacy pre-refactor), escluse URL Supabase
-    const inlinePhotos = (wine.photos || []).filter(isValidPhoto);
-    return { ...wine, photos: inlinePhotos };
-  });
+// ── IndexedDB per foto: capacità ~GB vs ~5MB di localStorage ──
+let _photoDBPromise = null;
+function getPhotoDB() {
+  if (!_photoDBPromise) {
+    _photoDBPromise = new Promise((res, rej) => {
+      const req = indexedDB.open('cantina-photos', 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore('photos');
+      req.onsuccess = e => res(e.target.result);
+      req.onerror = e => rej(e.target.error);
+    });
+  }
+  return _photoDBPromise;
 }
+
+async function idbSavePhotos(wineId, photos) {
+  try {
+    const db = await getPhotoDB();
+    await new Promise((res, rej) => {
+      const tx = db.transaction('photos', 'readwrite');
+      const store = tx.objectStore('photos');
+      if (photos && photos.length > 0) store.put(photos, wineId); else store.delete(wineId);
+      tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
+    });
+  } catch {}
+}
+
+async function idbLoadAllPhotos() {
+  try {
+    const db = await getPhotoDB();
+    return await new Promise((res, rej) => {
+      const result = {};
+      const tx = db.transaction('photos', 'readonly');
+      tx.objectStore('photos').openCursor().onsuccess = e => {
+        const cur = e.target.result;
+        if (cur) { result[cur.key] = cur.value; cur.continue(); }
+        else res(result);
+      };
+      tx.onerror = e => rej(e.target.error);
+    });
+  } catch { return {}; }
+}
+
 function loadWinesLocal(fallback) {
-  return loadWinePhotos(loadLocal(STORAGE_KEY, fallback));
+  // Le foto vengono caricate async da IndexedDB dopo il mount (vedi useEffect)
+  return loadLocal(STORAGE_KEY, fallback);
 }
 
 // ── Backup automatico degli ultimi 5 snapshot vini ──
@@ -431,62 +445,81 @@ export default function App() {
     } catch {}
   }, []);
 
-  // Migrazione una-tantum: se i vini hanno foto base64 inline (formato pre-refactor),
-  // salvale nelle chiavi separate prima che qualsiasi save le perda.
+  // Carica le foto da IndexedDB dopo il mount e le inietta nello stato React
   useEffect(() => {
-    wines.forEach(wine => {
-      const validPhotos = (wine.photos || []).filter(isValidPhoto);
-      if (validPhotos.length > 0) {
-        saveWinePhotos(wine.id, validPhotos);
-      }
+    idbLoadAllPhotos().then(photoMap => {
+      if (Object.keys(photoMap).length === 0) return;
+      setWines(current => current.map(wine => ({
+        ...wine,
+        photos: (photoMap[wine.id] || []).filter(isValidPhoto),
+      })));
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Migrazione una-tantum: scarica le foto da Supabase Storage e le salva come base64 locale.
-  // Da eseguire mentre Supabase è ancora accessibile; dopo, l'app è completamente offline.
+  // Migrazione una-tantum: foto inline legacy e chiavi cantina-photo-* localStorage → IndexedDB
   useEffect(() => {
-    if (localStorage.getItem('cantina-photo-migration-v1') === 'done') return;
-
+    if (localStorage.getItem('cantina-photo-idb-v1') === 'done') return;
     (async () => {
-      // Legge i vini grezzi da localStorage (prima del filtro isValidPhoto)
+      // 1. Foto base64 inline nel wine object (formato molto vecchio)
+      for (const wine of wines) {
+        const valid = (wine.photos || []).filter(isValidPhoto);
+        if (valid.length > 0) await idbSavePhotos(wine.id, valid);
+      }
+      // 2. Chiavi cantina-photo-* in localStorage (formato pre-IDB)
+      const lsKeys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i); if (k && k.startsWith(PHOTO_KEY_PREFIX)) lsKeys.push(k);
+      }
+      for (const key of lsKeys) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) { localStorage.removeItem(key); continue; }
+          const photos = JSON.parse(raw).filter(isValidPhoto);
+          const wineId = parseInt(key.replace(PHOTO_KEY_PREFIX, ''), 10);
+          if (photos.length > 0 && !isNaN(wineId)) await idbSavePhotos(wineId, photos);
+          localStorage.removeItem(key);
+        } catch {}
+      }
+      localStorage.setItem('cantina-photo-idb-v1', 'done');
+      // Ricarica le foto dallo stato IDB aggiornato
+      const photoMap = await idbLoadAllPhotos();
+      if (Object.keys(photoMap).length > 0) {
+        setWines(current => current.map(wine => ({
+          ...wine,
+          photos: (photoMap[wine.id] || []).filter(isValidPhoto),
+        })));
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Migrazione una-tantum: scarica foto da Supabase Storage → IndexedDB locale.
+  // Usa flag separato (cantina-photo-supabase-idb) perché il tentativo precedente
+  // (cantina-photo-migration-v1) falliva silenziosamente per il limite localStorage.
+  useEffect(() => {
+    if (localStorage.getItem('cantina-photo-supabase-idb') === 'done') return;
+    (async () => {
+      const existingMap = await idbLoadAllPhotos();
+      // Raccoglie URL Supabase da localStorage (wine objects potrebbero ancora averli)
       let rawWines = [];
       try { const s = localStorage.getItem(STORAGE_KEY); if (s) rawWines = JSON.parse(s); } catch {}
-
       const toMigrate = [];
       for (const wine of rawWines) {
-        // Salta se la chiave separata ha già foto valide (non-Supabase)
-        try {
-          const sep = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
-          if (sep) {
-            const valid = JSON.parse(sep).filter(isValidPhoto);
-            if (valid.length > 0) continue;
-          }
-        } catch {}
-        // Raccoglie URL Supabase dal main key e dalla chiave separata
+        // Salta se IDB ha già foto valide per questo vino
+        if ((existingMap[wine.id] || []).filter(isValidPhoto).length > 0) continue;
         const urls = new Set();
         (wine.photos || []).filter(p => typeof p === 'string' && p.includes('supabase.co')).forEach(u => urls.add(u));
-        try {
-          const sep = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
-          if (sep) JSON.parse(sep).filter(p => typeof p === 'string' && p.includes('supabase.co')).forEach(u => urls.add(u));
-        } catch {}
         if (urls.size > 0) toMigrate.push({ id: wine.id, urls: [...urls] });
       }
-
-      if (toMigrate.length === 0) {
-        localStorage.setItem('cantina-photo-migration-v1', 'done');
-        return;
-      }
-
-      showToast(`📷 Salvataggio ${toMigrate.length} foto in locale…`);
-
+      if (toMigrate.length === 0) { localStorage.setItem('cantina-photo-supabase-idb', 'done'); return; }
+      showToast(`📷 Download ${toMigrate.length} foto in corso…`);
       let migrated = 0;
       for (const { id, urls } of toMigrate) {
         const base64s = [];
         for (const url of urls) {
           try {
-            const resp = await fetch(url);
-            if (!resp.ok) continue;
+            const resp = await fetch(url); if (!resp.ok) continue;
             const blob = await resp.blob();
             const b64 = await new Promise((res, rej) => {
               const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob);
@@ -494,23 +527,15 @@ export default function App() {
             base64s.push(b64);
           } catch {}
         }
-        if (base64s.length > 0) { saveWinePhotos(id, base64s); migrated++; }
+        if (base64s.length > 0) { await idbSavePhotos(id, base64s); migrated++; }
       }
-
-      localStorage.setItem('cantina-photo-migration-v1', 'done');
-
+      localStorage.setItem('cantina-photo-supabase-idb', 'done');
       if (migrated > 0) {
-        // Aggiorna lo stato React per mostrare le foto scaricate senza ricaricare la pagina
-        setWines(current => current.map(wine => {
-          try {
-            const raw = localStorage.getItem(PHOTO_KEY_PREFIX + wine.id);
-            if (raw) {
-              const photos = JSON.parse(raw).filter(isValidPhoto);
-              if (photos.length > 0) return { ...wine, photos };
-            }
-          } catch {}
-          return wine;
-        }));
+        const photoMap = await idbLoadAllPhotos();
+        setWines(current => current.map(wine => ({
+          ...wine,
+          photos: (photoMap[wine.id] || []).filter(isValidPhoto),
+        })));
         showToast(`✅ ${migrated} foto salvate in locale`);
       }
     })();
@@ -542,8 +567,8 @@ export default function App() {
     saveWinesBackup(deduped);
     latestWinesRef.current = deduped;
     setWines(deduped);
-    // Salva foto in chiavi separate per ottimizzare lo spazio localStorage
-    deduped.forEach(wine => saveWinePhotos(wine.id, wine.photos || []));
+    // Salva foto in IndexedDB (nessun limite pratico di spazio)
+    deduped.forEach(wine => idbSavePhotos(wine.id, wine.photos || []));
     saveLocal(STORAGE_KEY, deduped.map(wine => ({ ...wine, photos: [] })));
   };
   const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY, r); };
