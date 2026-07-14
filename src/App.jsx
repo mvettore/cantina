@@ -605,6 +605,48 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Migrazione una-tantum: scarica foto degustazione da Supabase Storage → IndexedDB
+  useEffect(() => {
+    if (localStorage.getItem('cantina-tasting-supabase-idb') === 'done') return;
+    (async () => {
+      const existingMap = await idbLoadAllTastingPhotos();
+      let rawLog = [];
+      try { const s = localStorage.getItem(LOG_KEY); if (s) rawLog = JSON.parse(s); } catch {}
+      const toMigrate = [];
+      for (const entry of rawLog) {
+        if ((existingMap[entry.id] || []).filter(isValidPhoto).length > 0) continue;
+        const urls = (entry.tastingPhotos || []).filter(p => typeof p === 'string' && p.includes('supabase.co'));
+        if (urls.length > 0) toMigrate.push({ id: entry.id, urls });
+      }
+      if (toMigrate.length === 0) { localStorage.setItem('cantina-tasting-supabase-idb', 'done'); return; }
+      showToast(`📷 Download foto degustazione (${toMigrate.length})…`);
+      let migrated = 0;
+      for (const { id, urls } of toMigrate) {
+        const base64s = [];
+        for (const url of urls) {
+          try {
+            const resp = await fetch(url); if (!resp.ok) continue;
+            const blob = await resp.blob();
+            const b64 = await new Promise((res, rej) => {
+              const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob);
+            });
+            base64s.push(b64);
+          } catch {}
+        }
+        if (base64s.length > 0) { await idbSaveTastingPhotos(id, base64s); migrated++; }
+      }
+      localStorage.setItem('cantina-tasting-supabase-idb', 'done');
+      if (migrated > 0) {
+        const photoMap = await idbLoadAllTastingPhotos();
+        setLog(current => current.map(entry => ({
+          ...entry,
+          tastingPhotos: (photoMap[entry.id] || []).filter(isValidPhoto),
+        })));
+        showToast(`✅ ${migrated} foto degustazione salvate in locale`);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Ri-analizza i vini con analisi scaduta (>6 mesi) al primo avvio
   useEffect(() => {
@@ -3888,7 +3930,10 @@ export default function App() {
       {view === "logview" && (
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO DEGUSTAZIONI</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2, margin: 0 }}>STORICO DEGUSTAZIONI</h2>
+              <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length === 1 ? "bottiglia" : "bottiglie"}</span>
+            </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {/* Log rapido — vino bevuto fuori, non in cantina */}
               <button onClick={() => {
@@ -3923,7 +3968,6 @@ export default function App() {
                 color: logFavOnly ? C.gold : C.textFaint,
                 fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1,
               }}>★ PREFERITI</button>
-              <span style={{ fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length}bt</span>
             </div>
           </div>
           {/* Search bar */}
