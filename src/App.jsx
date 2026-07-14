@@ -3888,7 +3888,10 @@ export default function App() {
       {view === "logview" && (
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2 }}>STORICO DEGUSTAZIONI</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <h2 style={{ fontFamily: "'Cinzel', serif", fontSize: 18, color: C.gold, letterSpacing: 2, margin: 0 }}>STORICO DEGUSTAZIONI</h2>
+              <span style={{ fontSize: 12, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length} {log.length === 1 ? "bottiglia" : "bottiglie"}</span>
+            </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {/* Log rapido — vino bevuto fuori, non in cantina */}
               <button onClick={() => {
@@ -3923,7 +3926,6 @@ export default function App() {
                 color: logFavOnly ? C.gold : C.textFaint,
                 fontFamily: "'Cinzel', serif", fontSize: 12, letterSpacing: 1,
               }}>★ PREFERITI</button>
-              <span style={{ fontSize: 13, color: C.textFaint, fontFamily: "'Cinzel', serif" }}>{log.length}bt</span>
             </div>
           </div>
           {/* Search bar */}
