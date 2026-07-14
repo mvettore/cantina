@@ -577,20 +577,20 @@ export default function App() {
       }
       if (toMigrate.length === 0) { localStorage.setItem('cantina-photo-supabase-idb', 'done'); return; }
       showToast(`📷 Download ${toMigrate.length} foto in corso…`);
+      const downloadUrl = async (url) => {
+        try {
+          const resp = await fetch(url); if (!resp.ok) return null;
+          const blob = await resp.blob();
+          return await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+        } catch { return null; }
+      };
       let migrated = 0;
-      for (const { id, urls } of toMigrate) {
-        const base64s = [];
-        for (const url of urls) {
-          try {
-            const resp = await fetch(url); if (!resp.ok) continue;
-            const blob = await resp.blob();
-            const b64 = await new Promise((res, rej) => {
-              const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob);
-            });
-            base64s.push(b64);
-          } catch {}
-        }
-        if (base64s.length > 0) { await idbSavePhotos(id, base64s); migrated++; }
+      const BATCH = 8;
+      for (let i = 0; i < toMigrate.length; i += BATCH) {
+        await Promise.all(toMigrate.slice(i, i + BATCH).map(async ({ id, urls }) => {
+          const base64s = (await Promise.all(urls.map(downloadUrl))).filter(Boolean);
+          if (base64s.length > 0) { await idbSavePhotos(id, base64s); migrated++; }
+        }));
       }
       localStorage.setItem('cantina-photo-supabase-idb', 'done');
       if (migrated > 0) {
@@ -620,20 +620,20 @@ export default function App() {
       }
       if (toMigrate.length === 0) { localStorage.setItem('cantina-tasting-supabase-idb', 'done'); return; }
       showToast(`📷 Download foto degustazione (${toMigrate.length})…`);
+      const downloadUrl = async (url) => {
+        try {
+          const resp = await fetch(url); if (!resp.ok) return null;
+          const blob = await resp.blob();
+          return await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+        } catch { return null; }
+      };
       let migrated = 0;
-      for (const { id, urls } of toMigrate) {
-        const base64s = [];
-        for (const url of urls) {
-          try {
-            const resp = await fetch(url); if (!resp.ok) continue;
-            const blob = await resp.blob();
-            const b64 = await new Promise((res, rej) => {
-              const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob);
-            });
-            base64s.push(b64);
-          } catch {}
-        }
-        if (base64s.length > 0) { await idbSaveTastingPhotos(id, base64s); migrated++; }
+      const BATCH = 8;
+      for (let i = 0; i < toMigrate.length; i += BATCH) {
+        await Promise.all(toMigrate.slice(i, i + BATCH).map(async ({ id, urls }) => {
+          const base64s = (await Promise.all(urls.map(downloadUrl))).filter(Boolean);
+          if (base64s.length > 0) { await idbSaveTastingPhotos(id, base64s); migrated++; }
+        }));
       }
       localStorage.setItem('cantina-tasting-supabase-idb', 'done');
       if (migrated > 0) {
