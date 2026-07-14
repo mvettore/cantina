@@ -168,6 +168,7 @@ async function idbLoadAllTastingPhotos() {
   } catch { return {}; }
 }
 
+
 function loadWinesLocal(fallback) {
   // Le foto vengono caricate async da IndexedDB dopo il mount (vedi useEffect)
   return loadLocal(STORAGE_KEY, fallback);
