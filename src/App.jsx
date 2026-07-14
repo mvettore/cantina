@@ -4015,9 +4015,14 @@ export default function App() {
                   style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", display: "flex", gap: 0 }}
                   className="wine-card">
                   <div style={{ width: 72, height: 88, flexShrink: 0, overflow: "hidden", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {((entry.winePhotos||[])[0] || entry.winePhoto)
-                      ? <img src={(entry.winePhotos||[])[0] || entry.winePhoto} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} alt={entry.wineName} loading="lazy" />
-                      : <span style={{ fontSize: 28, opacity: 0.3 }}>🍷</span>}
+                    {(() => {
+                      const ph = (entry.winePhotos || []).find(isValidPhoto)
+                        || (entry.wineId ? (wines.find(w => w.id === entry.wineId)?.photos || []).find(isValidPhoto) : null)
+                        || (isValidPhoto(entry.winePhoto) ? entry.winePhoto : null);
+                      return ph
+                        ? <img src={ph} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} alt={entry.wineName} loading="lazy" />
+                        : <span style={{ fontSize: 28, opacity: 0.3 }}>🍷</span>;
+                    })()}
                   </div>
                   <div style={{ flex: 1, minWidth: 0, padding: "12px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
@@ -4073,14 +4078,19 @@ export default function App() {
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div style={{ position:"sticky", top:0, zIndex:2, background:C.surface, borderBottom: `1px solid ${C.border}`, borderRadius:"14px 14px 0 0" }}>
               {/* Foto vino (strip) */}
-              {(logEntry.winePhotos||[]).length > 0 && (
-                <div style={{ display:"flex", overflowX:"auto", background:"#1a0f08", maxHeight:100 }}>
-                  {(logEntry.winePhotos||[]).map((ph,i) => (
-                    <img key={i} src={ph} alt="" onClick={()=>setLightboxPhoto(ph)}
-                      style={{ height:100, width:"auto", objectFit:"cover", cursor:"zoom-in", flexShrink:0 }} />
-                  ))}
-                </div>
-              )}
+              {(() => {
+                const valid = (logEntry.winePhotos||[]).filter(isValidPhoto);
+                const strip = valid.length > 0 ? valid
+                  : (logEntry.wineId ? (wines.find(w => w.id === logEntry.wineId)?.photos || []).filter(isValidPhoto) : []);
+                return strip.length > 0 ? (
+                  <div style={{ display:"flex", overflowX:"auto", background:"#1a0f08", maxHeight:100 }}>
+                    {strip.map((ph,i) => (
+                      <img key={i} src={ph} alt="" onClick={()=>setLightboxPhoto(ph)}
+                        style={{ height:100, width:"auto", objectFit:"cover", cursor:"zoom-in", flexShrink:0 }} />
+                    ))}
+                  </div>
+                ) : null;
+              })()}
               <div style={{ padding: "14px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:11, color:C.gold, fontFamily:"'Cinzel',serif", letterSpacing:2, marginBottom:4 }}>
