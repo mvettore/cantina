@@ -99,8 +99,12 @@ let _photoDBPromise = null;
 function getPhotoDB() {
   if (!_photoDBPromise) {
     _photoDBPromise = new Promise((res, rej) => {
-      const req = indexedDB.open('cantina-photos', 1);
-      req.onupgradeneeded = e => e.target.result.createObjectStore('photos');
+      const req = indexedDB.open('cantina-photos', 2);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('photos')) db.createObjectStore('photos');
+        if (!db.objectStoreNames.contains('tasting-photos')) db.createObjectStore('tasting-photos');
+      };
       req.onsuccess = e => res(e.target.result);
       req.onerror = e => rej(e.target.error);
     });
@@ -127,6 +131,34 @@ async function idbLoadAllPhotos() {
       const result = {};
       const tx = db.transaction('photos', 'readonly');
       tx.objectStore('photos').openCursor().onsuccess = e => {
+        const cur = e.target.result;
+        if (cur) { result[cur.key] = cur.value; cur.continue(); }
+        else res(result);
+      };
+      tx.onerror = e => rej(e.target.error);
+    });
+  } catch { return {}; }
+}
+
+async function idbSaveTastingPhotos(logEntryId, photos) {
+  try {
+    const db = await getPhotoDB();
+    await new Promise((res, rej) => {
+      const tx = db.transaction('tasting-photos', 'readwrite');
+      const store = tx.objectStore('tasting-photos');
+      if (photos && photos.length > 0) store.put(photos, logEntryId); else store.delete(logEntryId);
+      tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
+    });
+  } catch {}
+}
+
+async function idbLoadAllTastingPhotos() {
+  try {
+    const db = await getPhotoDB();
+    return await new Promise((res, rej) => {
+      const result = {};
+      const tx = db.transaction('tasting-photos', 'readonly');
+      tx.objectStore('tasting-photos').openCursor().onsuccess = e => {
         const cur = e.target.result;
         if (cur) { result[cur.key] = cur.value; cur.continue(); }
         else res(result);
@@ -445,7 +477,7 @@ export default function App() {
     } catch {}
   }, []);
 
-  // Carica le foto da IndexedDB dopo il mount e le inietta nello stato React
+  // Carica le foto vino da IndexedDB dopo il mount
   useEffect(() => {
     idbLoadAllPhotos().then(photoMap => {
       if (Object.keys(photoMap).length === 0) return;
@@ -454,6 +486,38 @@ export default function App() {
         photos: (photoMap[wine.id] || []).filter(isValidPhoto),
       })));
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Carica le foto degustazione da IndexedDB dopo il mount
+  useEffect(() => {
+    idbLoadAllTastingPhotos().then(photoMap => {
+      if (Object.keys(photoMap).length === 0) return;
+      setLog(current => current.map(entry => ({
+        ...entry,
+        tastingPhotos: (photoMap[entry.id] || []).filter(isValidPhoto),
+      })));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Migrazione una-tantum: foto degustazione inline in localStorage → IndexedDB
+  useEffect(() => {
+    if (localStorage.getItem('cantina-tasting-idb-v1') === 'done') return;
+    (async () => {
+      for (const entry of log) {
+        const valid = (entry.tastingPhotos || []).filter(isValidPhoto);
+        if (valid.length > 0) await idbSaveTastingPhotos(entry.id, valid);
+      }
+      localStorage.setItem('cantina-tasting-idb-v1', 'done');
+      const photoMap = await idbLoadAllTastingPhotos();
+      if (Object.keys(photoMap).length > 0) {
+        setLog(current => current.map(entry => ({
+          ...entry,
+          tastingPhotos: (photoMap[entry.id] || []).filter(isValidPhoto),
+        })));
+      }
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -571,7 +635,11 @@ export default function App() {
     saveLocal(STORAGE_KEY, deduped.map(wine => ({ ...wine, photos: [] })));
   };
   const saveRacks = (r) => { setRacks(r); saveLocal(RACKS_KEY, r); };
-  const saveLog   = (l) => { setLog(l); saveLocal(LOG_KEY, l); };
+  const saveLog   = (l) => {
+    setLog(l);
+    l.forEach(entry => idbSaveTastingPhotos(entry.id, entry.tastingPhotos || []));
+    saveLocal(LOG_KEY, l.map(entry => ({ ...entry, tastingPhotos: [] })));
+  };
   const saveName  = (n) => { setCantinaName(n); saveLocal('cantina-name', n); };
   const showToast = (msg) => { setToast(msg); setUndoState(null); setTimeout(() => setToast(null), 3000); };
   const showUndoToast = (msg, restore) => {
@@ -1545,12 +1613,12 @@ export default function App() {
                   <button onClick={async () => {
                     setMenuOpen(false);
                     showToast("📦 Preparazione backup…");
-                    const photoMap = await idbLoadAllPhotos();
+                    const [photoMap, tastingMap] = await Promise.all([idbLoadAllPhotos(), idbLoadAllTastingPhotos()]);
                     const backup = {
                       exportedAt: new Date().toISOString(),
                       wines: wines.map(w => ({ ...w, photos: (photoMap[w.id] || []).filter(isValidPhoto) })),
                       racks,
-                      log,
+                      log: log.map(entry => ({ ...entry, tastingPhotos: (tastingMap[entry.id] || []).filter(isValidPhoto) })),
                     };
                     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
                     const url = URL.createObjectURL(blob);
