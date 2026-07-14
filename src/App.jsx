@@ -605,6 +605,48 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Migrazione una-tantum: scarica foto degustazione da Supabase Storage → IndexedDB
+  useEffect(() => {
+    if (localStorage.getItem('cantina-tasting-supabase-idb') === 'done') return;
+    (async () => {
+      const existingMap = await idbLoadAllTastingPhotos();
+      let rawLog = [];
+      try { const s = localStorage.getItem(LOG_KEY); if (s) rawLog = JSON.parse(s); } catch {}
+      const toMigrate = [];
+      for (const entry of rawLog) {
+        if ((existingMap[entry.id] || []).filter(isValidPhoto).length > 0) continue;
+        const urls = (entry.tastingPhotos || []).filter(p => typeof p === 'string' && p.includes('supabase.co'));
+        if (urls.length > 0) toMigrate.push({ id: entry.id, urls });
+      }
+      if (toMigrate.length === 0) { localStorage.setItem('cantina-tasting-supabase-idb', 'done'); return; }
+      showToast(`📷 Download foto degustazione (${toMigrate.length})…`);
+      let migrated = 0;
+      for (const { id, urls } of toMigrate) {
+        const base64s = [];
+        for (const url of urls) {
+          try {
+            const resp = await fetch(url); if (!resp.ok) continue;
+            const blob = await resp.blob();
+            const b64 = await new Promise((res, rej) => {
+              const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob);
+            });
+            base64s.push(b64);
+          } catch {}
+        }
+        if (base64s.length > 0) { await idbSaveTastingPhotos(id, base64s); migrated++; }
+      }
+      localStorage.setItem('cantina-tasting-supabase-idb', 'done');
+      if (migrated > 0) {
+        const photoMap = await idbLoadAllTastingPhotos();
+        setLog(current => current.map(entry => ({
+          ...entry,
+          tastingPhotos: (photoMap[entry.id] || []).filter(isValidPhoto),
+        })));
+        showToast(`✅ ${migrated} foto degustazione salvate in locale`);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Ri-analizza i vini con analisi scaduta (>6 mesi) al primo avvio
   useEffect(() => {
