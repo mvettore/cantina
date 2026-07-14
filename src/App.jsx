@@ -414,6 +414,7 @@ export default function App() {
   const [filterHouse, setFilterHouse] = useState(null); // filtro per casa
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [storageInfo, setStorageInfo] = useState(null);
   const [sortBy,  setSortBy]  = useState("name");
   const [sortDir, setSortDir] = useState("desc");
   const [modal,   setModal]   = useState(null);
@@ -647,6 +648,14 @@ export default function App() {
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Calcola spazio storage quando il menu si apre
+  useEffect(() => {
+    if (!menuOpen) return;
+    navigator.storage?.estimate().then(est => {
+      setStorageInfo({ used: est.usage ?? null, quota: est.quota ?? null });
+    }).catch(() => setStorageInfo({ used: null, quota: null }));
+  }, [menuOpen]);
 
   // Ri-analizza i vini con analisi scaduta (>6 mesi) al primo avvio
   useEffect(() => {
@@ -1684,6 +1693,24 @@ export default function App() {
                     <span style={{ fontSize: 16 }}>📦</span>
                     <span style={{ flex: 1 }}>ESPORTA BACKUP</span>
                   </button>
+
+                  {/* Footer: versione + storage */}
+                  <div style={{ height: 1, background: C.border, margin: "6px 2px" }} />
+                  <div style={{ padding: "8px 13px 4px", display: "flex", flexDirection: "column", gap: 2 }}>
+                    <span style={{ fontSize: 10, color: C.textFaint, fontFamily: "monospace", letterSpacing: 1 }}>{__APP_VERSION__}</span>
+                    {storageInfo && (
+                      <span style={{ fontSize: 10, color: C.textFaint, fontFamily: "monospace" }}>
+                        💾 {storageInfo.used != null
+                          ? storageInfo.used < 1024 * 1024
+                            ? `${(storageInfo.used / 1024).toFixed(0)} KB`
+                            : `${(storageInfo.used / 1024 / 1024).toFixed(1)} MB`
+                          : "—"}
+                        {storageInfo.quota != null && (
+                          <> / {(storageInfo.quota / 1024 / 1024 / 1024).toFixed(1)} GB disponibili</>
+                        )}
+                      </span>
+                    )}
+                  </div>
 
                 </div>
               </>
