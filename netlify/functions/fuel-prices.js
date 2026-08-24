@@ -2,6 +2,11 @@
  * Proxy verso l'API Osservaprezzi Carburanti del MIMIT (ex MISE).
  * È la stessa API usata dal portale https://carburanti.mise.gov.it/ospzSearch/zona
  *
+ * Formato richiesta (POST /ospzApi/search/zone):
+ *   { points: [{lat,lng}, ...], radius?, fuelType: "F-M", priceOrder: "asc"|"desc" }
+ * dove F = 0 tutti, 1 benzina, 2 gasolio, 3 metano, 4 GPL, 323 GNC, 324 GNL
+ * e M = x tutti, 1 self, 0 servito.
+ *
  * Il proxy serve per due motivi:
  *  - evitare problemi CORS dal browser
  *  - avere un punto unico dove gestire fallback e cache
@@ -33,48 +38,54 @@ exports.handler = async (event) => {
     const commonHeaders = {
       "Content-Type": "application/json",
       "Accept": "application/json",
-      // Il backend ministeriale a volte rifiuta richieste senza UA "da browser"
-      "User-Agent": "Mozilla/5.0 (compatible; PrezziCarburanti/1.0)",
+      "User-Agent": "prezzi-carburanti-proxy/1.0",
     };
 
-    // Tentativo 1: ricerca per punto + raggio (formato usato dall'app ufficiale)
-    let data = await searchZone(commonHeaders, {
+    const attempts = [];
+
+    // Tentativo 1: punto + raggio, tutti i carburanti (il filtro si fa nel client)
+    let outcome = await searchZone(commonHeaders, {
       points: [{ lat, lng }],
       radius,
+      fuelType: "0-x",
       priceOrder: "asc",
     });
+    attempts.push(outcome);
 
-    // Tentativo 2 (fallback): ricerca per poligono — quadrato centrato sulla posizione.
+    // Tentativo 2 (fallback): poligono — quadrato centrato sulla posizione.
     // 1 grado di latitudine ≈ 111 km; per la longitudine correggiamo con cos(lat).
-    if (!data || !Array.isArray(data.results)) {
+    if (!outcome.data) {
       const dLat = radius / 111;
       const dLng = radius / (111 * Math.cos((lat * Math.PI) / 180));
-      data = await searchZone(commonHeaders, {
+      outcome = await searchZone(commonHeaders, {
         points: [
           { lat: lat - dLat, lng: lng - dLng },
           { lat: lat - dLat, lng: lng + dLng },
           { lat: lat + dLat, lng: lng + dLng },
           { lat: lat + dLat, lng: lng - dLng },
         ],
+        fuelType: "0-x",
         priceOrder: "asc",
       });
+      attempts.push(outcome);
     }
 
-    if (!data || !Array.isArray(data.results)) {
-      throw new Error("Risposta inattesa dal portale MIMIT");
+    if (!outcome.data) {
+      const detail = attempts.map((a, i) => `tentativo ${i + 1}: ${a.error}`).join(" | ");
+      throw new Error(detail);
     }
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, center: { lat, lng }, radius, results: data.results }),
+      body: JSON.stringify({ success: true, center: { lat, lng }, radius, results: outcome.data.results }),
     };
   } catch (err) {
     console.error(`[fuel-prices] ${err.message}`);
     return {
       statusCode: 502,
       headers: { ...headers, "Cache-Control": "no-store" },
-      body: JSON.stringify({ error: `Portale carburanti non raggiungibile: ${err.message}` }),
+      body: JSON.stringify({ error: `Portale carburanti non raggiungibile — ${err.message}` }),
     };
   }
 };
@@ -86,14 +97,23 @@ async function searchZone(headers, body) {
       headers,
       body: JSON.stringify(body),
     });
+    const text = await resp.text().catch(() => "");
     if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
       console.error(`[fuel-prices] search/zone HTTP ${resp.status}: ${text.substring(0, 300)}`);
-      return null;
+      return { data: null, error: `HTTP ${resp.status} ${text.substring(0, 120)}` };
     }
-    return await resp.json();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return { data: null, error: `risposta non JSON: ${text.substring(0, 120)}` };
+    }
+    if (!data || !Array.isArray(data.results)) {
+      return { data: null, error: `JSON senza results: ${text.substring(0, 120)}` };
+    }
+    return { data, error: null };
   } catch (err) {
     console.error(`[fuel-prices] search/zone errore rete: ${err.message}`);
-    return null;
+    return { data: null, error: `rete: ${err.message}` };
   }
 }
