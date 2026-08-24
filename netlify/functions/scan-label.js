@@ -2,7 +2,7 @@
  * Netlify Function: scan-label
  * Legge una o due foto di etichette di vino (fronte/retro) e restituisce
  * i dati strutturati del vino.
- * Provider AI: Claude per primo (vision), fallback su Gemini — via _ai.js.
+ * Provider AI: Anthropic Claude — via _ai.js.
  */
 
 const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
@@ -28,7 +28,7 @@ const handler = async (event, context) => {
   if (activeProvider() === "none") {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Nessuna API key configurata (GEMINI_API_KEY o ANTHROPIC_API_KEY)" }),
+      body: JSON.stringify({ error: "ANTHROPIC_API_KEY non configurata" }),
     };
   }
 
@@ -74,11 +74,6 @@ Usa null per i campi non leggibili.`;
       prompt,
       maxTokens: 600,
       images,
-      temperature: 0.2,
-      jsonMode: true,
-      // La vision passa da Claude: il default Gemini (1.5-flash) è ritirato e
-      // questo è il percorso che funzionava prima della migrazione a _ai.js.
-      preferClaude: true,
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
