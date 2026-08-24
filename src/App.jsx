@@ -330,7 +330,7 @@ Se un campo non è determinabile usa null. Il campo "alcohol" è la gradazione a
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: images }] }),
+      body: JSON.stringify({ model: "claude-sonnet-5", max_tokens: 1000, messages: [{ role: "user", content: images }] }),
     });
     if (!resp.ok) throw new Error(`API error ${resp.status}`);
     const data = await resp.json();

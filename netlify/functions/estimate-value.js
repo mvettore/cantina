@@ -2,7 +2,7 @@
  * Netlify Function: estimate-value
  * Stima il valore di mercato indicativo di una bottiglia di vino
  * basandosi su nome, produttore, annata, tipologia e regione.
- * Provider AI: Gemini (default) con fallback su Anthropic.
+ * Provider AI: Anthropic Claude — via _ai.js.
  */
 
 const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
@@ -60,8 +60,6 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
     const raw = await callAI({
       prompt,
       maxTokens: 600,
-      temperature: 0.4,
-      jsonMode: true,
       signal: controller.signal,
     });
     clearTimeout(timeoutId);

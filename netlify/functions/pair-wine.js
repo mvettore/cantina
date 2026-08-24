@@ -3,7 +3,7 @@
  * Riceve un pasto/piatto + il catalogo vini dell'utente e restituisce:
  * - "picks": fino a 3 vini dalla cantina dell'utente
  * - "ideal": 1-2 abbinamenti ideali con vini che l'utente NON ha
- * Provider AI: Gemini (default, free tier) con fallback su Anthropic.
+ * Provider AI: Anthropic Claude — via _ai.js.
  */
 
 const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
@@ -72,8 +72,6 @@ ${!hasCellar ? 'Il campo "picks" deve essere un array vuoto [] se non ci sono vi
     const raw = await callAI({
       prompt,
       maxTokens: 1200,
-      temperature: 0.6,
-      jsonMode: true,
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
