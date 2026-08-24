@@ -2,7 +2,7 @@
  * Netlify Function: scan-label
  * Legge una o due foto di etichette di vino (fronte/retro) e restituisce
  * i dati strutturati del vino.
- * Provider AI: Gemini (default) con fallback su Anthropic — via _ai.js.
+ * Provider AI: Claude per primo (vision), fallback su Gemini — via _ai.js.
  */
 
 const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
@@ -85,7 +85,9 @@ Usa null per i campi non leggibili.`;
 
     const parsed = parseJSONResponse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { statusCode: 502, body: JSON.stringify({ error: "Risposta AI non valida" }) };
+      // Non 502: quel codice lo usa Netlify quando la function muore, e
+      // confonderlo con un errore applicativo rende la diagnosi impossibile.
+      return { statusCode: 500, body: JSON.stringify({ error: "Risposta AI non valida" }) };
     }
 
     return {
