@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { execSync } from 'child_process'
+import { fileURLToPath } from 'url'
 
 function getVersion() {
   try {
@@ -17,5 +18,13 @@ export default defineConfig({
   plugins: [react()],
   define: {
     __APP_VERSION__: JSON.stringify(getVersion()),
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        benzina: fileURLToPath(new URL('./benzina.html', import.meta.url)),
+      },
+    },
   },
 })

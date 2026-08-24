@@ -13,6 +13,16 @@
   timeout = 26
 
 [[redirects]]
+  from = "/benzina"
+  to = "/benzina.html"
+  status = 200
+
+[[redirects]]
+  from = "/benzina/*"
+  to = "/benzina.html"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
