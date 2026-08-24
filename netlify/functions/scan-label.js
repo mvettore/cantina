@@ -5,7 +5,7 @@
  * Provider AI: Anthropic Claude — via _ai.js.
  */
 
-const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
+import { callAI, parseJSONResponse, activeProvider } from "./_ai.js";
 
 /**
  * Budget di tempo reale prima che Lambda uccida la function.
@@ -119,4 +119,4 @@ Usa null per i campi non leggibili.`;
   }
 };
 
-module.exports = { handler };
+export { handler };

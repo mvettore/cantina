@@ -119,4 +119,4 @@ function activeProvider() {
   return process.env.ANTHROPIC_API_KEY ? "anthropic" : "none";
 }
 
-module.exports = { callAI, parseJSONResponse, activeProvider };
+export { callAI, parseJSONResponse, activeProvider };

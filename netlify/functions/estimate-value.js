@@ -5,7 +5,7 @@
  * Provider AI: Anthropic Claude — via _ai.js.
  */
 
-const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
+import { callAI, parseJSONResponse, activeProvider } from "./_ai.js";
 
 const handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -78,4 +78,4 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
   }
 };
 
-module.exports = { handler };
+export { handler };

@@ -124,4 +124,4 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido:
   }
 };
 
-module.exports = { handler };
+export { handler };

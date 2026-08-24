@@ -238,4 +238,4 @@ Restituisci SOLO questo JSON:
   }
 };
 
-module.exports = { handler };
+export { handler };

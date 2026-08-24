@@ -90,4 +90,4 @@ Rispondi ESCLUSIVAMENTE con un oggetto JSON valido (nessun testo fuori dal JSON)
   }
 };
 
-module.exports = { handler };
+export { handler };
