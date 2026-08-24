@@ -27,7 +27,7 @@ const CSV_TTL_MS = 30 * 60 * 1000;
 let liveFailedAt = 0;
 const LIVE_RETRY_MS = 10 * 60 * 1000;
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   const headers = {
     "Content-Type": "application/json",
     "Cache-Control": "public, max-age=300",
