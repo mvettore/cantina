@@ -7,7 +7,20 @@
 
 const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
 
-const handler = async (event) => {
+/**
+ * Budget di tempo reale prima che Lambda uccida la function.
+ * Netlify espone getRemainingTimeInMillis(): usiamo quello meno un margine,
+ * così torniamo sempre un errore JSON invece di un 502 opaco della piattaforma.
+ */
+function timeBudgetMs(context) {
+  const margin = 1500;
+  const remaining = typeof context?.getRemainingTimeInMillis === "function"
+    ? context.getRemainingTimeInMillis()
+    : 10000; // default Netlify quando il contesto non è disponibile
+  return Math.max(3000, remaining - margin);
+}
+
+const handler = async (event, context) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
@@ -51,8 +64,10 @@ Il campo "alcohol" è la gradazione alcolica in %vol (numero decimale).
 Il campo "denomination" è la denominazione ufficiale e la tipologia del vino, ad esempio "Barolo DOCG", "Barbera d'Asti Superiore DOCG", "Chianti Classico Riserva DOCG", "Langhe Nebbiolo DOC", "Prosecco di Valdobbiadene Superiore DOCG Brut". Includi sempre la sigla (DOCG, DOC, IGT) se presente sull'etichetta, e la tipologia (Riserva, Superiore, Gran Selezione, Brut, ecc.) quando indicata.
 Usa null per i campi non leggibili.`;
 
+  const budget = timeBudgetMs(context);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 24000);
+  const timeoutId = setTimeout(() => controller.abort(), budget);
+  console.log(`[scan-label] budget=${budget}ms`);
 
   try {
     const raw = await callAI({
@@ -61,6 +76,9 @@ Usa null per i campi non leggibili.`;
       images,
       temperature: 0.2,
       jsonMode: true,
+      // La vision passa da Claude: il default Gemini (1.5-flash) è ritirato e
+      // questo è il percorso che funzionava prima della migrazione a _ai.js.
+      preferClaude: true,
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -79,7 +97,7 @@ Usa null per i campi non leggibili.`;
     clearTimeout(timeoutId);
     console.error(`[scan-label] errore: ${err.message}`);
     if (err.name === "AbortError") {
-      return { statusCode: 504, body: JSON.stringify({ error: "Timeout: riprova con una foto più piccola" }) };
+      return { statusCode: 504, body: JSON.stringify({ error: `Timeout dopo ${Math.round(budget / 1000)}s: riprova con una foto sola` }) };
     }
     return { statusCode: err.status || 500, body: JSON.stringify({ error: err.message }) };
   }

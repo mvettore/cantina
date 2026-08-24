@@ -6,10 +6,12 @@
  * delle altre function ma NON lo espone come endpoint.
  */
 
-// Default: gemini-1.5-flash — stabile, free tier, supporta vision + JSON mode.
-// Override possibile via env GEMINI_MODEL (es. "gemini-2.0-flash" o "gemini-2.5-flash").
-const GEMINI_MODEL_TEXT   = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-const GEMINI_MODEL_VISION = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+// ATTENZIONE: gemini-1.5-flash è stato RITIRATO da Google (le richieste tornano 404).
+// Non esiste più un default sicuro: il modello va indicato via env GEMINI_MODEL
+// (es. "gemini-3.6-flash"). Senza GEMINI_MODEL, Gemini viene saltato del tutto
+// e si usa direttamente Claude, invece di sprecare un round-trip verso un 404.
+const GEMINI_MODEL_TEXT   = process.env.GEMINI_MODEL || null;
+const GEMINI_MODEL_VISION = process.env.GEMINI_MODEL || null;
 const CLAUDE_MODEL_TEXT   = "claude-sonnet-4-20250514";
 const CLAUDE_MODEL_VISION = "claude-haiku-4-5-20251001";
 
@@ -22,28 +24,38 @@ const FALLBACK_TO_CLAUDE_ON_GEMINI_ERROR = process.env.DISABLE_CLAUDE_FALLBACK !
  * @returns {Promise<string>} testo (trim) restituito dal modello
  */
 async function callAI(opts) {
-  const preferGemini = !!process.env.GEMINI_API_KEY;
-  const hasClaude    = !!process.env.ANTHROPIC_API_KEY;
+  // Gemini è utilizzabile solo con chiave E modello configurato: il vecchio
+  // default (gemini-1.5-flash) è ritirato da Google e tornerebbe sempre 404.
+  const geminiOk = !!process.env.GEMINI_API_KEY
+    && !!(opts.images?.length ? GEMINI_MODEL_VISION : GEMINI_MODEL_TEXT);
+  const claudeOk = !!process.env.ANTHROPIC_API_KEY;
 
-  if (!preferGemini && !hasClaude) {
-    throw new Error("Nessuna API key configurata: imposta GEMINI_API_KEY (preferito) o ANTHROPIC_API_KEY");
+  if (!geminiOk && !claudeOk) {
+    throw new Error(process.env.GEMINI_API_KEY
+      ? "GEMINI_MODEL non configurato (gemini-1.5-flash è ritirato) e ANTHROPIC_API_KEY assente"
+      : "Nessuna API key configurata: imposta GEMINI_API_KEY + GEMINI_MODEL, oppure ANTHROPIC_API_KEY");
   }
 
-  if (preferGemini) {
+  // opts.preferClaude è una preferenza (usata dalla vision), non un'esclusione:
+  // se Claude non è disponibile si ricade comunque su Gemini.
+  const order = opts.preferClaude && claudeOk
+    ? [["anthropic", callClaude, claudeOk], ["gemini", callGemini, geminiOk]]
+    : [["gemini", callGemini, geminiOk], ["anthropic", callClaude, claudeOk]];
+
+  let lastErr;
+  for (const [name, fn, usable] of order) {
+    if (!usable) continue;
+    if (lastErr && !FALLBACK_TO_CLAUDE_ON_GEMINI_ERROR) break;
     try {
-      return await callGemini(opts);
+      return await fn(opts);
     } catch (err) {
-      console.error(`[_ai] Gemini ha fallito: ${err.message}`);
-      if (FALLBACK_TO_CLAUDE_ON_GEMINI_ERROR && hasClaude) {
-        console.log("[_ai] Fallback a Claude…");
-        return await callClaude(opts);
-      }
-      throw err;
+      console.error(`[_ai] ${name} ha fallito: ${err.message}`);
+      lastErr = err;
+      // Un abort è il nostro deadline: inutile provare l'altro provider.
+      if (err.name === "AbortError") throw err;
     }
   }
-
-  // Solo Claude disponibile
-  return await callClaude(opts);
+  throw lastErr;
 }
 
 async function callGemini({
@@ -217,7 +229,8 @@ function parseJSONResponse(raw) {
  * Provider attivo (per logging).
  */
 function activeProvider() {
-  if (process.env.GEMINI_API_KEY)    return "gemini";
+  // Gemini conta come disponibile solo con un modello configurato (vedi GEMINI_MODEL_TEXT)
+  if (process.env.GEMINI_API_KEY && GEMINI_MODEL_TEXT) return "gemini";
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
   return "none";
 }
