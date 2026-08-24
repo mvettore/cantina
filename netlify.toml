@@ -12,6 +12,9 @@
 [functions."search-wine-url"]
   timeout = 26
 
+[functions."fuel-prices"]
+  timeout = 26
+
 [[redirects]]
   from = "/benzina"
   to = "/benzina.html"

@@ -61,9 +61,11 @@ export default function BenzinaApp() {
     setError(null)
     try {
       const resp = await fetch(`/.netlify/functions/fuel-prices?lat=${p.lat}&lng=${p.lng}&radius=${r}`)
-      const data = await resp.json().catch(() => ({}))
+      const text = await resp.text()
+      let data = {}
+      try { data = JSON.parse(text) } catch {}
       if (!resp.ok || !Array.isArray(data.results)) {
-        throw new Error(data.error || `Errore ${resp.status}`)
+        throw new Error(data.error || `Errore ${resp.status}: ${text.slice(0, 180) || 'risposta vuota'}`)
       }
       setStations(data.results)
     } catch (err) {

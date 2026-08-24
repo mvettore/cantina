@@ -22,6 +22,11 @@ const CSV_BASES = ["https://www.mimit.gov.it/images/exportCSV", "https://www.mis
 let csvCache = { at: 0, stations: null };
 const CSV_TTL_MS = 30 * 60 * 1000;
 
+// Se l'API live ha appena fallito, per un po' passiamo diretti agli open data
+// senza bruciare secondi (il timeout della function è limitato).
+let liveFailedAt = 0;
+const LIVE_RETRY_MS = 10 * 60 * 1000;
+
 exports.handler = async (event) => {
   const headers = {
     "Content-Type": "application/json",
@@ -40,15 +45,20 @@ exports.handler = async (event) => {
   const errors = [];
 
   // ── Fonte 1: API live del portale ──────────────────────────────────────────
-  const live = await searchZoneLive(lat, lng, radius);
-  if (live.data) {
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({ success: true, source: "live", center: { lat, lng }, radius, results: live.data.results }),
-    };
+  if (Date.now() - liveFailedAt > LIVE_RETRY_MS) {
+    const live = await searchZoneLive(lat, lng, radius);
+    if (live.data) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: true, source: "live", center: { lat, lng }, radius, results: live.data.results }),
+      };
+    }
+    liveFailedAt = Date.now();
+    errors.push(`API live: ${live.error}`);
+  } else {
+    errors.push("API live: saltata (fallita di recente)");
   }
-  errors.push(`API live: ${live.error}`);
 
   // ── Fonte 2: open data CSV giornalieri ─────────────────────────────────────
   try {
@@ -85,7 +95,7 @@ async function searchZoneLive(lat, lng, radius) {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
       },
       body: JSON.stringify({ points: [{ lat, lng }], radius, fuelType: "0-x", priceOrder: "asc" }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(4000),
     });
     const text = await resp.text().catch(() => "");
     if (!resp.ok) return { data: null, error: `HTTP ${resp.status} ${text.substring(0, 120)}` };
@@ -149,7 +159,7 @@ async function fetchCsv(file) {
     try {
       const resp = await fetch(`${base}/${file}`, {
         headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(15000),
       });
       if (!resp.ok) { lastErr = `${base}: HTTP ${resp.status}`; continue }
       return await resp.text();
