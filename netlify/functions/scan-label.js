@@ -1,19 +1,39 @@
+/**
+ * Netlify Function: scan-label
+ * Legge una o due foto di etichette di vino (fronte/retro) e restituisce
+ * i dati strutturati del vino.
+ * Provider AI: Gemini (default) con fallback su Anthropic — via _ai.js.
+ */
+
+const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
+
 const handler = async (event) => {
-  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "Method Not Allowed" };
+  }
+
+  if (activeProvider() === "none") {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "Nessuna API key configurata (GEMINI_API_KEY o ANTHROPIC_API_KEY)" }),
+    };
+  }
 
   let body;
   try { body = JSON.parse(event.body); }
   catch { return { statusCode: 400, body: JSON.stringify({ error: "Body non valido" }) }; }
 
   const { base64, mediaType, base64_2, mediaType_2 } = body;
-  if (!base64 || !mediaType) return { statusCode: 400, body: JSON.stringify({ error: "Campi mancanti" }) };
+  if (!base64 || !mediaType) {
+    return { statusCode: 400, body: JSON.stringify({ error: "Campi mancanti" }) };
+  }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: "API key mancante" }) };
+  const images = [{ base64, mediaType }];
+  if (base64_2 && mediaType_2) images.push({ base64: base64_2, mediaType: mediaType_2 });
 
-  console.log(`Immagine: ~${Math.round(base64.length * 0.75 / 1024)}KB`);
+  const hasSecond = images.length > 1;
+  console.log(`[scan-label] provider=${activeProvider()} immagini=${images.length} ~${Math.round(base64.length * 0.75 / 1024)}KB`);
 
-  const hasSecond = !!(base64_2 && mediaType_2);
   const prompt = `Sei un esperto di vini. Leggi quest${hasSecond ? "e etichette" : "a etichetta"} di vino (${hasSecond ? "fronte e retro" : "fronte"}) e restituisci SOLO questo JSON (niente altro testo):
 {
   "name": "nome commerciale del vino",
@@ -35,42 +55,33 @@ Usa null per i campi non leggibili.`;
   const timeoutId = setTimeout(() => controller.abort(), 24000);
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
+    const raw = await callAI({
+      prompt,
+      maxTokens: 600,
+      images,
+      temperature: 0.2,
+      jsonMode: true,
       signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 500,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-            ...(hasSecond ? [{ type: "image", source: { type: "base64", media_type: mediaType_2, data: base64_2 } }] : []),
-            { type: "text", text: prompt },
-          ],
-        }],
-      }),
     });
-
     clearTimeout(timeoutId);
-    if (!response.ok) {
-      const err = await response.text();
-      return { statusCode: response.status, body: JSON.stringify({ error: err }) };
+
+    const parsed = parseJSONResponse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { statusCode: 502, body: JSON.stringify({ error: "Risposta AI non valida" }) };
     }
 
-    const data = await response.json();
-    const raw = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim();
-    const clean = raw.replace(/^```json\s*/i,"").replace(/^```\s*/i,"").replace(/```\s*$/i,"").trim();
-    return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: clean };
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsed),
+    };
   } catch (err) {
     clearTimeout(timeoutId);
-    if (err.name === "AbortError") return { statusCode: 504, body: JSON.stringify({ error: "Timeout" }) };
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+    console.error(`[scan-label] errore: ${err.message}`);
+    if (err.name === "AbortError") {
+      return { statusCode: 504, body: JSON.stringify({ error: "Timeout: riprova con una foto più piccola" }) };
+    }
+    return { statusCode: err.status || 500, body: JSON.stringify({ error: err.message }) };
   }
 };
 

@@ -899,7 +899,7 @@ export default function App() {
       await doScanAndFill(firstPhotoData, { scanDataUrl: scanDataUrl2, hiResDataUrl: hiResDataUrl2 });
     } catch (err) {
       console.error(err);
-      setScanError("Non sono riuscito a leggere le etichette. Riprova.");
+      setScanError(`Non sono riuscito a leggere le etichette. ${err.message || ""}`.trim());
     } finally {
       setScanning(false);
       setFirstPhotoData(null);
@@ -915,7 +915,7 @@ export default function App() {
       await doScanAndFill(firstPhotoData, null);
     } catch (err) {
       console.error(err);
-      setScanError("Non sono riuscito a leggere l'etichetta. Riprova con una foto più nitida.");
+      setScanError(`Non sono riuscito a leggere l'etichetta. ${err.message || "Riprova con una foto più nitida."}`.trim());
     } finally {
       setScanning(false);
       setFirstPhotoData(null);
@@ -946,7 +946,7 @@ export default function App() {
       showToast(cropped ? "✨ Etichetta riconosciuta e ritagliata!" : "✨ Etichetta riconosciuta!");
     } catch (err) {
       console.error(err);
-      setLogScanError("Non sono riuscito a leggere l'etichetta. Riprova con una foto più nitida.");
+      setLogScanError(`Non sono riuscito a leggere l'etichetta. ${err.message || "Riprova con una foto più nitida."}`.trim());
     } finally {
       setLogScanning(false);
     }
