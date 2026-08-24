@@ -21,6 +21,25 @@ function timeBudgetMs(context) {
 }
 
 const handler = async (event, context) => {
+  // Health check: apribile dal browser per capire se la function si carica.
+  // Se questo risponde JSON, il modulo è a posto e il problema è nella
+  // chiamata AI. Se risponde 502, la function muore prima di eseguire.
+  if (event.httpMethod === "GET") {
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ok: true,
+        build: "claude-only",
+        provider: activeProvider(),
+        hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
+        node: process.version,
+        remainingMs: typeof context?.getRemainingTimeInMillis === "function"
+          ? context.getRemainingTimeInMillis() : null,
+      }),
+    };
+  }
+
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
