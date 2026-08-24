@@ -70,4 +70,4 @@ Dove x,y sono l'angolo in alto a sinistra e w,h la larghezza e altezza. Niente a
   }
 };
 
-module.exports = { handler };
+export { handler };

@@ -6,7 +6,7 @@
  * Provider AI: Anthropic Claude — via _ai.js.
  */
 
-const { callAI, parseJSONResponse, activeProvider } = require("./_ai");
+import { callAI, parseJSONResponse, activeProvider } from "./_ai.js";
 
 const handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -90,4 +90,4 @@ ${!hasCellar ? 'Il campo "picks" deve essere un array vuoto [] se non ci sono vi
   }
 };
 
-module.exports = { handler };
+export { handler };
