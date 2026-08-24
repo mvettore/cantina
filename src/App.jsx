@@ -308,8 +308,13 @@ async function scanLabel(base64DataUrl, base64DataUrl2 = null) {
       body: JSON.stringify({ base64, mediaType, base64_2, mediaType_2 }),
     });
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || `Errore server ${resp.status}`);
+      // Netlify mette la causa reale nel corpo del 502 (es. Runtime.ImportModuleError).
+      // Senza leggerlo, l'errore che arriva all'utente è solo "Errore server 502".
+      const raw = await resp.text().catch(() => "");
+      let detail = "";
+      try { detail = JSON.parse(raw).error || JSON.parse(raw).errorMessage || ""; }
+      catch { detail = raw.slice(0, 200); }
+      throw new Error(detail ? `${resp.status}: ${detail}` : `Errore server ${resp.status}`);
     }
     return await resp.json();
   } else {
