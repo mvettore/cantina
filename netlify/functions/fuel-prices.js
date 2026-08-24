@@ -1,119 +1,188 @@
 /**
- * Proxy verso l'API Osservaprezzi Carburanti del MIMIT (ex MISE).
- * È la stessa API usata dal portale https://carburanti.mise.gov.it/ospzSearch/zona
+ * Prezzi carburanti per zona, con doppia fonte dati MIMIT (ex MISE):
  *
- * Formato richiesta (POST /ospzApi/search/zone):
- *   { points: [{lat,lng}, ...], radius?, fuelType: "F-M", priceOrder: "asc"|"desc" }
- * dove F = 0 tutti, 1 benzina, 2 gasolio, 3 metano, 4 GPL, 323 GNC, 324 GNL
- * e M = x tutti, 1 self, 0 servito.
+ * 1. API "live" del portale Osservaprezzi (https://carburanti.mise.gov.it/ospzApi)
+ *    POST /search/zone { points:[{lat,lng}], radius, fuelType:"F-M", priceOrder }
+ * 2. Fallback: open data ufficiali giornalieri (CSV delle 8:00)
+ *    https://www.mimit.gov.it/it/open-data — prezzo_alle_8.csv + anagrafica_impianti_attivi.csv
+ *    Stessi prezzi comunicati dai gestori, aggiornati ogni mattina.
  *
- * Il proxy serve per due motivi:
- *  - evitare problemi CORS dal browser
- *  - avere un punto unico dove gestire fallback e cache
+ * Il fallback serve perché il WAF del portale può rifiutare richieste
+ * provenienti da datacenter esteri (le function Netlify girano su AWS).
  *
  * GET /.netlify/functions/fuel-prices?lat=44.89&lng=8.65&radius=10
- * Risposta: { success, results: [ { id, name, brand, address, location:{lat,lng}, fuels:[{name, price, isSelf, fuelId}] } ] }
+ * Risposta: { success, source: "live"|"opendata", results:[{ id, name, brand,
+ *   address, location:{lat,lng}, insertDate, fuels:[{name, price, isSelf, fuelId}] }] }
  */
 
 const API_BASE = "https://carburanti.mise.gov.it/ospzApi";
+const CSV_BASES = ["https://www.mimit.gov.it/images/exportCSV", "https://www.mise.gov.it/images/exportCSV"];
+
+// Cache in memoria del container: sopravvive tra invocazioni "calde".
+let csvCache = { at: 0, stations: null };
+const CSV_TTL_MS = 30 * 60 * 1000;
 
 exports.handler = async (event) => {
   const headers = {
     "Content-Type": "application/json",
-    // Cache CDN 5 minuti: i prezzi vengono comunicati al massimo una volta al giorno,
-    // ma teniamo la cache breve per non servire dati stantii dopo cambio parametri.
     "Cache-Control": "public, max-age=300",
   };
 
-  try {
-    const params = event.queryStringParameters || {};
-    const lat = parseFloat(params.lat);
-    const lng = parseFloat(params.lng);
-    const radius = Math.min(Math.max(parseFloat(params.radius) || 10, 1), 35);
+  const params = event.queryStringParameters || {};
+  const lat = parseFloat(params.lat);
+  const lng = parseFloat(params.lng);
+  const radius = Math.min(Math.max(parseFloat(params.radius) || 10, 1), 35);
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "Parametri lat/lng mancanti o non validi" }) };
-    }
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: "Parametri lat/lng mancanti o non validi" }) };
+  }
 
-    const commonHeaders = {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-      "User-Agent": "prezzi-carburanti-proxy/1.0",
-    };
+  const errors = [];
 
-    const attempts = [];
-
-    // Tentativo 1: punto + raggio, tutti i carburanti (il filtro si fa nel client)
-    let outcome = await searchZone(commonHeaders, {
-      points: [{ lat, lng }],
-      radius,
-      fuelType: "0-x",
-      priceOrder: "asc",
-    });
-    attempts.push(outcome);
-
-    // Tentativo 2 (fallback): poligono — quadrato centrato sulla posizione.
-    // 1 grado di latitudine ≈ 111 km; per la longitudine correggiamo con cos(lat).
-    if (!outcome.data) {
-      const dLat = radius / 111;
-      const dLng = radius / (111 * Math.cos((lat * Math.PI) / 180));
-      outcome = await searchZone(commonHeaders, {
-        points: [
-          { lat: lat - dLat, lng: lng - dLng },
-          { lat: lat - dLat, lng: lng + dLng },
-          { lat: lat + dLat, lng: lng + dLng },
-          { lat: lat + dLat, lng: lng - dLng },
-        ],
-        fuelType: "0-x",
-        priceOrder: "asc",
-      });
-      attempts.push(outcome);
-    }
-
-    if (!outcome.data) {
-      const detail = attempts.map((a, i) => `tentativo ${i + 1}: ${a.error}`).join(" | ");
-      throw new Error(detail);
-    }
-
+  // ── Fonte 1: API live del portale ──────────────────────────────────────────
+  const live = await searchZoneLive(lat, lng, radius);
+  if (live.data) {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ success: true, center: { lat, lng }, radius, results: outcome.data.results }),
-    };
-  } catch (err) {
-    console.error(`[fuel-prices] ${err.message}`);
-    return {
-      statusCode: 502,
-      headers: { ...headers, "Cache-Control": "no-store" },
-      body: JSON.stringify({ error: `Portale carburanti non raggiungibile — ${err.message}` }),
+      body: JSON.stringify({ success: true, source: "live", center: { lat, lng }, radius, results: live.data.results }),
     };
   }
+  errors.push(`API live: ${live.error}`);
+
+  // ── Fonte 2: open data CSV giornalieri ─────────────────────────────────────
+  try {
+    const stations = await loadOpenData();
+    const results = [];
+    for (const st of stations) {
+      const d = haversineKm(lat, lng, st.location.lat, st.location.lng);
+      if (d <= radius) results.push(st);
+    }
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, source: "opendata", center: { lat, lng }, radius, results }),
+    };
+  } catch (err) {
+    errors.push(`open data: ${err.message}`);
+  }
+
+  console.error(`[fuel-prices] tutte le fonti fallite: ${errors.join(" | ")}`);
+  return {
+    statusCode: 502,
+    headers: { ...headers, "Cache-Control": "no-store" },
+    body: JSON.stringify({ error: `Nessuna fonte dati raggiungibile — ${errors.join(" | ")}` }),
+  };
 };
 
-async function searchZone(headers, body) {
+async function searchZoneLive(lat, lng, radius) {
   try {
     const resp = await fetch(`${API_BASE}/search/zone`, {
       method: "POST",
-      headers,
-      body: JSON.stringify(body),
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+      },
+      body: JSON.stringify({ points: [{ lat, lng }], radius, fuelType: "0-x", priceOrder: "asc" }),
+      signal: AbortSignal.timeout(8000),
     });
     const text = await resp.text().catch(() => "");
-    if (!resp.ok) {
-      console.error(`[fuel-prices] search/zone HTTP ${resp.status}: ${text.substring(0, 300)}`);
-      return { data: null, error: `HTTP ${resp.status} ${text.substring(0, 120)}` };
-    }
+    if (!resp.ok) return { data: null, error: `HTTP ${resp.status} ${text.substring(0, 120)}` };
     let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return { data: null, error: `risposta non JSON: ${text.substring(0, 120)}` };
-    }
-    if (!data || !Array.isArray(data.results)) {
-      return { data: null, error: `JSON senza results: ${text.substring(0, 120)}` };
-    }
+    try { data = JSON.parse(text) } catch { return { data: null, error: `risposta non JSON: ${text.substring(0, 120)}` } }
+    if (!data || !Array.isArray(data.results)) return { data: null, error: `JSON senza results: ${text.substring(0, 120)}` };
     return { data, error: null };
   } catch (err) {
-    console.error(`[fuel-prices] search/zone errore rete: ${err.message}`);
     return { data: null, error: `rete: ${err.message}` };
   }
+}
+
+async function loadOpenData() {
+  if (csvCache.stations && Date.now() - csvCache.at < CSV_TTL_MS) return csvCache.stations;
+
+  const [anagrafica, prezzi] = await Promise.all([
+    fetchCsv("anagrafica_impianti_attivi.csv"),
+    fetchCsv("prezzo_alle_8.csv"),
+  ]);
+
+  // anagrafica: idImpianto;Gestore;Bandiera;Tipo Impianto;Nome Impianto;Indirizzo;Comune;Provincia;Latitudine;Longitudine
+  const byId = new Map();
+  for (const cols of parseCsv(anagrafica)) {
+    if (cols.length < 10) continue;
+    const id = cols[0];
+    const la = parseFloat(cols[8]);
+    const lo = parseFloat(cols[9]);
+    if (!Number.isFinite(la) || !Number.isFinite(lo)) continue;
+    byId.set(id, {
+      id: Number(id) || id,
+      name: cols[4] || cols[1] || "Distributore",
+      brand: cols[2] || "",
+      address: [cols[5], cols[6], cols[7] ? `(${cols[7]})` : ""].filter(Boolean).join(", "),
+      location: { lat: la, lng: lo },
+      insertDate: null,
+      fuels: [],
+    });
+  }
+
+  // prezzi: idImpianto;descCarburante;prezzo;isSelf;dtComu
+  for (const cols of parseCsv(prezzi)) {
+    if (cols.length < 5) continue;
+    const st = byId.get(cols[0]);
+    if (!st) continue;
+    const price = parseFloat(String(cols[2]).replace(",", "."));
+    if (!Number.isFinite(price)) continue;
+    const iso = itDateToIso(cols[4]);
+    st.fuels.push({ name: cols[1], price, isSelf: cols[3] === "1", fuelId: 0 });
+    if (iso && (!st.insertDate || iso > st.insertDate)) st.insertDate = iso;
+  }
+
+  const stations = [...byId.values()].filter((s) => s.fuels.length > 0);
+  csvCache = { at: Date.now(), stations };
+  console.log(`[fuel-prices] open data caricati: ${stations.length} impianti con prezzi`);
+  return stations;
+}
+
+async function fetchCsv(file) {
+  let lastErr = "";
+  for (const base of CSV_BASES) {
+    try {
+      const resp = await fetch(`${base}/${file}`, {
+        headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!resp.ok) { lastErr = `${base}: HTTP ${resp.status}`; continue }
+      return await resp.text();
+    } catch (err) {
+      lastErr = `${base}: ${err.message}`;
+    }
+  }
+  throw new Error(`${file} non scaricabile (${lastErr})`);
+}
+
+/** CSV MIMIT: separatore ';', prima riga = data estrazione, seconda = intestazioni. */
+function* parseCsv(text) {
+  const lines = text.split(/\r?\n/);
+  for (let i = 2; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    yield line.split(";").map((c) => c.trim());
+  }
+}
+
+/** "17/03/2024 08:00:00" → "2024-03-17T08:00:00" (comparabile e parsabile ovunque). */
+function itDateToIso(s) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})[ T]?(\d{2}:\d{2}(?::\d{2})?)?/.exec(String(s || "").trim());
+  if (!m) return null;
+  return `${m[3]}-${m[2]}-${m[1]}T${m[4] || "08:00:00"}`;
+}
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
 }

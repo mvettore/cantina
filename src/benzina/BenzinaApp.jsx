@@ -67,8 +67,21 @@ export default function BenzinaApp() {
       }
       setStations(data.results)
     } catch (err) {
-      setError(err.message)
-      setStations(null)
+      // Fallback: chiamata diretta all'API del ministero dal browser (IP italiano).
+      // Funziona solo se il server consente CORS; se no restiamo sull'errore del proxy.
+      try {
+        const resp = await fetch('https://carburanti.mise.gov.it/ospzApi/search/zone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ points: [{ lat: p.lat, lng: p.lng }], radius: r, fuelType: '0-x', priceOrder: 'asc' }),
+        })
+        const data = await resp.json()
+        if (!Array.isArray(data.results)) throw new Error('risposta inattesa')
+        setStations(data.results)
+      } catch {
+        setError(err.message)
+        setStations(null)
+      }
     } finally {
       setLoading(false)
     }
